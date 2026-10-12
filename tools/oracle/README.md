@@ -31,7 +31,10 @@ powershell -ExecutionPolicy Bypass -File tools/oracle/Trace-Demos.ps1 -Oracle D:
 `Trace-Demos.ps1` copies the original `id1/pak0.pak` and `id1/pak1.pak` into the oracle's own Quake folder (beside
 the executable) and removes `config.cfg` before every run, since the oracle writes one when it quits. It writes
 `demo1-3.trace` (320x240, WinQuake's default windowed mode), `.320x200.trace` (DOS Quake's mode 0) and
-`.640x480.trace`, and `attract.trace` (the attract loop, 20,000 frames).
+`.640x480.trace`, `attract.trace` (the attract loop, 20,000 frames) with `attract.config.cfg` (the `config.cfg` the
+oracle wrote when that run quit), and `menus.trace` and `menus.640x480.trace`: 3,700 frames of the attract loop with
+the scripted keys and commands of `events/menus.events` (every menu but the network ones, the console, the scores,
+the help pages and the renderer's cvars).
 
 ## How the oracle is built
 

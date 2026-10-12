@@ -3,8 +3,8 @@ using QuakeSharp.Core.Diagnostics;
 namespace QuakeSharp.Fidelity.Tests;
 
 /// <summary>
-/// The client and the renderer against the oracle (milestones 5 and 6): demo1-3 at three video modes and the attract
-/// loop play with the oracle's state and pictures on every frame. Every line of the oracle's trace is compared: F
+/// The client and the renderer against the oracle (milestones 5 and 6): demo1-3 at three video modes, the attract
+/// loop and the scripted menus play with the oracle's state and pictures on every frame. Every line of the oracle's trace is compared: F
 /// (time, rand()), C (cls, cl), E (the entities), D (what the renderer writes into them), X (temporary entities,
 /// beams, lights, light styles, particles), S (sound channels), T (console text), R (the view) and V (the frame and
 /// the palette).
@@ -50,6 +50,34 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-oracleframes", "20000"]);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 20000));
+    }
+
+    // The menus, the console, the scores and the renderer's cvars, driven by tools/oracle/events/menus.events over
+    // the attract loop
+    [Theory]
+    [InlineData(320, 240, "menus.trace")]
+    [InlineData(640, 480, "menus.640x480.trace")]
+    public void MenusPlayInSyncWithTheOracle(int width, int height, string trace)
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile(trace);
+        string events = Path.Combine(RepositoryRoot(), "tools", "oracle", "events", "menus.events");
+
+        var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", "3700"], width, height);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 3700));
+    }
+
+    private static string RepositoryRoot()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "QuakeSharp.slnx")))
+            {
+                return dir.FullName;
+            }
+        }
+
+        throw new InvalidOperationException("QuakeSharp.slnx not found above the test directory");
     }
 
     // Compares the frames' lines with the oracle's, and the number of frames

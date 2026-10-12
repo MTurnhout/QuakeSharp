@@ -9,12 +9,12 @@ A faithful C# port of id Software's Quake, translated from the original source r
 
 See [design.md](design.md) for the full design and milestones.
 
-> **Status:** milestone 5: the Quake file system, the C library's maths functions (from musl) and `rand()`, the host,
-> the commands, cvars, console text and keys, and the client (demo playback, models, particles, the view, the sound
-> mixer) are ported and checked against WinQuake 1.09's own C, built headless as a reference oracle that traces every
-> demo frame by frame: the three demos play with the client's state the oracle's on every frame. The renderer comes
-> next, so nothing is seen yet: the executable runs the demo loop, which can be heard, and shows the console
-> background.
+> **Status:** milestone 6: the Quake file system, the C library's maths functions (from musl) and `rand()`, the host,
+> the commands, cvars, console text and keys, the client (demo playback, models, particles, the view, the sound mixer),
+> the software renderer, the console, the status bar and the menus are ported and checked against WinQuake 1.09's own
+> C, built headless as a reference oracle that traces every frame: the three demos at three video modes, the attract
+> loop and a scripted tour of the menus match it pixel for pixel on every frame. The executable plays the demo loop
+> and its menus can be used; starting a game waits for the server and QuakeC (milestone 7).
 
 ## Game data
 

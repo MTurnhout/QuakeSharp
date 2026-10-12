@@ -71,11 +71,11 @@ foreach ($demo in 'demo1', 'demo2', 'demo3') {
 }
 Trace 'attract' @('-oracleframes', "$AttractFrames")
 
+# the config.cfg the oracle wrote when it quit the attract loop: the bindings and archived cvars after quake.rc
+Copy-Item (Join-Path $id1 'config.cfg') (Join-Path $OutDir 'attract.config.cfg')
+Write-Host 'attract.config.cfg'
+
 # the menus, the console and the renderer's cvars, played over the attract loop
 $events = Join-Path $PSScriptRoot 'events\menus.events'
 Trace 'menus' @('-traceevents', $events, '-oracleframes', '3700')
 Trace 'menus.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-oracleframes', '3700')
-
-# the config.cfg the oracle wrote when it quit: the bindings and archived cvars after quake.rc
-Copy-Item (Join-Path $id1 'config.cfg') (Join-Path $OutDir 'attract.config.cfg')
-Write-Host 'attract.config.cfg'
