@@ -511,7 +511,7 @@ each demo played back and as a timedemo.
 | 7 ✅ | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable. *Plan: §11.1. Ported: pr_edict.c, pr_exec.c, pr_cmds.c, world.c, sv_main.c, sv_phys.c, sv_move.c, sv_user.c, host.c's and host_cmd.c's server parts (save and load included), net_main.c, net_loop.c, net_dgrm.c with the virtual LAN driver, and menu.c's network menus. Trace format 4 adds the server's lines; the scripted games (`events/`: start, commands, intermission, finale, netmenus, tour) and a game played by hand (`e1`: recorded with `-recordevents`, from the menu through e1m1 into e1m2) match the oracle on every line of every frame, 60,500 frames of play in all, every map of the four episodes included; the recording matched on its first replay. The executable shows and plays the game (milestone 6's Program.cs still drew `gfx/conback.lmp` and never handed the engine its video output) and records games with `-recordevents`. More playthroughs are added as they are recorded (decision 35)* |
 | 8 ✅ | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files. *Plan: §11.2. Trace format 5 adds `P` (the sound device's whole buffer) and `A` (the CD); every trace (demo1-3 at three sizes, the attract loop, the menus, the scripted games, the playthrough, and `sound.events` with and without a sound device and CD) matches with them on every frame: the mixer ported with milestone 5 was already sample-exact. Ported: cd_win.c over an MCI-like `ICdDrive` (the oracle compiles it unchanged over a virtual disc), snd_win.c's start-up messages (as Winquake.exe 1.09 prints them), `AppActivate`'s sound part. The executable plays the CD's tracks from the user's files (the rerelease's Ogg Vorbis through NVorbis, or WAV) on their own SDL3 stream, is silent without the focus, and under `-recordevents` plays the virtual disc's tracks for listening only* |
 | 9 ✅ | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync. *Plan: §11.3. Each oracle run keeps the files it writes (`<name>.files`), and every trace test compares QuakeSharp's with them byte for byte: config.cfg after every run (it already matched), the 41 saves of `saves.events` (a save on every map, the menus' slots, the refusals) and `commands`' save, three demos (through a level change and an intermission, with a forced CD track, one cut by the end of the run), two screenshots and `qconsole.log`. Read back in fresh runs, in sync on every frame: the menus' config.cfg, every save (`loads.events`), every demo played back and as a timedemo. Fixed on the way: reading a savegame as the C runtime's `fscanf` does (hex floats, exponents without digits, 64-bit `%i`, a 0xff byte taken for EOF; checked on 20,000 inputs of each against the oracle), `qconsole.log` in text mode (CR LF), `CL_GetMessage`'s uninitialised `f` at a demo's end (§3.3, the oracle patched alike), and the demo file still open at the end. Winquake.exe 1.09 loads QuakeSharp's saves, and QuakeSharp loads Winquake.exe's saves and plays its demos* |
-| 10 | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios |
+| 10 | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios. *Plan: §11.4* |
 | 11 | Networking | UDP play with other NetQuake engines; net game tests |
 | Later | | Enhanced mode (Vulkan hardware renderer), QuakeWorld, release builds (single file, NativeAOT) |
 
@@ -701,6 +701,98 @@ bytes. Trace format stays 5.
 the oracle's byte for byte; the saves and demos read back in fresh runs match on every frame; and Winquake.exe's saves
 and demos load in QuakeSharp, and QuakeSharp's saves in Winquake.exe.
 
+### 11.4 Milestone 10: the plan
+
+Every module of WinQuake's C is ported but two drivers: in_win.c (the mouse and the joystick: `IN_Move` and the rest are
+still stand-ins in `QuakeEngine.Pending.cs`, so the executable has no mouse look) and vid_win.c's modes (one mode of
+the size `QuakeParms` asks for; the Video menu lists nothing, decision 30). The mission packs' code (`-hipnotic` and
+`-rogue`: the search path, sbar.c's weapons and items, menu.c's episodes and levels, `give`) came with its modules, but
+no trace runs it. And the oracle is the C: what Winquake.exe itself does where the oracle's platform layer stands in
+has been checked only where a milestone needed it (snd_win.c's messages, the build stamp, the saves and demos).
+Milestone 10 audits the executables, ports the last two drivers, traces the mission packs, and adds scenarios for
+what no trace reaches yet.
+
+**The audit** (decision 42). Winquake.exe 1.09 from a scratch copy, by hand, as §11.3's step 6; each finding is
+either emulated (the oracle and QuakeSharp alike) or documented, in a new §3.4:
+
+| What | How | Expected |
+|---|---|---|
+| The start-up text | `-condebug`'s `qconsole.log` against the oracle's console at the same point | in_win.c's joystick line (`joystick not found -- ...`), vid_win.c's mode messages, the network drivers' (Winsock TCP/IP with the real address, IPX), `CDAudio_Init` (no drive here) |
+| `config.cfg` | Written after a run that changes nothing, against the oracle's | in_win.c's archived cvars (`joystick`...) |
+| The modes | `vid_describemodes`, `vid_nummodes`, the Video menu (a `screenshot`), the mode it starts in | The three windowed modes (320×240; 640×480 and 800×600, stretched: frames of 320×240 and 400×300 shown doubled), the fullscreen modes this machine offers, `VID_Update`'s switch to `_vid_default_mode_win` at the first frame unless `-startwindowed` |
+| The mouse | In a window and full screen, with `_windowed_mouse` 0 and 1 | In a window the mouse does nothing (buttons included) until `_windowed_mouse` is 1; `-dinput` off by default; in_win.c changes the system's mouse acceleration (`-noforcemparms`...) |
+| The network menus | The multiplayer menu | Whether IPX is offered |
+| The pixels | Frames of `timedemo demo1`-`3` (`wait` lines, then `screenshot`: a timedemo runs one demo message per frame whatever the time) against the oracle's same frames (`-traceshot`) | How many pixels the x87 arithmetic and the `id386` assembly change (§3.1: documented, not emulated; now measured) |
+| quake.exe (DOS) | Its version identified; read from the source's DOS drivers (sys_dos.c, vid_dos.c, vid_vga.c, vid_ext.c, in_dos.c, snd_dos.c, snd_gus.c, cd_audio.c, net_dos.c, net_ipx.c, net_ser.c...) and Chocolate Quake's notes (read, never copied) | DJGPP's `rand()`, VGA's palette index 0 (no colormap remapping), mode 0's 320×200 and the VESA modes, the serial and modem menus, the DOS start-up text; documented only (D4), unless D10 says otherwise |
+
+**Trace format 6** adds a line after `A`, and the frame line takes the mode:
+
+| Line | Fields |
+|---|---|
+| `I <hash>` | in_win.c: `mouseactive`, `mouseinitialized`, `mouse_buttons`, `mouse_oldbuttonstate`, `mx_accum`, `my_accum`, `mouse_x`, `mouse_y`, `old_mouse_x`, `old_mouse_y`, the joystick's state (`joy_avail`, `joy_advancedinit`, `joy_haspov`, `dwAxisMap`, `dwControlMap`, `joy_oldbuttonstate`, `joy_oldpovstate`) and vid_win.c's `windowed_mouse` |
+| `V <frame> <palette>` | As format 5's, the frame's hash also taking the mode: `vid_modenum`, `vid.width`, `vid.height`, `vid.rowbytes`, `modestate` |
+
+`-tracedump` writes in_win.c's fields and the mode by name; `trace-compare` knows `I`.
+
+**Scripted mouse.** `-traceevents` takes two window-level lines besides `@key` (which stays `Key_Event`, so `e1.events`
+replays as before): `<frame> @mouse <dx> <dy>`, the cursor moved (what in_win.c's `GetCursorPos` finds before the
+frame), and `<frame> @buttons <state>`, a mouse button message with the buttons' state (`MainWndProc`'s
+`IN_MouseEvent`). in_win.c decides what they do, as in WinQuake. `-recordevents` records the mouse as these (decision
+43 extends decision 34: the oracle now has mouse motion).
+
+**What the oracle adds**: in_win.c compiled unchanged in place of in_null.c, over a virtual Win32 in `src/in_oracle.c`
+(`GetCursorPos`, `SetCursorPos`, `ClipCursor`, `ShowCursor`, `SystemParametersInfo`; winmm's joystick functions
+answering as the audit shows Windows does without a joystick; DirectInput only with `-dinput`, not used); vid_win.c's
+mode list, its commands and the Video menu in `vid_oracle.c` over a virtual display with the audit's modes (decision
+44); trace format 6 and the scripted mouse in `trace.c`; and `Trace-Demos.ps1` copying `hipnotic/pak0.pak` and
+`rogue/pak0.pak` (never the packs' loose `config.cfg`, as id1 holds only its PAKs) and tracing them.
+
+**Porting order.** Each step builds with the tests green and is committed; at steps 3-5 the oracle's traces change
+first and QuakeSharp follows them.
+
+1. **The audit**, above. §3.4 records it; D4 is settled with it.
+2. **What the traces reach.** A coverage run of the fidelity tests over Core (D9) lists, module by module, the ported
+   functions and branches no trace reaches. That list is the work of step 6, and the measure of its end. Without a
+   coverage tool, the list comes from reading each C module against the scenarios.
+3. **in_win.c**: the oracle first (format 6, the scripted mouse, in_win.c over the virtual Win32), then
+   `QuakeEngine.InWin.cs` (the stand-ins leave `QuakeEngine.Pending.cs`) over the platform's mouse and joystick (SDL3
+   relative motion; a gamepad as `joyGetPosEx`'s axes and buttons where that maps cleanly, §8), with vid_win.c's part:
+   `VID_Update`'s `_windowed_mouse`, `IN_ActivateMouse` in the full-screen modes, `VID_HandlePause`, the options' Use
+   Mouse. Every trace changes (the joystick's line on the console, `I`) and matches again. `mouse.events`: `+mlook`,
+   `sensitivity`, `m_filter`, `m_pitch`, `m_yaw`, `m_forward`, `m_side`, `lookstrafe`, `lookspring`, `freelook`, the
+   options' invert mouse, `_windowed_mouse` on and off, the buttons, `force_centerview`. The executable captures the
+   mouse when in_win.c activates it, and records it.
+4. **vid_win.c's modes** (decision 44): the mode list, `vid_mode` (set in `VID_Update`, so on a frame boundary), the
+   `vid_*` commands, the Video menu (the arrows, Enter, `T` to test a mode for 5 seconds and come back, `D` to make it
+   the default), the stretched modes, `_vid_default_mode_win` at the first frame. `video.events`: the menu, every mode
+   set from the menu and the console, in a game too (the z-buffer and the surface cache at the new size, the refdef
+   recalculated), a save and a demo across a change. The existing traces keep their sizes (`-oraclevid`, a mode of its
+   own as now). The executable's window follows the mode: a window of the mode's size for the windowed modes,
+   borderless full screen for the others, the frame scaled as §6.4. D7 is settled with it.
+5. **The mission packs**: the MD5s confirmed as the original releases (the "to verify" of §2 goes); with `-hipnotic`
+   and `-rogue`: their demos (hipnotic's `hipdemo1`-`4`, rogue's `demo1`-`3`) and attract loops (their own `quake.rc`);
+   `hiptour.events` and `roguetour.events`, generated as `tour.events`: every map of each pack with its weapons and
+   items (`give`, the impulses), so sbar.c draws them; their saves on every map, read back; the single-player and
+   network menus' episodes and levels; rogue's team modes (`teamplay` 4-6, the scores sbar.c draws); each pack's end.
+   `GameTests` checks them; the executable plays the packs' tracks (the rerelease's `hipnotic/music`, `rogue/music`).
+6. **The remaining UI**, from step 2's list, in new events files traced at 320×240 (some also at 640×480). Expected
+   there: the console (scrolling back, the history, command completion, `messagemode` and `messagemode2`,
+   `con_notifytime`), screen.c (the turtle, the net icon, the disc, `showpause`, the loading plaque, centre prints of
+   several lines), sbar.c (the deathmatch overlays and the mini overlay at each `viewsize`, the face with the
+   powerups, the sigils, keys and armours, coop's `+showscores`), menu.c (the help pages, every options item, Reset to
+   defaults, binding and clearing keys, the quit messages), the renderer's debug cvars (`r_drawflat`, `r_draworder`,
+   `r_speeds`, `r_timegraph`, `r_aliasstats`, `r_polymodelstats`, `r_reportsurfout`, `r_reportedgeout`, the
+   `r_maxsurfs` and `r_maxedges` overflows, `r_waterwarp`, `d_subdiv16`, `chase_active`), and the server's rarer
+   commands. What no input can reach in the oracle's build is listed with the reason.
+7. **The shareware smoke test** (§10's last row, D11): CI fetches `quake106.zip`, extracts its `pak0.pak` (the
+   registered one, same MD5), and plays demo1-3 against the last lines of their traces, kept in the test.
+
+**Done when** §3.4 holds the audit (each difference emulated or documented); in_win.c and vid_win.c's modes are ported
+and `QuakeEngine.Pending.cs` keeps only zone.c's `Cache_Report` and `Hunk_Check` (managed memory: nothing to do); the
+mission packs' demos, attract loops, tours, saves and scripted games match the oracle on every frame, their files
+included; each function step 2 found unreached is reached by a trace in sync or listed with why; and the executable
+plays with the mouse, in every mode, and both mission packs.
+
 ## 12. Decision log
 
 | # | Topic | Decision | Date |
@@ -733,7 +825,7 @@ and demos load in QuakeSharp, and QuakeSharp's saves in Winquake.exe.
 | 26 | What the client needs, ported with it | The client's state depends on code beyond `cl_*`: `S_StartSound` draws `rand()` depending on what the mixer has painted, `R_DrawParticles` frees particles the client's effects then reuse, `R_SetupFrame`'s view leaf sets the contents' colour shift, `SCR_UpdateScreen` decides whether the view runs. So snd_dma/snd_mix/snd_mem, r_part and the control flow of screen.c and r_main/r_misc are ported whole now, their drawing calls stand-ins until milestone 6 | 2026-10-12 |
 | 27 | The video driver in Core | vid_win.c's part that the game sees (one mode of the size `QuakeParms` asks for, its cvars and commands, the colormap remapping, `S_Init` between the mode sets, the palette, the surface cache message) is ported in Core as the oracle has it; the platform only shows `vid.buffer` through `IVideoOutput`. Its other modes come with milestone 6 (§6.4) | 2026-10-12 |
 | 29 | Renderer memory | The software renderer's arrays, offsets and surface cache keep the C's layout where it shows (§6.1); undefined reads get fixed substitutes shared with the oracle (§3.3: `finalverts` zeroed) | 2026-10-12 |
-| 30 | Video menu | One mode, as the oracle's: `VID_MenuDraw` lists nothing, `VID_MenuKey` goes back to the options on Escape as vid_win.c's does (oracle and QuakeSharp alike); the mode list waits for more modes | 2026-10-12 |
+| 30 | Video menu | One mode, as the oracle's: `VID_MenuDraw` lists nothing, `VID_MenuKey` goes back to the options on Escape as vid_win.c's does (oracle and QuakeSharp alike); the mode list waits for more modes (superseded by decision 44) | 2026-10-12 |
 | 31 | Scripted keys | `-traceevents` lines may be `<frame> @key <key> <down>`, a key event, so menus and the console are driven as a player does; QuakeSharp's `TraceRun` reads the same files | 2026-10-12 |
 | 28 | Base directory "." | The oracle's traces and QuakeSharp's run with WinQuake's base directory "." (the console shows `./id1/pak0.pak` wherever the data is); `QuakeParms.workdir` is the folder "." means, the process's current folder by default | 2026-10-12 |
 | 32 | Server verification (was D5) | Scripted games: `-traceevents` files of console commands and key events on the virtual clock, written by hand or recorded from play (decision 34), run by the oracle and QuakeSharp and compared every frame with trace format 4's server lines (`G`, `Q`, `N`, `W`, `M`) besides the client's and the renderer's. Demos the oracle records wait for milestone 9, where `.dem` files are compared byte for byte (§11.1) | 2026-10-12 |
@@ -746,6 +838,10 @@ and demos load in QuakeSharp, and QuakeSharp's saves in Winquake.exe.
 | 39 | Music decoder (was D6) | NVorbis 0.10.5 (NuGet, MIT, GPL-2-compatible) decodes the rerelease's Ogg Vorbis tracks; WAV tracks are SDL3's. Approved with the milestone 8 plan | 2026-10-12 |
 | 40 | Comparing files | The files the game writes are compared at the end of each run, not by a trace line: `Trace-Demos.ps1` keeps what each oracle run wrote (`<name>.files/`), the tests compare QuakeSharp's user folder with it (the same names, byte for byte), and runs that read files start with the oracle's copied in (its `id1`, QuakeSharp's user folder). `TraceRun` quits at the frame limit as the oracle does, so every run's config.cfg is compared. Trace format stays 5 (§11.3) | 2026-10-12 |
 | 41 | The real executable's files | Saves, demos and config.cfg cross-loaded with Winquake.exe 1.09 by hand, not traced: its x87 arithmetic may print other last digits than the oracle (§11.3) | 2026-10-12 |
+| 42 | Executable audit | Winquake.exe 1.09 is audited by hand from a scratch copy (its start-up text, config.cfg, modes, mouse, menus, and timedemo frames against the oracle's pixels); quake.exe from the source's DOS drivers and Chocolate Quake's notes. Each difference is emulated on both sides or documented, in §3.4 (§11.4) | 2026-10-12 |
+| 43 | Mouse and joystick | in_win.c is ported in Core and compiled unchanged in the oracle over a virtual Win32 (cursor, winmm's joystick); `-traceevents` takes window-level `@mouse <dx> <dy>` and `@buttons <state>` lines that in_win.c reads as WinQuake does, `@key` staying `Key_Event`; `-recordevents` records them, so the oracle has mouse motion (extends decision 34). Trace format 6 adds `I` (§11.4) | 2026-10-12 |
+| 44 | Video modes | vid_win.c's mode list (the three windowed modes, two of them stretched, and fixed full-screen modes as Winquake.exe lists them here), `vid_mode`, its commands and the Video menu, ported in Core and copied into `vid_oracle.c`; the frame's hash takes the mode. Supersedes decision 30 (§11.4) | 2026-10-12 |
+| 45 | Mission packs | Traced as id1 is: the oracle's game folders hold only the original PAKs (`hipnotic/pak0.pak`, `rogue/pak0.pak`, by MD5, never their loose config.cfg), run with `-hipnotic` and `-rogue`; their demos, attract loops, tours, saves and scripted games checked every frame (§11.4) | 2026-10-12 |
 
 ## 13. Open decisions
 
@@ -756,3 +852,6 @@ To confirm with the user before the milestones they affect; the proposals are th
 | D4 | Fidelity target version | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`; the DOS 1.08 executable's differences (DJGPP's `rand()`, x87) documented, emulated later only if wanted |
 | D7 | Default video mode | 320×240 in a window scaled to the screen, as WinQuake's default mode (the fidelity target is WinQuake: decision 14); DOS's 320×200 and larger modes from the menu |
 | D8 | Scope of v1 | Quake and both mission packs on the WinQuake engine; GLQuake and QuakeWorld after v1 |
+| D9 | Coverage tool (milestone 10, step 2) | `coverlet.MTP` (MIT; Microsoft.Testing.Platform's coverage extension), in the fidelity tests only, run locally with the game data; never shipped. Without it, the list comes from reading the C |
+| D10 | Running quake.exe (milestone 10, step 1) | Not run: its differences come from the source and Chocolate Quake's notes. Running it would need DOSBox, a download |
+| D11 | Shareware in CI (milestone 10, step 7) | CI downloads `quake106.zip` from a fixed mirror, checks its MD5, extracts `pak0.pak` (7-Zip reads its LHA archive) and caches it; never committed |
