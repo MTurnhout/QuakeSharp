@@ -1,3 +1,57 @@
+diff --git a/common.c b/common.c
+index e07e6ce..ca085ec 100644
+--- a/common.c
++++ b/common.c
+@@ -862,8 +862,15 @@ void COM_FileBase (char *in, char *out)
+ 	while (s != in && *s != '.')
+ 		s--;
+ 	
++#ifdef ORACLE
++// a name without '/' ("progs.dat"): stop before its start, as QuakeSharp does, rather than read the memory before it
++// (which overran COM_LoadFile's base[32] with the string literal in front of "progs.dat")
++	for (s2 = s ; s2 >= in && *s2 && *s2 != '/' ; s2--)
++	;
++#else
+ 	for (s2 = s ; *s2 && *s2 != '/' ; s2--)
+ 	;
++#endif
+ 	
+ 	if (s-s2 < 2)
+ 		strcpy (out,"?model?");
+diff --git a/net_main.c b/net_main.c
+index 5f5d2cf..7facb9b 100644
+--- a/net_main.c
++++ b/net_main.c
+@@ -20,6 +20,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ // net_main.c
+ 
+ #include "quakedef.h"
++#ifdef ORACLE
++#include "trace.h"
++#endif
+ #include "net_vcr.h"
+ 
+ qsocket_t	*net_activeSockets = NULL;
+@@ -639,6 +642,9 @@ int NET_SendMessage (qsocket_t *sock, sizebuf_t *data)
+ 	r = sfunc.QSendMessage(sock, data);
+ 	if (r == 1 && sock->driver)
+ 		messagesSent++;
++#ifdef ORACLE
++	Trace_Message (sock, data, 1, r);
++#endif
+ 
+ 	if (recording)
+ 	{
+@@ -670,6 +676,9 @@ int NET_SendUnreliableMessage (qsocket_t *sock, sizebuf_t *data)
+ 	r = sfunc.SendUnreliableMessage(sock, data);
+ 	if (r == 1 && sock->driver)
+ 		unreliableMessagesSent++;
++#ifdef ORACLE
++	Trace_Message (sock, data, 0, r);
++#endif
+ 
+ 	if (recording)
+ 	{
 diff --git a/quakeasm.h b/quakeasm.h
 index 96b758b..b63f5a1 100644
 --- a/quakeasm.h
@@ -41,3 +95,42 @@ index 8607419..50de739 100644
  // cache align
  	pfinalverts = (finalvert_t *)
  			(((long)&finalverts[0] + CACHE_SIZE - 1) & ~(CACHE_SIZE - 1));
+diff --git a/world.c b/world.c
+index e1acfea..b2e7850 100644
+--- a/world.c
++++ b/world.c
+@@ -238,6 +238,34 @@ areanode_t *SV_CreateAreaNode (int depth, vec3_t mins, vec3_t maxs)
+ 	return anode;
+ }
+ 
++#ifdef ORACLE
++/*
++===============
++Oracle_AreaLinks
++
++The trace's W line (trace.c): every area node's trigger list, then its solid list, as edict numbers in their order,
++each list ended by -1. Returns how many numbers it wrote.
++===============
++*/
++int Oracle_AreaLinks (int *out, int max)
++{
++	int		i, s, n;
++	link_t	*list, *l;
++
++	n = 0;
++	for (i = 0; i < sv_numareanodes; i++)
++		for (s = 0; s < 2; s++)
++		{
++			list = s ? &sv_areanodes[i].solid_edicts : &sv_areanodes[i].trigger_edicts;
++			for (l = list->next; l != list && n < max; l = l->next)
++				out[n++] = NUM_FOR_EDICT (EDICT_FROM_AREA (l));
++			if (n < max)
++				out[n++] = -1;
++		}
++	return n;
++}
++#endif
++
+ /*
+ ===============
+ SV_ClearWorld

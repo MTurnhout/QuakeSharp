@@ -24,6 +24,7 @@ extern char *con_text;
 #define CON_TEXTSIZE 16384
 extern float con_times[NUM_CON_TIMES];
 char *va (char *format, ...);
+int Oracle_AreaLinks (int *out, int max);	// world.c, as quake-oracle.patch adds it
 
 static FILE *trace;
 static char trace_name[MAX_OSPATH];
@@ -42,6 +43,12 @@ static unsigned long long palette_hash;
 static FILE *events;
 static int next_event_frame = -1;
 static char next_event[1024];
+
+// the M line: the messages sent during the frame (and, for -tracedump, their text)
+static unsigned long long message_hash;
+static int message_count;
+static char *message_log;
+static int message_log_length, message_log_size;
 
 /*
 ===============================================================================
@@ -422,6 +429,260 @@ static hash_t Frame (void)
 /*
 ===============================================================================
 
+THE SERVER'S LINES
+
+Without an active server, G hashes the flags and svs, and Q, N and W nothing: what sv points into belongs to a game
+that is over.
+
+===============================================================================
+*/
+
+static void H_StringPtr (hash_t *h, const char *s)
+{
+	H_Int (h, s != NULL);
+	if (s)
+		H_String (h, s);
+}
+
+static void H_Sizebuf (hash_t *h, sizebuf_t *b)
+{
+	H_Int (h, b->overflowed);
+	H_Int (h, b->cursize);
+	H_Bytes (h, b->data, b->cursize);
+}
+
+// an edict's number (from its address, so stale pointers give the C's number too), -1 without a server
+static int EdictNumber (edict_t *e)
+{
+	if (!e || !sv.active || !sv.edicts)
+		return -1;
+	return (int)(((byte *)e - (byte *)sv.edicts) / pr_edict_size);
+}
+
+// G: the server (sv, svs and the client slots up to svs.maxclients)
+static hash_t Server (void)
+{
+	hash_t h = FNV_OFFSET;
+	client_t *c;
+	int i, j;
+
+	H_Int (&h, sv.active);
+	H_Int (&h, sv.paused);
+	H_Int (&h, sv.loadgame);
+	if (sv.active)
+	{
+		H_Double (&h, sv.time);
+		H_Int (&h, sv.lastcheck);
+		H_Double (&h, sv.lastchecktime);
+		H_String (&h, sv.name);
+		H_String (&h, sv.modelname);
+		H_Model (&h, sv.worldmodel);
+		for (i = 0; i < MAX_MODELS; i++)
+		{
+			H_StringPtr (&h, sv.model_precache[i]);
+			H_Model (&h, sv.models[i]);
+		}
+		for (i = 0; i < MAX_SOUNDS; i++)
+			H_StringPtr (&h, sv.sound_precache[i]);
+		for (i = 0; i < MAX_LIGHTSTYLES; i++)
+			H_StringPtr (&h, sv.lightstyles[i]);
+		H_Int (&h, sv.num_edicts);
+		H_Int (&h, sv.max_edicts);
+		H_Int (&h, sv.state);
+		H_Sizebuf (&h, &sv.datagram);
+		H_Sizebuf (&h, &sv.reliable_datagram);
+		H_Sizebuf (&h, &sv.signon);
+	}
+
+	H_Int (&h, svs.maxclients);
+	H_Int (&h, svs.maxclientslimit);
+	H_Int (&h, svs.serverflags);
+	H_Int (&h, svs.changelevel_issued);
+	for (i = 0, c = svs.clients; i < svs.maxclients; i++, c++)
+	{
+		H_Int (&h, c->active);
+		H_Int (&h, c->spawned);
+		H_Int (&h, c->dropasap);
+		H_Int (&h, c->privileged);
+		H_Int (&h, c->sendsignon);
+		H_Double (&h, c->last_message);
+		H_Int (&h, c->netconnection != NULL);
+		H_Vec (&h, c->cmd.viewangles);
+		H_Float (&h, c->cmd.forwardmove);
+		H_Float (&h, c->cmd.sidemove);
+		H_Float (&h, c->cmd.upmove);
+		H_Vec (&h, c->wishdir);
+		H_Sizebuf (&h, &c->message);
+		H_Int (&h, EdictNumber (c->edict));
+		H_String (&h, c->name);
+		H_Int (&h, c->colors);
+		for (j = 0; j < NUM_PING_TIMES; j++)
+			H_Float (&h, c->ping_times[j]);
+		H_Int (&h, c->num_pings);
+		for (j = 0; j < NUM_SPAWN_PARMS; j++)
+			H_Float (&h, c->spawn_parms[j]);
+		H_Int (&h, c->old_frags);
+	}
+	return h;
+}
+
+// what each slot of the globals or of an edict's fields holds, from the progs' definitions: 0 no definition covers it
+// (the compiler's temporaries, the return value, the parameters), 1 a number, an entity, a field or a function, 2 a
+// string (hashed by content: its offset depends on the oracle's addresses)
+#define SLOT_NONE	0
+#define SLOT_VALUE	1
+#define SLOT_STRING	2
+
+static byte *slot_kinds;
+static int slot_kinds_size;
+
+static byte *SlotKinds (ddef_t *defs, int numdefs, int numslots)
+{
+	int i, j, type, size;
+
+	if (numslots > slot_kinds_size)
+	{
+		slot_kinds = realloc (slot_kinds, numslots);
+		slot_kinds_size = numslots;
+	}
+	memset (slot_kinds, SLOT_NONE, numslots);
+	for (i = 0; i < numdefs; i++)
+	{
+		type = defs[i].type & ~DEF_SAVEGLOBAL;
+		size = type == ev_vector ? 3 : 1;
+		for (j = 0; j < size; j++)
+		{
+			if (defs[i].ofs + j >= numslots)
+				break;
+			if (type == ev_string)
+				slot_kinds[defs[i].ofs + j] = SLOT_STRING;
+			else if (slot_kinds[defs[i].ofs + j] == SLOT_NONE)
+				slot_kinds[defs[i].ofs + j] = SLOT_VALUE;
+		}
+	}
+	return slot_kinds;
+}
+
+static void H_Slots (hash_t *h, byte *kinds, int *slots, int count)
+{
+	int i;
+
+	for (i = 0; i < count; i++)
+	{
+		if (kinds[i] == SLOT_STRING)
+			H_String (h, pr_strings + slots[i]);
+		else if (kinds[i] == SLOT_VALUE)
+			H_Int (h, slots[i]);
+	}
+}
+
+// Q: the QuakeC globals
+static hash_t Globals (void)
+{
+	hash_t h = FNV_OFFSET;
+	byte *kinds;
+
+	if (!sv.active || !progs)
+		return h;
+	kinds = SlotKinds (pr_globaldefs, progs->numglobaldefs, progs->numglobals);
+	H_Int (&h, progs->numglobals);
+	H_Slots (&h, kinds, (int *)pr_globals, progs->numglobals);
+	return h;
+}
+
+// N: the edicts up to sv.num_edicts, their header and their fields
+static hash_t Edicts (int *count)
+{
+	hash_t h = FNV_OFFSET;
+	byte *kinds;
+	edict_t *e;
+	int i, j;
+
+	*count = 0;
+	if (!sv.active || !progs)
+		return h;
+	kinds = SlotKinds (pr_fielddefs, progs->numfielddefs, progs->entityfields);
+	for (i = 0; i < sv.num_edicts; i++)
+	{
+		e = EDICT_NUM(i);
+		H_Int (&h, e->free);
+		H_Int (&h, e->num_leafs);
+		for (j = 0; j < e->num_leafs; j++)
+			H_Int (&h, e->leafnums[j]);
+		H_EntityState (&h, &e->baseline);
+		H_Float (&h, e->freetime);
+		H_Slots (&h, kinds, (int *)&e->v, progs->entityfields);
+	}
+	*count = sv.num_edicts;
+	return h;
+}
+
+// W: the area nodes' trigger and solid lists, as edict numbers in their order
+static hash_t World (void)
+{
+	static int links[4096];
+	hash_t h = FNV_OFFSET;
+	int i, n;
+
+	if (!sv.active)
+		return h;
+	n = Oracle_AreaLinks (links, sizeof(links) / sizeof(links[0]));
+	H_Int (&h, n);
+	for (i = 0; i < n; i++)
+		H_Int (&h, links[i]);
+	return h;
+}
+
+static int DumpThisFrame (int frame);
+
+// who sent a message: -1 the client, n the server to client n, -2 another socket
+static int MessageSender (qsocket_t *sock)
+{
+	int i;
+
+	if (sock == cls.netcon)
+		return -1;
+	for (i = 0; i < svs.maxclients; i++)
+		if (svs.clients[i].netconnection == sock)
+			return i;
+	return -2;
+}
+
+// net_main.c (quake-oracle.patch): NET_SendMessage and NET_SendUnreliableMessage, after the driver took the message
+void Trace_Message (qsocket_t *sock, sizebuf_t *data, int reliable, int result)
+{
+	hash_t h = message_hash;
+	int sender, i, need;
+
+	sender = MessageSender (sock);
+	H_Int (&h, sender);
+	H_Int (&h, reliable);
+	H_Int (&h, result);
+	H_Int (&h, data->cursize);
+	H_Bytes (&h, data->data, data->cursize);
+	message_hash = h;
+	message_count++;
+
+	// the frame running is trace_frame + 1
+	if (DumpThisFrame (trace_frame + 1))
+	{
+		need = message_log_length + 64 + data->cursize * 2;
+		if (need > message_log_size)
+		{
+			message_log_size = need * 2;
+			message_log = realloc (message_log, message_log_size);
+		}
+		message_log_length += sprintf (message_log + message_log_length, "message %d %d %d %d ", sender, reliable,
+			result, data->cursize);
+		for (i = 0; i < data->cursize; i++)
+			message_log_length += sprintf (message_log + message_log_length, "%02x", data->data[i]);
+		message_log_length += sprintf (message_log + message_log_length, "\n");
+	}
+}
+
+/*
+===============================================================================
+
 THE TRACE
 
 ===============================================================================
@@ -461,6 +722,7 @@ void Trace_Init (void)
 		frame_limit = Q_atoi (com_argv[t + 1]);
 
 	quit_after_demo = COM_CheckParm ("-tracequitafterdemo") != 0;
+	message_hash = FNV_OFFSET;
 }
 
 static void Shot (void)
@@ -516,6 +778,77 @@ static void DumpEntity (FILE *f, const char *what, int i, entity_t *e)
 		e->frame, *(unsigned *)&e->syncbase, ColormapNumber (e->colormap), e->effects, e->skinnum);
 }
 
+// a string in a dump: quoted, with \\, \" and the characters outside 32-126 as \xHH
+static void DumpString (FILE *f, const char *s)
+{
+	const unsigned char *p;
+
+	fputc ('"', f);
+	for (p = (const unsigned char *)s; *p; p++)
+	{
+		if (*p == '\\' || *p == '"')
+			fprintf (f, "\\%c", *p);
+		else if (*p < 32 || *p > 126)
+			fprintf (f, "\\x%02x", *p);
+		else
+			fputc (*p, f);
+	}
+	fputc ('"', f);
+}
+
+// the slots of a definition: strings by content, the rest as their bits in hexadecimal
+static void DumpDef (FILE *f, const char *what, ddef_t *def, int *slots, int numslots)
+{
+	int type, size, j;
+
+	type = def->type & ~DEF_SAVEGLOBAL;
+	size = type == ev_vector ? 3 : 1;
+	fprintf (f, "%s %s", what, pr_strings + def->s_name);
+	for (j = 0; j < size && def->ofs + j < numslots; j++)
+	{
+		fputc (' ', f);
+		if (type == ev_string)
+			DumpString (f, pr_strings + slots[def->ofs + j]);
+		else
+			fprintf (f, "%08x", slots[def->ofs + j]);
+	}
+	fputc ('\n', f);
+}
+
+// -tracedump: the server's state, the globals and the edicts by name, the frame's messages
+static void DumpServer (FILE *f)
+{
+	edict_t *e;
+	char what[32];
+	int i, j;
+
+	fprintf (f, "server active %d paused %d", sv.active, sv.paused);
+	if (sv.active)
+		fprintf (f, " time %016llx name %s num_edicts %d", *(unsigned long long *)&sv.time, sv.name, sv.num_edicts);
+	fprintf (f, "\n");
+	if (sv.active && progs)
+	{
+		for (i = 0; i < progs->numglobaldefs; i++)
+			DumpDef (f, "global", &pr_globaldefs[i], (int *)pr_globals, progs->numglobals);
+		for (i = 0; i < sv.num_edicts; i++)
+		{
+			e = EDICT_NUM(i);
+			fprintf (f, "edict %d free %d freetime %08x leafs", i, e->free, *(unsigned *)&e->freetime);
+			for (j = 0; j < e->num_leafs; j++)
+				fprintf (f, " %d", e->leafnums[j]);
+			DumpVec (f, "baseline.origin", e->baseline.origin);
+			DumpVec (f, "baseline.angles", e->baseline.angles);
+			fprintf (f, " modelindex %d frame %d colormap %d skin %d effects %d\n", e->baseline.modelindex,
+				e->baseline.frame, e->baseline.colormap, e->baseline.skin, e->baseline.effects);
+			sprintf (what, "edict %d", i);
+			for (j = 0; j < progs->numfielddefs; j++)
+				DumpDef (f, what, &pr_fielddefs[j], (int *)&e->v, progs->entityfields);
+		}
+	}
+	if (message_log_length)
+		fwrite (message_log, 1, message_log_length, f);
+}
+
 // -tracedump: the entities, field by field
 static void Dump (void)
 {
@@ -537,7 +870,18 @@ static void Dump (void)
 			? (int)(cl_visedicts[i] - cl_entities) : cl_visedicts[i] >= cl_temp_entities && cl_visedicts[i] < cl_temp_entities + MAX_TEMP_ENTITIES
 			? 0x20000 + (int)(cl_visedicts[i] - cl_temp_entities) : IsStatic (cl_visedicts[i])
 			? 0x10000 + (int)(cl_visedicts[i] - cl_static_entities) : -1);
+	DumpServer (f);
 	fclose (f);
+}
+
+static int DumpThisFrame (int frame)
+{
+	int i;
+
+	for (i = 0; i < num_dumps; i++)
+		if (dumps[i] == frame)
+			return 1;
+	return 0;
 }
 
 void Trace_Frame (void)
@@ -549,7 +893,7 @@ void Trace_Frame (void)
 	if (trace)
 	{
 		if (trace_frame == 1)
-			fprintf (trace, "H 3 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
+			fprintf (trace, "H 4 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
 		fprintf (trace, "F %d %d %016llx %08x %u\n", trace_frame, host_framecount,
 			*(unsigned long long *)&realtime, oracle_rand_seed (), oracle_rand_calls);
 		fprintf (trace, "C %016llx\n", Client ());
@@ -563,14 +907,25 @@ void Trace_Frame (void)
 		fprintf (trace, "T %016llx\n", Text ());
 		fprintf (trace, "R %016llx\n", View ());
 		fprintf (trace, "V %016llx %016llx\n", Frame (), palette_hash);
+		fprintf (trace, "G %016llx\n", Server ());
+		fprintf (trace, "Q %016llx\n", Globals ());
+		{
+			int edicts;
+			hash_t n = Edicts (&edicts);
+			fprintf (trace, "N %016llx %d\n", n, edicts);
+		}
+		fprintf (trace, "W %016llx\n", World ());
+		fprintf (trace, "M %016llx %d\n", message_hash, message_count);
 	}
 
 	for (i = 0; i < num_shots; i++)
 		if (shots[i] == trace_frame)
 			Shot ();
-	for (i = 0; i < num_dumps; i++)
-		if (dumps[i] == trace_frame)
-			Dump ();
+	if (DumpThisFrame (trace_frame))
+		Dump ();
+	message_hash = FNV_OFFSET;
+	message_count = 0;
+	message_log_length = 0;
 
 	if (cls.demoplayback)
 		was_playing = 1;

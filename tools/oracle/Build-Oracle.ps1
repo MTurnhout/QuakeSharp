@@ -72,7 +72,8 @@ Link (Join-Path $WorkDir 'numerics.exe') (@($numerics) + $muslObjects)
 
 # quake-oracle.exe: WinQuake 1.09's C with the oracle's platform layer (src/) instead of the Windows drivers. The
 # sources are copied into the work folder and quake-oracle.patch applied: with ORACLE defined, quakedef.h and
-# quakeasm.h leave __i386__ undefined, so id386 is 0 (the C code, never the assembly).
+# quakeasm.h leave __i386__ undefined, so id386 is 0 (the C code, never the assembly). The network drivers are
+# src/net_oracle.c's (loopback and datagram over a virtual LAN driver) instead of net_win.c's.
 $quake = Join-Path $WorkDir 'quake-src'
 if (Test-Path $quake) { Remove-Item -Recurse -Force $quake }
 Copy-Item -Recurse (Join-Path $repo 'reference\Quake\WinQuake') $quake
@@ -87,7 +88,7 @@ $quakeSources = @(
     'cl_demo.c', 'cl_input.c', 'cl_main.c', 'cl_parse.c', 'cl_tent.c', 'chase.c', 'cmd.c', 'common.c', 'console.c',
     'crc.c', 'cvar.c', 'draw.c', 'd_edge.c', 'd_fill.c', 'd_init.c', 'd_modech.c', 'd_part.c', 'd_polyse.c', 'd_scan.c',
     'd_sky.c', 'd_sprite.c', 'd_surf.c', 'd_vars.c', 'd_zpoint.c', 'host.c', 'host_cmd.c', 'keys.c', 'menu.c',
-    'mathlib.c', 'model.c', 'net_loop.c', 'net_main.c', 'net_vcr.c', 'net_none.c', 'nonintel.c', 'pr_cmds.c',
+    'mathlib.c', 'model.c', 'net_dgrm.c', 'net_loop.c', 'net_main.c', 'net_vcr.c', 'nonintel.c', 'pr_cmds.c',
     'pr_edict.c', 'pr_exec.c', 'r_aclip.c', 'r_alias.c', 'r_bsp.c', 'r_light.c', 'r_draw.c', 'r_efrag.c', 'r_edge.c',
     'r_misc.c', 'r_main.c', 'r_sky.c', 'r_sprite.c', 'r_surf.c', 'r_part.c', 'r_vars.c', 'screen.c', 'sbar.c',
     'sv_main.c', 'sv_phys.c', 'sv_move.c', 'sv_user.c', 'zone.c', 'view.c', 'wad.c', 'world.c',
@@ -100,4 +101,5 @@ $quakeObjects += foreach ($s in (Get-ChildItem (Join-Path $oracleSrc '*.c'))) {
     # the oracle's own files must declare what they call: a float argument to an undeclared function is passed as a double
     Compile $s.FullName (Join-Path $WorkDir 'obj\oracle') ($quakeFlags + '/clang:-Werror=implicit-function-declaration')
 }
-Link (Join-Path $WorkDir 'quake-oracle.exe') ($quakeObjects + $muslObjects)
+# wsock32.lib: net_dgrm.c's ban command converts addresses with inet_addr and inet_ntoa
+Link (Join-Path $WorkDir 'quake-oracle.exe') ($quakeObjects + $muslObjects + 'wsock32.lib')

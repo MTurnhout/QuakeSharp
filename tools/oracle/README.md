@@ -42,6 +42,11 @@ the help pages and the renderer's cvars).
   `quakedef.h` and `quakeasm.h` no longer define `__i386__` for `_M_IX86`, so `id386` is 0 and the C versions of the
   assembly routines are used, as the Linux and non-Intel builds do. `_WIN32` stays defined: the code is WinQuake's
   (its menus, its console stamp "(WinQuake) 1.09", S_Init from the video driver).
+- **Its other changes** (`quake-oracle.patch`, each under `ORACLE`): fixed substitutes for memory the C reads without
+  owning it (design.md ง3.3: `R_AliasDrawModel`'s `finalverts` start zeroed; `COM_FileBase` stops at the start of a
+  name without `/`, where it read the memory before it), and two hooks for the traces that change nothing:
+  `NET_SendMessage` and `NET_SendUnreliableMessage` pass every message to `Trace_Message`, and world.c's
+  `Oracle_AreaLinks` lists the area nodes' edicts.
 - **Floating point** as design.md ยง3.1: SSE2, every float operation rounded to single precision.
 - **musl's libm**: `sin`, `cos`, `tan`, `atan`, `atan2` and `pow` are musl 1.2.5's (`reference/musl`), renamed
   `musl_*` in musl's sources and Quake's alike (`musl/musl_names.h`, force-included).
@@ -67,6 +72,10 @@ the help pages and the renderer's cvars).
   the virtual clock. The mixer then paints the same samples at the same frames in every run, which the game depends on:
   `S_StartSound` draws from `rand()` when an identical sound has not been painted yet.
 - `in_oracle.c`, with `in_null.c` and `cd_null.c` from WinQuake: no mouse, no CD.
+- `net_oracle.c`: WinQuake's network drivers (`net_win.c`'s list: loopback, then datagram, `net_dgrm.c`) over a
+  virtual LAN driver, net_wins.c without sockets (design.md decision 33): TCP/IP is available (the menus offer it and
+  a game started from them runs over loopback), the address is 127.0.0.1 once listening, the console says "Winsock
+  TCP/IP Initialized", no name or address resolves and no packet arrives.
 - `trace.c`: the traces and the scripted input.
 
 ## Switches
@@ -77,7 +86,7 @@ the help pages and the renderer's cvars).
 | `-tracequitafterdemo` | Quit when the demo playing ends |
 | `-oracleframes <n>` | Quit after n frames |
 | `-traceshot <frame>` | Also write that frame (any number of times) as `<trace>.<frame>.shot`: width, height (32-bit), the palette, the pixels; `quakesharp-tools shot2png` makes a PNG of it |
-| `-tracedump <frame>` | Also write that frame's entities (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits; `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing `E` line |
+| `-tracedump <frame>` | Also write that frame's state (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits: the client's entities, then the server (`server` line), the QuakeC globals and every edict's header and fields by name (`global`, `edict` lines, strings quoted with `\xHH` escapes), and the messages sent during the frame in hexadecimal (`message <sender> <reliable> <result> <size> <bytes>`); `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing line |
 | `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), or `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it) |
 | `-oraclevid <w> <h>` | The video mode (320x200 to 1280x1024) |
 | `-oraclestep <n>` | Frames of 1/n s |
@@ -85,7 +94,7 @@ the help pages and the renderer's cvars).
 
 ## The trace format
 
-One line `H 3 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
+One line `H 4 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
 
 | Line | Fields |
 |---|---|
@@ -98,13 +107,20 @@ One line `H 3 <width> <height> <frames per second>`, then for every frame, after
 | `T <hash>` | The console's text: `con_linewidth`, `con_totallines`, `con_current`, `con_x`, `con_times` and the whole `con_text` |
 | `R <hash>` | The view: `r_refdef`'s rectangle, origin, angles and field of view |
 | `V <frame> <palette>` | The frame (the 8-bit buffer, row by row) and the palette last passed to `VID_SetPalette` |
+| `G <hash>` | The server: `sv.active`, `paused`, `loadgame`, and with an active server `time`, `lastcheck`, `lastchecktime`, `name`, `modelname`, the world model, the model precaches and models, the sound precaches, the light styles, `num_edicts`, `max_edicts`, `state` and the `datagram`, `reliable_datagram` and `signon` buffers (overflowed, size, bytes); then `svs` (`maxclients`, `maxclientslimit`, `serverflags`, `changelevel_issued`) and every client slot below `maxclients` (see `Server` in `src/trace.c`) |
+| `Q <hash>` | The QuakeC globals: the slots the progs' global definitions cover (not the compiler's temporaries, the return value or the parameters), strings by content |
+| `N <hash> <edicts>` | The edicts up to `sv.num_edicts`: `free`, `num_leafs` and the leaf numbers, the baseline, `freetime`, and the slots the field definitions cover, strings by content |
+| `W <hash>` | The area nodes' trigger and solid lists, as edict numbers in their order (-1 after each list) |
+| `M <hash> <messages>` | The messages sent during the frame through `NET_SendMessage` and `NET_SendUnreliableMessage`: the sender (-1 the client, n the server to client n), reliable or not, the driver's result, the size and the bytes |
 | `Err <text>` | `Sys_Error`'s message, last |
 
 The client's lines (`F`, `C`, `E`, `X`, `S`, `T`, `R` and the palette) do not depend on the renderer; `D` and the frame
-are the renderer's. `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
+are the renderer's; `G`, `Q`, `N` and `W` the server's (without an active server `G` hashes the flags and `svs`, the
+others nothing), `M` both. `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
 console shows `./id1/pak0.pak`), as QuakeSharp's traces run wherever the game data is.
 
 Hashes are 64-bit FNV-1a over the fields' bytes: `int` and `float` as 4 little-endian bytes, `double` 8, vectors three
 floats, strings their bytes and then 4 zero bytes, a model its name, a colormap 0 (the normal one), 1 + n (player n's
 translation) or -1, an entity pointer its array and index (`cl_entities` index, `0x10000 +` static, `0x20000 +` temp,
-`0x30000` the view model).
+`0x30000` the view model). A QuakeC string is hashed by its contents: its offset from `pr_strings` depends on the
+oracle's addresses (design.md ง11.1).

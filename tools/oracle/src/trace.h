@@ -8,5 +8,6 @@ void Trace_Events (void);
 void Trace_Palette (unsigned char *palette);
 void Trace_Error (char *text);
 void Trace_Close (void);
+void Trace_Message (struct qsocket_s *sock, sizebuf_t *data, int reliable, int result);
 
 #endif
