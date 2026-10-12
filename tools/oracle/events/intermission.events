@@ -1,0 +1,14 @@
+5 map e1m1
+150 noclip
+160 +forward
+447 -forward
+450 +moveright
+617 -moveright
+620 +movedown
+712 -movedown
+1000 +jump
+1010 -jump
+1300 +jump
+1310 -jump
+1600 +forward
+1800 -forward

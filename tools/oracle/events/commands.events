@@ -1,0 +1,76 @@
+5 map e1m1
+120 god
+130 impulse 9
+140 +forward
+260 -forward
+270 +right
+300 -right
+310 +attack
+420 -attack
+430 impulse 2
+440 +forward
+441 +attack
+600 -attack
+601 +left
+640 -left
+700 -forward
+710 notarget
+720 +moveleft
+800 -moveleft
+810 notarget
+820 noclip
+830 +forward
+1000 -forward
+1010 +lookdown
+1030 -lookdown
+1040 +back
+1100 -back
+1110 noclip
+1120 fly
+1130 +moveup
+1170 -moveup
+1180 fly
+1190 +jump
+1200 -jump
+1210 give h 50
+1220 give s 10
+1230 give 6
+1240 impulse 6
+1250 +attack
+1400 -attack
+1410 impulse 7
+1420 +attack
+1560 -attack
+1570 impulse 8
+1580 +attack
+1700 -attack
+1710 name Ranger
+1720 color 4 11
+1730 say hello there
+1740 status
+1750 ping
+1760 pause
+1800 pause
+1810 impulse 255
+1820 impulse 4
+1830 +attack
+1950 -attack
+1960 god
+1970 kill
+2100 +attack
+2101 -attack
+2200 save s1
+2210 +forward
+2400 -forward
+2410 load s1
+2600 +right
+2700 -right
+2710 +forward
+2900 -forward
+2910 restart
+3100 impulse 9
+3110 +back
+3300 -back
+3310 changelevel e1m2
+3500 +forward
+3700 -forward

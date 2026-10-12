@@ -13,6 +13,10 @@ Each trace starts from a clean game folder: the oracle's Quake folder holds only
   attract.config.cfg    the config.cfg the oracle writes when it quits after the attract loop
   menus.trace           the attract loop with the scripted input of events/menus.events (menus, console, scores,
                         renderer cvars), at 320x240; menus.640x480.trace the same at 640x480
+  <game>.trace          the scripted games of events/<game>.events (start, commands, intermission, finale: a new game
+                        from the menu, the server's commands and fights, the end of a level and of an episode), at
+                        320x240; commands.640x480.trace the same at 640x480. Savegames the games write are removed
+                        before each run, as config.cfg is
 
 .PARAMETER Oracle
 quake-oracle.exe, as Build-Oracle.ps1 builds it.
@@ -54,6 +58,7 @@ foreach ($pak in 'pak0.pak', 'pak1.pak') {
 
 function Trace([string] $name, [string[]] $arguments) {
     Remove-Item (Join-Path $id1 'config.cfg') -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $id1 '*.sav') -ErrorAction SilentlyContinue
     $trace = Join-Path $OutDir "$name.trace"
     # from the Quake folder with WinQuake's base directory ".": the console shows "./id1/pak0.pak", as QuakeSharp's
     # traces do wherever the game data is
@@ -79,3 +84,12 @@ Write-Host 'attract.config.cfg'
 $events = Join-Path $PSScriptRoot 'events\menus.events'
 Trace 'menus' @('-traceevents', $events, '-oracleframes', '3700')
 Trace 'menus.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-oracleframes', '3700')
+
+# the scripted games (design.md §11.1): the frames each runs for are in GameTests too
+$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100 }
+foreach ($game in $games.Keys) {
+    $events = Join-Path $PSScriptRoot "events\$game.events"
+    Trace $game @('-traceevents', $events, '-oracleframes', "$($games[$game])")
+}
+$events = Join-Path $PSScriptRoot 'events\commands.events'
+Trace 'commands.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-oracleframes', '3800')

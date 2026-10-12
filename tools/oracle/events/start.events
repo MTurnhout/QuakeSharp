@@ -1,0 +1,24 @@
+100 @key 27 1
+101 @key 27 0
+142 @key 13 1
+143 @key 13 0
+184 @key 13 1
+185 @key 13 0
+400 +forward
+800 -forward
+820 +left
+861 -left
+870 +forward
+1065 -forward
+1080 noclip
+1090 +moveup
+1139 -moveup
+1145 +forward
+1273 -forward
+1280 +moveleft
+1315 -moveleft
+1600 +forward
+1800 -forward
+1810 noclip
+1820 +attack
+1900 -attack

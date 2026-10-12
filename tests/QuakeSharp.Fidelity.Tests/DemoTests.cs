@@ -1,14 +1,16 @@
+using System.Globalization;
 using QuakeSharp.Core.Diagnostics;
 
 namespace QuakeSharp.Fidelity.Tests;
 
 /// <summary>
-/// The client and the renderer against the oracle (milestones 5 and 6): demo1-3 at three video modes, the attract
-/// loop and the scripted menus play with the oracle's state and pictures on every frame. Every line of the oracle's trace is compared: F
+/// The client, the renderer and the server against the oracle (milestones 5, 6 and 7): demo1-3 at three video modes,
+/// the attract loop, the scripted menus and the scripted games play with the oracle's state and pictures on every
+/// frame. Every line of the oracle's trace is compared: F
 /// (time, rand()), C (cls, cl), E (the entities), D (what the renderer writes into them), X (temporary entities,
 /// beams, lights, light styles, particles), S (sound channels), T (console text), R (the view), V (the frame and
 /// the palette), and the server's lines, G (sv, svs), Q (the QuakeC globals), N (the edicts), W (the area lists) and M
-/// (the messages sent), which these runs leave as without a server.
+/// (the messages sent).
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
@@ -66,6 +68,25 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", "3700"], width, height);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 3700));
+    }
+
+    // The scripted games of tools/oracle/events (design.md §11.1): a new game from the menu through the start map
+    // into e1m1, the server's commands with fights, saves and level changes, e1m1's exit and intermission, e1m7's
+    // exit and the episode's finale
+    [Theory]
+    [InlineData("start", 2000, 320, 240, "start.trace")]
+    [InlineData("commands", 3800, 320, 240, "commands.trace")]
+    [InlineData("commands", 3800, 640, 480, "commands.640x480.trace")]
+    [InlineData("intermission", 1900, 320, 240, "intermission.trace")]
+    [InlineData("finale", 3100, 320, 240, "finale.trace")]
+    public void GamePlaysInSyncWithTheOracle(string game, int frames, int width, int height, string trace)
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile(trace);
+        string events = Path.Combine(RepositoryRoot(), "tools", "oracle", "events", game + ".events");
+
+        var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", frames.ToString(CultureInfo.InvariantCulture)], width, height);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: frames));
     }
 
     private static string RepositoryRoot()

@@ -1,0 +1,15 @@
+5 map e1m7
+140 god
+150 noclip
+160 +movedown
+498 -movedown
+500 +forward
+969 -forward
+1300 +jump
+1310 -jump
+1700 +jump
+1710 -jump
+2500 +jump
+2510 -jump
+2900 +forward
+3000 -forward
