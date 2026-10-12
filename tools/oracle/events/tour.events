@@ -1,0 +1,629 @@
+5 map e1m1
+65 god
+75 impulse 9
+85 impulse 2
+105 +attack
+105 +left
+225 -left
+235 +forward
+385 -forward
+395 impulse 5
+405 +moveright
+475 -moveright
+485 +jump
+495 -jump
+505 -attack
+515 +back
+585 -back
+605 changelevel e1m2
+665 god
+675 impulse 9
+685 impulse 3
+705 +attack
+705 +right
+825 -right
+835 +forward
+985 -forward
+995 impulse 6
+1005 +moveright
+1075 -moveright
+1085 +jump
+1095 -jump
+1105 -attack
+1115 +back
+1185 -back
+1205 changelevel e1m3
+1265 god
+1275 impulse 9
+1285 impulse 4
+1305 +attack
+1305 +left
+1425 -left
+1435 +forward
+1585 -forward
+1595 impulse 7
+1605 +moveright
+1675 -moveright
+1685 +jump
+1695 -jump
+1705 -attack
+1715 +back
+1785 -back
+1805 changelevel e1m4
+1865 god
+1875 impulse 9
+1885 impulse 5
+1905 +attack
+1905 +right
+2025 -right
+2035 +forward
+2185 -forward
+2195 impulse 8
+2205 +moveright
+2275 -moveright
+2285 +jump
+2295 -jump
+2305 -attack
+2315 +back
+2385 -back
+2405 changelevel e1m5
+2465 god
+2475 impulse 9
+2485 impulse 6
+2505 +attack
+2505 +left
+2625 -left
+2635 +forward
+2785 -forward
+2795 impulse 2
+2805 +moveright
+2875 -moveright
+2885 +jump
+2895 -jump
+2905 -attack
+2915 +back
+2985 -back
+3005 changelevel e1m6
+3065 god
+3075 impulse 9
+3085 impulse 7
+3105 +attack
+3105 +right
+3225 -right
+3235 +forward
+3385 -forward
+3395 impulse 3
+3405 +moveright
+3475 -moveright
+3485 +jump
+3495 -jump
+3505 -attack
+3515 +back
+3585 -back
+3605 changelevel e1m7
+3665 god
+3675 impulse 9
+3685 impulse 8
+3705 +attack
+3705 +left
+3825 -left
+3835 +forward
+3985 -forward
+3995 impulse 4
+4005 +moveright
+4075 -moveright
+4085 +jump
+4095 -jump
+4105 -attack
+4115 +back
+4185 -back
+4205 changelevel e1m8
+4265 god
+4275 impulse 9
+4285 impulse 2
+4305 +attack
+4305 +right
+4425 -right
+4435 +forward
+4585 -forward
+4595 impulse 5
+4605 +moveright
+4675 -moveright
+4685 +jump
+4695 -jump
+4705 -attack
+4715 +back
+4785 -back
+4805 changelevel e2m1
+4865 god
+4875 impulse 9
+4885 impulse 3
+4905 +attack
+4905 +left
+5025 -left
+5035 +forward
+5185 -forward
+5195 impulse 6
+5205 +moveright
+5275 -moveright
+5285 +jump
+5295 -jump
+5305 -attack
+5315 +back
+5385 -back
+5405 changelevel e2m2
+5465 god
+5475 impulse 9
+5485 impulse 4
+5505 +attack
+5505 +right
+5625 -right
+5635 +forward
+5785 -forward
+5795 impulse 7
+5805 +moveright
+5875 -moveright
+5885 +jump
+5895 -jump
+5905 -attack
+5915 +back
+5985 -back
+6005 changelevel e2m3
+6065 god
+6075 impulse 9
+6085 impulse 5
+6105 +attack
+6105 +left
+6225 -left
+6235 +forward
+6385 -forward
+6395 impulse 8
+6405 +moveright
+6475 -moveright
+6485 +jump
+6495 -jump
+6505 -attack
+6515 +back
+6585 -back
+6605 changelevel e2m4
+6665 god
+6675 impulse 9
+6685 impulse 6
+6705 +attack
+6705 +right
+6825 -right
+6835 +forward
+6985 -forward
+6995 impulse 2
+7005 +moveright
+7075 -moveright
+7085 +jump
+7095 -jump
+7105 -attack
+7115 +back
+7185 -back
+7205 changelevel e2m5
+7265 god
+7275 impulse 9
+7285 impulse 7
+7305 +attack
+7305 +left
+7425 -left
+7435 +forward
+7585 -forward
+7595 impulse 3
+7605 +moveright
+7675 -moveright
+7685 +jump
+7695 -jump
+7705 -attack
+7715 +back
+7785 -back
+7805 changelevel e2m6
+7865 god
+7875 impulse 9
+7885 impulse 8
+7905 +attack
+7905 +right
+8025 -right
+8035 +forward
+8185 -forward
+8195 impulse 4
+8205 +moveright
+8275 -moveright
+8285 +jump
+8295 -jump
+8305 -attack
+8315 +back
+8385 -back
+8405 changelevel e2m7
+8465 god
+8475 impulse 9
+8485 impulse 2
+8505 +attack
+8505 +left
+8625 -left
+8635 +forward
+8785 -forward
+8795 impulse 5
+8805 +moveright
+8875 -moveright
+8885 +jump
+8895 -jump
+8905 -attack
+8915 +back
+8985 -back
+9005 changelevel e3m1
+9065 god
+9075 impulse 9
+9085 impulse 3
+9105 +attack
+9105 +right
+9225 -right
+9235 +forward
+9385 -forward
+9395 impulse 6
+9405 +moveright
+9475 -moveright
+9485 +jump
+9495 -jump
+9505 -attack
+9515 +back
+9585 -back
+9605 changelevel e3m2
+9665 god
+9675 impulse 9
+9685 impulse 4
+9705 +attack
+9705 +left
+9825 -left
+9835 +forward
+9985 -forward
+9995 impulse 7
+10005 +moveright
+10075 -moveright
+10085 +jump
+10095 -jump
+10105 -attack
+10115 +back
+10185 -back
+10205 changelevel e3m3
+10265 god
+10275 impulse 9
+10285 impulse 5
+10305 +attack
+10305 +right
+10425 -right
+10435 +forward
+10585 -forward
+10595 impulse 8
+10605 +moveright
+10675 -moveright
+10685 +jump
+10695 -jump
+10705 -attack
+10715 +back
+10785 -back
+10805 changelevel e3m4
+10865 god
+10875 impulse 9
+10885 impulse 6
+10905 +attack
+10905 +left
+11025 -left
+11035 +forward
+11185 -forward
+11195 impulse 2
+11205 +moveright
+11275 -moveright
+11285 +jump
+11295 -jump
+11305 -attack
+11315 +back
+11385 -back
+11405 changelevel e3m5
+11465 god
+11475 impulse 9
+11485 impulse 7
+11505 +attack
+11505 +right
+11625 -right
+11635 +forward
+11785 -forward
+11795 impulse 3
+11805 +moveright
+11875 -moveright
+11885 +jump
+11895 -jump
+11905 -attack
+11915 +back
+11985 -back
+12005 changelevel e3m6
+12065 god
+12075 impulse 9
+12085 impulse 8
+12105 +attack
+12105 +left
+12225 -left
+12235 +forward
+12385 -forward
+12395 impulse 4
+12405 +moveright
+12475 -moveright
+12485 +jump
+12495 -jump
+12505 -attack
+12515 +back
+12585 -back
+12605 changelevel e3m7
+12665 god
+12675 impulse 9
+12685 impulse 2
+12705 +attack
+12705 +right
+12825 -right
+12835 +forward
+12985 -forward
+12995 impulse 5
+13005 +moveright
+13075 -moveright
+13085 +jump
+13095 -jump
+13105 -attack
+13115 +back
+13185 -back
+13205 changelevel e4m1
+13265 god
+13275 impulse 9
+13285 impulse 3
+13305 +attack
+13305 +left
+13425 -left
+13435 +forward
+13585 -forward
+13595 impulse 6
+13605 +moveright
+13675 -moveright
+13685 +jump
+13695 -jump
+13705 -attack
+13715 +back
+13785 -back
+13805 changelevel e4m2
+13865 god
+13875 impulse 9
+13885 impulse 4
+13905 +attack
+13905 +right
+14025 -right
+14035 +forward
+14185 -forward
+14195 impulse 7
+14205 +moveright
+14275 -moveright
+14285 +jump
+14295 -jump
+14305 -attack
+14315 +back
+14385 -back
+14405 changelevel e4m3
+14465 god
+14475 impulse 9
+14485 impulse 5
+14505 +attack
+14505 +left
+14625 -left
+14635 +forward
+14785 -forward
+14795 impulse 8
+14805 +moveright
+14875 -moveright
+14885 +jump
+14895 -jump
+14905 -attack
+14915 +back
+14985 -back
+15005 changelevel e4m4
+15065 god
+15075 impulse 9
+15085 impulse 6
+15105 +attack
+15105 +right
+15225 -right
+15235 +forward
+15385 -forward
+15395 impulse 2
+15405 +moveright
+15475 -moveright
+15485 +jump
+15495 -jump
+15505 -attack
+15515 +back
+15585 -back
+15605 changelevel e4m5
+15665 god
+15675 impulse 9
+15685 impulse 7
+15705 +attack
+15705 +left
+15825 -left
+15835 +forward
+15985 -forward
+15995 impulse 3
+16005 +moveright
+16075 -moveright
+16085 +jump
+16095 -jump
+16105 -attack
+16115 +back
+16185 -back
+16205 changelevel e4m6
+16265 god
+16275 impulse 9
+16285 impulse 8
+16305 +attack
+16305 +right
+16425 -right
+16435 +forward
+16585 -forward
+16595 impulse 4
+16605 +moveright
+16675 -moveright
+16685 +jump
+16695 -jump
+16705 -attack
+16715 +back
+16785 -back
+16805 changelevel e4m7
+16865 god
+16875 impulse 9
+16885 impulse 2
+16905 +attack
+16905 +left
+17025 -left
+17035 +forward
+17185 -forward
+17195 impulse 5
+17205 +moveright
+17275 -moveright
+17285 +jump
+17295 -jump
+17305 -attack
+17315 +back
+17385 -back
+17405 changelevel e4m8
+17465 god
+17475 impulse 9
+17485 impulse 3
+17505 +attack
+17505 +right
+17625 -right
+17635 +forward
+17785 -forward
+17795 impulse 6
+17805 +moveright
+17875 -moveright
+17885 +jump
+17895 -jump
+17905 -attack
+17915 +back
+17985 -back
+18005 changelevel end
+18065 god
+18075 impulse 9
+18085 impulse 4
+18105 +attack
+18105 +left
+18225 -left
+18235 +forward
+18385 -forward
+18395 impulse 7
+18405 +moveright
+18475 -moveright
+18485 +jump
+18495 -jump
+18505 -attack
+18515 +back
+18585 -back
+18605 changelevel dm1
+18665 god
+18675 impulse 9
+18685 impulse 5
+18705 +attack
+18705 +right
+18825 -right
+18835 +forward
+18985 -forward
+18995 impulse 8
+19005 +moveright
+19075 -moveright
+19085 +jump
+19095 -jump
+19105 -attack
+19115 +back
+19185 -back
+19205 changelevel dm2
+19265 god
+19275 impulse 9
+19285 impulse 6
+19305 +attack
+19305 +left
+19425 -left
+19435 +forward
+19585 -forward
+19595 impulse 2
+19605 +moveright
+19675 -moveright
+19685 +jump
+19695 -jump
+19705 -attack
+19715 +back
+19785 -back
+19805 changelevel dm3
+19865 god
+19875 impulse 9
+19885 impulse 7
+19905 +attack
+19905 +right
+20025 -right
+20035 +forward
+20185 -forward
+20195 impulse 3
+20205 +moveright
+20275 -moveright
+20285 +jump
+20295 -jump
+20305 -attack
+20315 +back
+20385 -back
+20405 changelevel dm4
+20465 god
+20475 impulse 9
+20485 impulse 8
+20505 +attack
+20505 +left
+20625 -left
+20635 +forward
+20785 -forward
+20795 impulse 4
+20805 +moveright
+20875 -moveright
+20885 +jump
+20895 -jump
+20905 -attack
+20915 +back
+20985 -back
+21005 changelevel dm5
+21065 god
+21075 impulse 9
+21085 impulse 2
+21105 +attack
+21105 +right
+21225 -right
+21235 +forward
+21385 -forward
+21395 impulse 5
+21405 +moveright
+21475 -moveright
+21485 +jump
+21495 -jump
+21505 -attack
+21515 +back
+21585 -back
+21605 changelevel dm6
+21665 god
+21675 impulse 9
+21685 impulse 3
+21705 +attack
+21705 +left
+21825 -left
+21835 +forward
+21985 -forward
+21995 impulse 6
+22005 +moveright
+22075 -moveright
+22085 +jump
+22095 -jump
+22105 -attack
+22115 +back
+22185 -back

@@ -4,9 +4,10 @@
 > (repository skeleton), 1 (files and data), 2 (the oracle and the numerics: WinQuake built headless writes traces of
 > every demo; musl's libm and `rand()` ported and checked against the C), 3 (the platform: an SDL3 window showing
 > 8-bit frames through Vulkan, keys as WinQuake reads them, the sound device), 4 (the host and the common code:
-> the frame loop, commands, cvars, console text, keys, `mathlib.c`, printf, all checked against WinQuake's own C) and
-> 5 (the client: demo1-3 and the attract loop play with the client state, the sound channels, the console text and
-> the view the oracle's on every frame) done.
+> the frame loop, commands, cvars, console text, keys, `mathlib.c`, printf, all checked against WinQuake's own C), 5
+> (the client: demo1-3 and the attract loop play with the client state, the sound channels, the console text and the
+> view the oracle's on every frame) and 6 (the software renderer and the 2D, pixel-exact) done; milestone 7 (the QuakeC
+> VM and the server) ported and in sync with the oracle on every scripted game, the recorded playthroughs to come.
 
 ## 1. Goal
 
@@ -144,6 +145,8 @@ share it only where a trace shows the difference.
 | `r_alias.c`: `R_AliasDrawModel` | The vertices behind the near plane are not projected, so their `v[0]`, `v[1]`, `v[5]` are what the stack array `finalverts` held; `R_Alias_clip_z` picks its direction of interpolation from `v[1]`, which moves a clipped vertex's `t` by one (demo3 at 640x480, frame 2760) | `finalverts` starts zeroed; the oracle is patched to zero it too (`quake-oracle.patch`) |
 | `common.c`: `COM_FileBase` | For a name without `/` (`progs.dat`, which `PR_LoadProgs` loads) the loop looking for the `/` walks back past the name's start, through the memory before it, to a 0 or a `/`: with the oracle's string literals, the one before `"progs.dat"` went into `COM_LoadFile`'s `base[32]` and overran the stack | The loop stops at the start, as if a 0 were before it (the base is `progs`); the oracle is patched to do the same. The base only names the hunk's blocks |
 | `net_main.c`: `NET_SendToAll` | A client slot without a connection is skipped before its two states are set, so the loop that waits for the slots reads whatever the stack held: if it reads "not done" the loop waits until `blocktime` (for ever on the virtual clock) | Such a slot is done; the oracle is patched to do the same |
+| `pr_edict.c`: `ED_ParseEpair` | A vector value is copied into `char string[128]` and split at three spaces; with fewer than three numbers the split goes on past the copy's 0 into what the array held before | Past the copy the array holds zeros (the missing numbers are 0); a value of 128 characters or more, which overruns the C's array, is copied whole |
+| `pr_cmds.c`: `PF_break` | Writes to the address -4 to stop in the debugger: the program crashes | A `Sys_Error` ("break statement") |
 | `d_edge.c`: `D_DrawSurfaces` with `r_drawflat` | A surface's flat colour is the low byte of its `msurface_t`'s address | The surface's index in the frame's surface list |
 
 ## 4. Technology
@@ -453,7 +456,11 @@ Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 f
 320×200 and 640×480, the attract loop and the scripted menus at two sizes, in about 40 seconds for all twelve
 traces. musl's libm and the C runtime's `rand()` match the C# ports on every one of 1.8 million values. QuakeSharp
 matches every line of the oracle's traces, the renderer's `D` and the frame's pixels included, on every frame of the
-nine demo traces, the 20,000 frames of the attract loop and the 3,700 frames of each menu trace (`DemoTests`).
+nine demo traces, the 20,000 frames of the attract loop and the 3,700 frames of each menu trace (`DemoTests`). With
+the server (trace format 4), it also matches every line, the server's `G`, `Q`, `N`, `W` and `M` included, of every
+frame of the scripted games of §11.1: a new game through the start map (2,000 frames), the server's commands with
+fights, a save, a load, a restart and a level change (3,800, at two sizes), e1m1's intermission (1,900), e1m7's finale
+(3,100), the network menus starting a deathmatch (3,000) and a tour of all 37 maps (22,200).
 
 ## 11. Milestones
 
@@ -466,7 +473,7 @@ nine demo traces, the 20,000 frames of the attract loop and the 3,700 frames of 
 | 4 ✅ | Host & common | `Host_Frame` with the virtual clock, command buffer, cvars, console text, `MSG_*`, `quake.rc`/`default.cfg` executed; `mathlib.c`, printf formatting (`%f`, `%5.1f`...) and `Q_atof` checked against the C. *`mathlib.c`, `Q_atoi`, `Q_atof` and printf match WinQuake's C on 18 sets of 20,000 inputs; commands, cvars, console text and keys match on two scenarios; the host runs `Host_Init` and `Host_Frame` (the modules to come are stand-ins), executes `quake.rc` and `default.cfg`, and writes WinQuake's bindings to `config.cfg`. net_main.c and net_loop.c move to milestone 7, where the server uses them; host_cmd.c's commands to 5 and 7* |
 | 5 ✅ | Client & demos | `cl_*` parse and interpolate; **demo1-3 play with the client state in sync on every frame** (no rendering yet). *demo1-3 at 320×240, 320×200 and 640×480 and 20,000 frames of the attract loop match the oracle's client lines on every frame: `rand()`'s state and calls, `cls`/`cl`, the entities, temp entities, beams, lights, light styles and particles, the sound channels, the console text, `r_refdef` and the palette. Ported: cl_main, cl_parse, cl_demo, cl_input, cl_tent, view, chase, r_part (`R_DrawParticles` moves them, `D_DrawParticle` waits), model.c, snd_dma/snd_mix/snd_mem (`S_StartSound` draws `rand()`), screen.c's control flow and r_main/r_misc/r_light's view setup (`R_SetupFrame`'s view leaf gives the contents' colour shift), vid_win.c's mode in Core, host_cmd.c's client commands, sv_main.c's `SV_Init`; drawing, menus, the status bar, efrags, net and the server are stand-ins. The executable plays the demo loop's sound* |
 | 6 ✅ | Software renderer & 2D | `r_*`/`d_*`, `draw`, `screen`, `console`, `sbar`; **every frame of demo1-3 pixel-exact** at 320×200 and a larger mode; menus. *Ported: the whole software renderer (r_*.c, d_*.c), draw.c, the console's drawing, sbar.c and menu.c. demo1-3 at 320×240, 320×200 and 640×480, 20,000 frames of the attract loop and 3,700 frames of scripted menus (`events/menus.events`: key events `@key` and commands over the attract loop) at 320×240 and 640×480 match the oracle pixel for pixel, `D` line included (trace format 3 hashes a leaf `topnode` as `0x10000 +` its index). The network menus wait for net_main.c, the intermission and finale screens for the server to reach them (milestone 7). The executable shows the game* |
-| 7 | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable. *Plan: §11.1* |
+| 7 | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable. *Plan: §11.1. Ported: pr_edict.c, pr_exec.c, pr_cmds.c, world.c, sv_main.c, sv_phys.c, sv_move.c, sv_user.c, host.c's and host_cmd.c's server parts (save and load included), net_main.c, net_loop.c, net_dgrm.c with the virtual LAN driver, and menu.c's network menus. Trace format 4 adds the server's lines; the scripted games (`events/`: start, commands, intermission, finale, netmenus, tour) match the oracle on every line of every frame, 39,000 frames in all, every map of the four episodes included. The executable shows and plays the game (milestone 6's Program.cs still drew `gfx/conback.lmp` and never handed the engine its video output) and records games with `-recordevents`. Remaining: playthroughs recorded by playing* |
 | 8 | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files. *The mixer is ported (milestone 5); what remains is a trace line of the painted buffer, the output and the CD* |
 | 9 | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync |
 | 10 | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios |
@@ -537,7 +544,8 @@ traces each at 320×240, some also at 640×480; `GameTests` checks them):
 | `intermission.events` | e1m1 to its exit: the intermission screen, then e1m2 |
 | `finale.events` | The end of episode 1: the finale's text |
 | `netmenus.events` | The network menus: TCP/IP, the LAN settings, the game options (players, deathmatch and coop, teamplay, limits, map) starting a listen server, a deathmatch, the search and server list, the setup (name and colours sent to the server) |
-| `e1.events`... | Playthroughs of the episodes, recorded with `-recordevents` |
+| `tour.events` | Every map of the four episodes, the end and the six deathmatch maps in turn, 600 frames each: god mode, all the weapons, shooting while turning and moving (generated by a script: `changelevel` from one map to the next) |
+| `e1.events`... | Playthroughs of the episodes, recorded with `-recordevents` (to come: they need someone playing) |
 
 **Done when** the scripted games and the playthroughs match the oracle on every line of every frame (the client's and
 the renderer's lines included) and the executable plays a game.
