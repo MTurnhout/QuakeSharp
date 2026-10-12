@@ -5,9 +5,10 @@ using QuakeSharp.Core.Platform;
 namespace QuakeSharp.Core.Diagnostics;
 
 /// <summary>
-/// The executable's -recordevents (design.md decision 34): passes the platform's key events on, and writes each as a
-/// "&lt;frame&gt; @key &lt;key&gt; &lt;1 or 0&gt;" line of the oracle's -traceevents format, the frame being the one that
-/// takes it, so <see cref="TraceEvents"/> and the oracle deliver it in the same frame of a replay.
+/// The executable's -recordevents (design.md decisions 34, 43): passes the platform's messages on to the window
+/// procedure, and writes each as a line of the oracle's -traceevents format ("&lt;frame&gt; @key &lt;key&gt; &lt;1 or
+/// 0&gt;", "&lt;frame&gt; @mouse &lt;dx&gt; &lt;dy&gt;", "&lt;frame&gt; @buttons &lt;state&gt;"), the frame being the one
+/// that takes it, so <see cref="TraceEvents"/> and the oracle deliver the same messages in the same frame of a replay.
 /// </summary>
 public sealed class EventRecorder : IInputEvents, IDisposable
 {
@@ -25,15 +26,31 @@ public sealed class EventRecorder : IInputEvents, IDisposable
         writer = new StreamWriter(path, false, new UTF8Encoding(false)) { NewLine = "\n" };
     }
 
-    public bool SendKeyEvents(Action<int, bool> keyEvent)
-    {
-        int current = frame() + 1;
-        return input.SendKeyEvents((key, down) =>
-        {
-            writer.WriteLine(string.Create(CultureInfo.InvariantCulture, $"{current} @key {key} {(down ? 1 : 0)}"));
-            keyEvent(key, down);
-        });
-    }
+    public bool SendKeyEvents(IWindowMessages window) => input.SendKeyEvents(new Recording(this, window, frame() + 1));
 
     public void Dispose() => writer.Dispose();
+
+    // the window procedure's messages, written as they pass
+    private sealed class Recording(EventRecorder recorder, IWindowMessages window, int current) : IWindowMessages
+    {
+        public void KeyEvent(int key, bool down)
+        {
+            Write($"{current} @key {key} {(down ? 1 : 0)}");
+            window.KeyEvent(key, down);
+        }
+
+        public void MouseMove(int dx, int dy)
+        {
+            Write($"{current} @mouse {dx} {dy}");
+            window.MouseMove(dx, dy);
+        }
+
+        public void MouseButtons(int state)
+        {
+            Write($"{current} @buttons {state}");
+            window.MouseButtons(state);
+        }
+
+        private void Write(FormattableString line) => recorder.writer.WriteLine(line.ToString(CultureInfo.InvariantCulture));
+    }
 }

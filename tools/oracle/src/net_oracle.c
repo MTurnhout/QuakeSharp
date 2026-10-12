@@ -1,8 +1,9 @@
 /*
  * net_oracle.c: the oracle's network drivers, in place of net_win.c (design.md decision 33). WinQuake's driver list,
- * loopback then datagram (net_dgrm.c), over one LAN driver: net_wins.c without sockets. TCP/IP is available at a fixed
- * address, the driver prints what net_wins.c prints, no name or address resolves (so nothing waits for an answer that
- * cannot come) and no packet ever arrives; what is written goes nowhere. QuakeSharp's VirtualLanDriver is the same.
+ * loopback then datagram (net_dgrm.c), over WinQuake's two LAN drivers: net_wins.c without sockets, and net_wipx.c as
+ * it fails to start on today's Windows. TCP/IP is available at a fixed address, the driver prints what net_wins.c
+ * prints, no name or address resolves (so nothing waits for an answer that cannot come) and no packet ever arrives;
+ * what is written goes nowhere. QuakeSharp's VirtualLanDriver and VirtualIpxDriver are the same.
  */
 #include "quakedef.h"
 
@@ -335,6 +336,46 @@ int VLAN_SetSocketPort (struct qsockaddr *addr, int port)
 	return 0;
 }
 
+/*
+===============================================================================
+
+THE VIRTUAL IPX DRIVER
+
+net_wipx.c as it starts on today's Windows, which has no IPX (design.md §3.4): its control socket cannot be opened,
+so it prints why and stays down. The machine has no name of its own (VLAN_Init), so hostname is left as it is. Its
+other functions are never called: net_dgrm.c only calls a driver that started.
+
+===============================================================================
+*/
+
+// net_wipx.c: WIPX_Init
+int VIPX_Init (void)
+{
+	if (COM_CheckParm ("-noipx"))
+		return -1;
+
+	Con_Printf("WIPX_Init: Unable to open control socket\n");
+	return -1;
+}
+
+static void VIPX_Shutdown (void) {}
+static void VIPX_Listen (qboolean state) {}
+static int VIPX_OpenSocket (int port) { return -1; }
+static int VIPX_CloseSocket (int socket) { return 0; }
+static int VIPX_Connect (int socket, struct qsockaddr *addr) { return 0; }
+static int VIPX_CheckNewConnections (void) { return -1; }
+static int VIPX_Read (int socket, byte *buf, int len, struct qsockaddr *addr) { return 0; }
+static int VIPX_Write (int socket, byte *buf, int len, struct qsockaddr *addr) { return -1; }
+static int VIPX_Broadcast (int socket, byte *buf, int len) { return -1; }
+static char *VIPX_AddrToString (struct qsockaddr *addr) { return ""; }
+static int VIPX_StringToAddr (char *string, struct qsockaddr *addr) { return -1; }
+static int VIPX_GetSocketAddr (int socket, struct qsockaddr *addr) { return -1; }
+static int VIPX_GetNameFromAddr (struct qsockaddr *addr, char *name) { return -1; }
+static int VIPX_GetAddrFromName (char *name, struct qsockaddr *addr) { return -1; }
+static int VIPX_AddrCompare (struct qsockaddr *addr1, struct qsockaddr *addr2) { return -1; }
+static int VIPX_GetSocketPort (struct qsockaddr *addr) { return 0; }
+static int VIPX_SetSocketPort (struct qsockaddr *addr, int port) { return 0; }
+
 net_landriver_t	net_landrivers[MAX_NET_DRIVERS] =
 {
 	{
@@ -360,6 +401,30 @@ net_landriver_t	net_landrivers[MAX_NET_DRIVERS] =
 	VLAN_GetSocketPort,
 	VLAN_SetSocketPort
 	}
+	,
+	{
+	"Winsock IPX",
+	false,
+	0,
+	VIPX_Init,
+	VIPX_Shutdown,
+	VIPX_Listen,
+	VIPX_OpenSocket,
+	VIPX_CloseSocket,
+	VIPX_Connect,
+	VIPX_CheckNewConnections,
+	VIPX_Read,
+	VIPX_Write,
+	VIPX_Broadcast,
+	VIPX_AddrToString,
+	VIPX_StringToAddr,
+	VIPX_GetSocketAddr,
+	VIPX_GetNameFromAddr,
+	VIPX_GetAddrFromName,
+	VIPX_AddrCompare,
+	VIPX_GetSocketPort,
+	VIPX_SetSocketPort
+	}
 };
 
-int net_numlandrivers = 1;
+int net_numlandrivers = 2;

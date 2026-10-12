@@ -51,7 +51,8 @@ function Compile([string] $source, [string] $objDir, [string[]] $extra = @()) {
 }
 
 function Link([string] $exe, [string[]] $objects) {
-    # 4217: cd_win.c imports mciSendCommandA from winmm, and src/cd_oracle.c defines it instead, as intended
+    # 4217: cd_win.c and in_win.c import functions from winmm and user32 that src/cd_oracle.c and src/in_oracle.c define
+    # instead, as intended
     & $clang --target=i686-pc-windows-msvc -fuse-ld=lld -MT @objects "-Fe$exe" -nologo /link /ignore:4217
     if ($LASTEXITCODE -ne 0) { throw "linking $exe failed" }
     Write-Host "built $exe"
@@ -75,7 +76,9 @@ Link (Join-Path $WorkDir 'numerics.exe') (@($numerics) + $muslObjects)
 # sources are copied into the work folder and quake-oracle.patch applied: with ORACLE defined, quakedef.h and
 # quakeasm.h leave __i386__ undefined, so id386 is 0 (the C code, never the assembly). The network drivers are
 # src/net_oracle.c's (loopback and datagram over a virtual LAN driver) instead of net_win.c's; cd_win.c's MCI commands
-# go to src/cd_oracle.c's virtual drive instead of winmm.
+# go to src/cd_oracle.c's virtual drive instead of winmm, and in_win.c's mouse and joystick calls to src/in_oracle.c's
+# virtual screen without a joystick instead of user32 and winmm (DirectInput's headers as DirectX 3's, which in_win.c
+# was written for).
 $quake = Join-Path $WorkDir 'quake-src'
 if (Test-Path $quake) { Remove-Item -Recurse -Force $quake }
 Copy-Item -Recurse (Join-Path $repo 'reference\Quake\WinQuake') $quake
@@ -84,6 +87,7 @@ if ($LASTEXITCODE -ne 0) { throw 'applying quake-oracle.patch failed' }
 $oracleSrc = Join-Path $PSScriptRoot 'src'
 $quakeFlags = @(
     '/clang:-std=gnu89', '/clang:-fcommon', '-DORACLE', '-U__i386__', '-D_CRT_SECURE_NO_WARNINGS', '-D_CRT_NONSTDC_NO_WARNINGS',
+    '-DDIRECTINPUT_VERSION=0x0300',
     "-I$oracleSrc", "-I$quake", "-I$(Join-Path $quake 'scitech\include')", '-FIoracle.h'
 )
 $quakeSources = @(
@@ -94,7 +98,7 @@ $quakeSources = @(
     'pr_edict.c', 'pr_exec.c', 'r_aclip.c', 'r_alias.c', 'r_bsp.c', 'r_light.c', 'r_draw.c', 'r_efrag.c', 'r_edge.c',
     'r_misc.c', 'r_main.c', 'r_sky.c', 'r_sprite.c', 'r_surf.c', 'r_part.c', 'r_vars.c', 'screen.c', 'sbar.c',
     'sv_main.c', 'sv_phys.c', 'sv_move.c', 'sv_user.c', 'zone.c', 'view.c', 'wad.c', 'world.c',
-    'snd_dma.c', 'snd_mem.c', 'snd_mix.c', 'in_null.c', 'cd_win.c'
+    'snd_dma.c', 'snd_mem.c', 'snd_mix.c', 'in_win.c', 'cd_win.c'
 )
 $quakeObjects = foreach ($s in $quakeSources) {
     Compile (Join-Path $quake $s) (Join-Path $WorkDir 'obj\quake') $quakeFlags
@@ -103,5 +107,6 @@ $quakeObjects += foreach ($s in (Get-ChildItem (Join-Path $oracleSrc '*.c'))) {
     # the oracle's own files must declare what they call: a float argument to an undeclared function is passed as a double
     Compile $s.FullName (Join-Path $WorkDir 'obj\oracle') ($quakeFlags + '/clang:-Werror=implicit-function-declaration')
 }
-# wsock32.lib: net_dgrm.c's ban command converts addresses with inet_addr and inet_ntoa
-Link (Join-Path $WorkDir 'quake-oracle.exe') ($quakeObjects + $muslObjects + 'wsock32.lib')
+# wsock32.lib: net_dgrm.c's ban command converts addresses with inet_addr and inet_ntoa; dxguid.lib: the DirectInput
+# GUIDs in in_win.c's mouse data format
+Link (Join-Path $WorkDir 'quake-oracle.exe') ($quakeObjects + $muslObjects + 'wsock32.lib' + 'dxguid.lib')

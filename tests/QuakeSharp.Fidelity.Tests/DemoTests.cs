@@ -10,13 +10,13 @@ namespace QuakeSharp.Fidelity.Tests;
 /// (time, rand()), C (cls, cl), E (the entities), D (what the renderer writes into them), X (temporary entities,
 /// beams, lights, light styles, particles), S (sound channels), T (console text), R (the view), V (the frame and
 /// the palette), the server's lines, G (sv, svs), Q (the QuakeC globals), N (the edicts), W (the area lists) and M
-/// (the messages sent), and the sound's of milestone 8, P (the sound device's buffer) and A (the CD). The files each
-/// run writes (config.cfg, savegames, demos, screenshots, qconsole.log) are compared with the oracle's run's, byte for
-/// byte (milestone 9).
+/// (the messages sent), the sound's of milestone 8, P (the sound device's buffer) and A (the CD), and I (the mouse and
+/// the joystick, milestone 10). The files each run writes (config.cfg, savegames, demos, screenshots, qconsole.log)
+/// are compared with the oracle's run's, byte for byte (milestone 9).
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
-    private const string Lines = "FCEDXSTRVGQNWMPA";
+    private const string Lines = "FCEDXSTRVGQNWMPAI";
 
     private readonly string userdir = Path.Combine(Path.GetTempPath(), "quakesharp-tests", Guid.NewGuid().ToString("N"));
 
@@ -93,7 +93,8 @@ public sealed class DemoTests : IDisposable
     // exit and the episode's finale, the network menus (a search, the game options starting a deathmatch, the setup),
     // a tour of every map of the episodes, the end and the deathmatch maps, fighting in each, and a game played by hand
     // (recorded with the executable's -recordevents) from the menu through e1m1 into e1m2, ending on the quit screen,
-    // and the sound's (design.md §11.2): its commands and cvars, the CD's, the menu's volume sliders, a game's pause
+    // and the sound's (design.md §11.2): its commands and cvars, the CD's, the menu's volume sliders, a game's pause;
+    // and the mouse's (design.md §11.4): taken and released, looking and moving, its buttons and cvars, the joystick's
     [Theory]
     [InlineData("start", 2000, 320, 240, "start.trace")]
     [InlineData("commands", 3800, 320, 240, "commands.trace")]
@@ -105,6 +106,7 @@ public sealed class DemoTests : IDisposable
     [InlineData("e1", 24500, 320, 240, "e1.trace")]
     [InlineData("sound", 3500, 320, 240, "sound.trace")]
     [InlineData("saves", 17705, 320, 240, "saves.trace")]
+    [InlineData("mouse", 1600, 320, 240, "mouse.trace")]
     public void GamePlaysInSyncWithTheOracle(string game, int frames, int width, int height, string trace)
     {
         string baseDir = GameDataLocator.RequireBaseDir();

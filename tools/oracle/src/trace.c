@@ -28,6 +28,13 @@ char *va (char *format, ...);
 int Oracle_AreaLinks (int *out, int max);	// world.c, as quake-oracle.patch adds it
 int Oracle_CDState (int *out);				// cd_win.c, as quake-oracle.patch adds it
 int Oracle_CDDrive (int *out);				// cd_oracle.c
+int Oracle_InState (int *out);				// in_win.c, as quake-oracle.patch adds it
+int Oracle_InputDevice (int *out);			// in_oracle.c
+int Oracle_WindowedMouse (void);			// vid_oracle.c
+void Oracle_MouseMove (int dx, int dy);		// in_oracle.c
+void Oracle_MouseButtons (int state);		// in_oracle.c
+extern int vid_modenum;						// vid_oracle.c
+extern int modestate;						// vid_oracle.c (winquake.h's modestate_t)
 
 static FILE *trace;
 static char trace_name[MAX_OSPATH];
@@ -42,7 +49,8 @@ static int dumps[MAX_SHOTS], num_dumps;
 static int quit_after_demo, was_playing, frame_limit;
 static unsigned long long palette_hash;
 
-// -traceevents: lines of "<frame> <console text>", run before that frame's commands, or "<frame> @key <key> <down>"
+// -traceevents: lines of "<frame> <console text>", run before that frame's commands, "<frame> @key <key> <down>",
+// "<frame> @mouse <dx> <dy>" or "<frame> @buttons <state>"
 static FILE *events;
 static int next_event_frame = -1;
 static char next_event[1024];
@@ -454,12 +462,39 @@ static hash_t View (void)
 	return h;
 }
 
-// V: the frame (vid.buffer, row by row)
+// I: the mouse and the joystick: in_win.c's state, vid_win.c's windowed_mouse, the virtual machine's (in_oracle.c)
+static int InputState (int *out)
+{
+	int n;
+
+	n = Oracle_InState (out);
+	out[n++] = Oracle_WindowedMouse ();
+	n += Oracle_InputDevice (out + n);
+	return n;
+}
+
+static hash_t Input (void)
+{
+	hash_t h = FNV_OFFSET;
+	int state[128], n, i;
+
+	n = InputState (state);
+	for (i = 0; i < n; i++)
+		H_Int (&h, state[i]);
+	return h;
+}
+
+// V: the mode (vid_modenum, modestate, vid.width, vid.height, vid.rowbytes), then the frame (vid.buffer, row by row)
 static hash_t Frame (void)
 {
 	hash_t h = FNV_OFFSET;
 	int y;
 
+	H_Int (&h, vid_modenum);
+	H_Int (&h, modestate);
+	H_Int (&h, vid.width);
+	H_Int (&h, vid.height);
+	H_Int (&h, vid.rowbytes);
 	for (y = 0; y < (int)vid.height; y++)
 		H_Bytes (&h, vid.buffer + y * vid.rowbytes, vid.width);
 	return h;
@@ -932,6 +967,28 @@ static void DumpSound (FILE *f)
 	fprintf (f, " drive open %d door %d mode %d track %d\n", state[109], state[110], state[111], state[112]);
 }
 
+// -tracedump: the I line's fields by name
+static void DumpInput (FILE *f)
+{
+	static const char *names[] = {
+		"mouseactive", "mouseinitialized", "mouseactivatetoggle", "mouseshowtoggle", "mouseparmsvalid", "restore_spi",
+		"dinput", "dinput_acquired", "mstate_di", "mouse_buttons", "mouse_oldbuttonstate", "current_pos.x",
+		"current_pos.y", "mx_accum", "my_accum", "mouse_x", "mouse_y", "old_mouse_x", "old_mouse_y", "joy_avail",
+		"joy_advancedinit", "joy_haspov", "joy_id", "joy_flags", "joy_numbuttons", "joy_oldbuttonstate",
+		"joy_oldpovstate", "dwAxisMap0", "dwAxisMap1", "dwAxisMap2", "dwAxisMap3", "dwAxisMap4", "dwAxisMap5",
+		"dwControlMap0", "dwControlMap1", "dwControlMap2", "dwControlMap3", "dwControlMap4", "dwControlMap5",
+		"windowed_mouse", "cursor.x", "cursor.y", "clipping", "clip.left", "clip.top", "clip.right", "clip.bottom",
+		"buttons", "cursor_count", "captured", "mouse_parms0", "mouse_parms1", "mouse_parms2"
+	};
+	int state[128], n, i;
+
+	n = InputState (state);
+	fprintf (f, "input");
+	for (i = 0; i < n && i < (int)(sizeof(names) / sizeof(names[0])); i++)
+		fprintf (f, " %s %d", names[i], state[i]);
+	fprintf (f, "\n");
+}
+
 // -tracedump: the entities, field by field
 static void Dump (void)
 {
@@ -955,6 +1012,7 @@ static void Dump (void)
 			? 0x10000 + (int)(cl_visedicts[i] - cl_static_entities) : -1);
 	DumpServer (f);
 	DumpSound (f);
+	DumpInput (f);
 	fclose (f);
 }
 
@@ -977,7 +1035,7 @@ void Trace_Frame (void)
 	if (trace)
 	{
 		if (trace_frame == 1)
-			fprintf (trace, "H 5 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
+			fprintf (trace, "H 6 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
 		fprintf (trace, "F %d %d %016llx %08x %u\n", trace_frame, host_framecount,
 			*(unsigned long long *)&realtime, oracle_rand_seed (), oracle_rand_calls);
 		fprintf (trace, "C %016llx\n", Client ());
@@ -1002,6 +1060,7 @@ void Trace_Frame (void)
 		fprintf (trace, "M %016llx %d\n", message_hash, message_count);
 		fprintf (trace, "P %016llx\n", Paint ());
 		fprintf (trace, "A %016llx\n", CD ());
+		fprintf (trace, "I %016llx\n", Input ());
 	}
 
 	for (i = 0; i < num_shots; i++)
@@ -1046,6 +1105,22 @@ void Trace_Events (void)
 
 			if (sscanf (next_event + 5, "%d %d", &key, &down) == 2)
 				Key_Event (key, down);
+		}
+		else if (!Q_strncmp (next_event, "@mouse ", 7))
+		{
+			// the mouse moved: "@mouse <dx> <dy>"
+			int dx, dy;
+
+			if (sscanf (next_event + 7, "%d %d", &dx, &dy) == 2)
+				Oracle_MouseMove (dx, dy);
+		}
+		else if (!Q_strncmp (next_event, "@buttons ", 9))
+		{
+			// the mouse buttons pressed: "@buttons <1 left | 2 right | 4 middle>"
+			int state;
+
+			if (sscanf (next_event + 9, "%d", &state) == 1)
+				Oracle_MouseButtons (state);
 		}
 		else
 		{

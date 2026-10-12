@@ -12,4 +12,13 @@ public sealed partial class QuakeEngine
     public void Cache_Flush()
     {
     }
+
+    // zone.c: Cache_Report, Hunk_Check (nothing to report or check)
+    public void Cache_Report()
+    {
+    }
+
+    public void Hunk_Check()
+    {
+    }
 }

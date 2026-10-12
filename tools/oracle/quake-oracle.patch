@@ -71,6 +71,67 @@ index e07e6ce..ca085ec 100644
  	
  	if (s-s2 < 2)
  		strcpy (out,"?model?");
+diff --git a/in_win.c b/in_win.c
+index d8544fb..90f8367 100644
+--- a/in_win.c
++++ b/in_win.c
+@@ -1237,3 +1237,55 @@ void IN_JoyMove (usercmd_t *cmd)
+ 	if (cl.viewangles[PITCH] < -70.0)
+ 		cl.viewangles[PITCH] = -70.0;
+ }
++
++#ifdef ORACLE
++/*
++===============
++Oracle_InState
++
++The trace's I line (trace.c): this file's state as ints, in this order: mouseactive, mouseinitialized,
++mouseactivatetoggle, mouseshowtoggle, mouseparmsvalid, restore_spi, dinput, dinput_acquired, mstate_di, mouse_buttons,
++mouse_oldbuttonstate, current_pos, mx_accum, my_accum, mouse_x, mouse_y, old_mouse_x, old_mouse_y, joy_avail,
++joy_advancedinit, joy_haspov, joy_id, joy_flags, joy_numbuttons, joy_oldbuttonstate, joy_oldpovstate, then
++dwAxisMap[0..5] and dwControlMap[0..5]. Returns how many it wrote.
++===============
++*/
++int Oracle_InState (int *out)
++{
++	int		i, n;
++
++	n = 0;
++	out[n++] = mouseactive;
++	out[n++] = mouseinitialized;
++	out[n++] = mouseactivatetoggle;
++	out[n++] = mouseshowtoggle;
++	out[n++] = mouseparmsvalid;
++	out[n++] = restore_spi;
++	out[n++] = dinput;
++	out[n++] = dinput_acquired;
++	out[n++] = mstate_di;
++	out[n++] = mouse_buttons;
++	out[n++] = mouse_oldbuttonstate;
++	out[n++] = current_pos.x;
++	out[n++] = current_pos.y;
++	out[n++] = mx_accum;
++	out[n++] = my_accum;
++	out[n++] = mouse_x;
++	out[n++] = mouse_y;
++	out[n++] = old_mouse_x;
++	out[n++] = old_mouse_y;
++	out[n++] = joy_avail;
++	out[n++] = joy_advancedinit;
++	out[n++] = joy_haspov;
++	out[n++] = joy_id;
++	out[n++] = joy_flags;
++	out[n++] = joy_numbuttons;
++	out[n++] = joy_oldbuttonstate;
++	out[n++] = joy_oldpovstate;
++	for (i = 0; i < JOY_MAX_AXES; i++)
++		out[n++] = dwAxisMap[i];
++	for (i = 0; i < JOY_MAX_AXES; i++)
++		out[n++] = dwControlMap[i];
++	return n;
++}
++#endif
+\ No newline at end of file
 diff --git a/net_main.c b/net_main.c
 index 5f5d2cf..5a28664 100644
 --- a/net_main.c

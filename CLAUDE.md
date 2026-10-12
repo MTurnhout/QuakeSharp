@@ -31,7 +31,7 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
   with coverlet and writes `coverage.md`: what the traces reach of Core, file by file, and the methods and lines they
   don't.
 - Engine code lives in `QuakeEngine`, a partial file per C module, with the C's names (design.md §6.2 rule 13).
-  Functions of unported modules are stand-ins in `QuakeEngine.Pending.cs`; move them out as their module is ported.
+  Every module WinQuake's game uses is ported (the stand-ins of `QuakeEngine.Pending.cs` are gone).
 
 ## Rules
 

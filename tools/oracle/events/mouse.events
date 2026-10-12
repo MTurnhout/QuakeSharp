@@ -1,0 +1,366 @@
+5 map e1m1
+100 god
+110 @mouse 50 0
+112 @buttons 1
+114 @buttons 0
+130 _windowed_mouse 1
+140 @mouse 4 0
+142 @mouse 4 0
+144 @mouse 4 0
+146 @mouse 4 0
+148 @mouse 4 0
+150 @mouse 4 0
+152 @mouse 4 0
+154 @mouse 4 0
+156 @mouse 4 0
+158 @mouse 4 0
+160 @mouse 4 0
+162 @mouse 4 0
+164 @mouse 4 0
+166 @mouse 4 0
+168 @mouse 4 0
+170 @mouse 4 0
+172 @mouse 4 0
+174 @mouse 4 0
+176 @mouse 4 0
+178 @mouse 4 0
+180 @mouse 4 0
+182 @mouse 4 0
+184 @mouse 4 0
+186 @mouse 4 0
+188 @mouse 4 0
+190 @mouse 4 0
+192 @mouse 4 0
+194 @mouse 4 0
+196 @mouse 4 0
+198 @mouse 4 0
+200 @mouse -400 0
+202 @mouse 400 0
+210 +mlook
+220 @mouse 0 -6
+222 @mouse 0 -6
+224 @mouse 0 -6
+226 @mouse 0 -6
+228 @mouse 0 -6
+230 @mouse 0 -6
+232 @mouse 0 -6
+234 @mouse 0 -6
+236 @mouse 0 -6
+238 @mouse 0 -6
+240 @mouse 0 -6
+242 @mouse 0 -6
+244 @mouse 0 -6
+246 @mouse 0 -6
+248 @mouse 0 -6
+250 @mouse 0 -6
+252 @mouse 0 -6
+254 @mouse 0 -6
+256 @mouse 0 -6
+258 @mouse 0 -6
+260 @mouse 0 -6
+262 @mouse 0 300
+264 @mouse 0 50
+266 @mouse 0 50
+268 @mouse 0 50
+270 @mouse 0 50
+272 @mouse 0 50
+274 @mouse 0 50
+276 @mouse 0 50
+278 @mouse 0 50
+280 @mouse 0 50
+282 @mouse 0 50
+284 @mouse 0 50
+286 @mouse 0 50
+288 @mouse 0 50
+290 @mouse 0 50
+292 @mouse 0 50
+294 @mouse 0 50
+296 @mouse 0 50
+298 @mouse 0 50
+300 @mouse 0 50
+310 force_centerview
+320 m_filter 1
+322 @mouse -3 1
+324 @mouse 5 -7
+326 @mouse -1 2
+330 sensitivity 7.5
+332 @mouse 3 -2
+334 @mouse -5 3
+336 @mouse 1 1
+340 m_filter 0
+350 lookstrafe 1
+352 @mouse 10 0
+354 @mouse 10 0
+356 @mouse 10 0
+358 @mouse 10 0
+360 @mouse 10 0
+362 @mouse 10 0
+364 @mouse 10 0
+366 @mouse 10 0
+368 @mouse 10 0
+370 @mouse 10 0
+372 lookstrafe 0
+380 -mlook
+382 @mouse 0 -8
+384 @mouse 0 -8
+386 @mouse 0 -8
+388 @mouse 0 -8
+390 @mouse 0 -8
+392 @mouse 0 -8
+394 @mouse 0 -8
+396 @mouse 0 -8
+398 @mouse 0 -8
+400 @mouse 0 -8
+410 +strafe
+412 @mouse -10 6
+414 @mouse -10 6
+416 @mouse -10 6
+418 @mouse -10 6
+420 @mouse -10 6
+422 @mouse -10 6
+424 @mouse -10 6
+426 @mouse -10 6
+428 @mouse -10 6
+430 @mouse -10 6
+440 noclip
+442 @mouse 0 -10
+444 @mouse 0 -10
+446 @mouse 0 -10
+448 @mouse 0 -10
+450 @mouse 0 -10
+452 @mouse 0 -10
+454 @mouse 0 -10
+456 @mouse 0 -10
+458 @mouse 0 -10
+460 @mouse 0 -10
+462 -strafe
+470 noclip
+480 m_yaw 0.03
+482 m_side 1.2
+484 m_forward 2
+490 @mouse 7 -3
+492 @mouse 7 -3
+494 @mouse 7 -3
+496 @mouse 7 -3
+498 @mouse 7 -3
+500 @mouse 7 -3
+502 @mouse 7 -3
+504 @mouse 7 -3
+506 @mouse 7 -3
+508 @mouse 7 -3
+510 @mouse 7 -3
+512 @mouse 7 -3
+514 @mouse 7 -3
+516 @mouse 7 -3
+518 @mouse 7 -3
+520 @mouse 7 -3
+530 sensitivity 3
+540 @buttons 1
+560 @buttons 3
+600 @buttons 2
+620 @buttons 6
+640 @buttons 0
+650 lookspring 1
+652 @buttons 4
+660 @mouse 0 5
+662 @mouse 0 5
+664 @mouse 0 5
+666 @mouse 0 5
+668 @mouse 0 5
+670 @mouse 0 5
+672 @mouse 0 5
+674 @mouse 0 5
+676 @mouse 0 5
+678 @mouse 0 5
+680 @mouse 0 5
+690 @buttons 0
+700 pause
+702 @mouse 20 20
+704 @mouse 20 20
+706 @mouse 20 20
+708 @mouse 20 20
+710 @mouse 20 20
+712 @mouse 20 20
+714 @mouse 20 20
+716 @mouse 20 20
+718 @mouse 20 20
+720 @mouse 20 20
+730 pause
+732 @mouse -4 2
+734 @mouse -4 2
+736 @mouse -4 2
+738 @mouse -4 2
+740 @mouse -4 2
+750 toggleconsole
+752 @mouse 6 0
+754 @mouse 6 0
+756 @mouse 6 0
+758 @mouse 6 0
+760 @mouse 6 0
+762 @mouse 6 0
+764 @mouse 6 0
+766 @mouse 6 0
+768 @mouse 6 0
+770 @mouse 6 0
+780 toggleconsole
+790 joystick 1
+800 joyadvanced 1
+802 joyname gamepad
+804 joyadvaxisx 3
+806 joyadvaxisy 17
+808 joyadvancedupdate
+820 joyadvanced 0
+822 joyadvancedupdate
+824 joystick 0
+830 @key 27 1
+831 @key 27 0
+850 @key 129 1
+851 @key 129 0
+860 @key 129 1
+861 @key 129 0
+870 @key 13 1
+871 @key 13 0
+890 @key 129 1
+891 @key 129 0
+900 @key 129 1
+901 @key 129 0
+910 @key 129 1
+911 @key 129 0
+920 @key 129 1
+921 @key 129 0
+930 @key 129 1
+931 @key 129 0
+940 @key 129 1
+941 @key 129 0
+950 @key 129 1
+951 @key 129 0
+960 @key 129 1
+961 @key 129 0
+970 @key 129 1
+971 @key 129 0
+990 @key 13 1
+991 @key 13 0
+1000 @key 128 1
+1001 @key 128 0
+1010 @key 128 1
+1011 @key 128 0
+1020 @key 128 1
+1021 @key 128 0
+1030 @key 128 1
+1031 @key 128 0
+1040 @key 131 1
+1041 @key 131 0
+1050 @key 131 1
+1051 @key 131 0
+1060 @key 129 1
+1061 @key 129 0
+1070 @key 129 1
+1071 @key 129 0
+1080 @key 129 1
+1081 @key 129 0
+1090 @key 129 1
+1091 @key 129 0
+1100 @key 129 1
+1101 @key 129 0
+1110 @key 129 1
+1111 @key 129 0
+1120 @key 129 1
+1121 @key 129 0
+1130 @key 129 1
+1131 @key 129 0
+1140 @key 13 1
+1141 @key 13 0
+1150 @mouse 3 3
+1152 @mouse 3 3
+1154 @mouse 3 3
+1156 @mouse 3 3
+1158 @mouse 3 3
+1160 @mouse 3 3
+1170 @key 27 1
+1171 @key 27 0
+1180 @key 27 1
+1181 @key 27 0
+1190 @mouse 3 3
+1192 @mouse 3 3
+1194 @mouse 3 3
+1196 @mouse 3 3
+1198 @mouse 3 3
+1200 @mouse 3 3
+1210 _windowed_mouse 1
+1220 @mouse -2 1
+1222 @mouse -2 1
+1224 @mouse -2 1
+1226 @mouse -2 1
+1228 @mouse -2 1
+1230 @mouse -2 1
+1232 @mouse -2 1
+1234 @mouse -2 1
+1236 @mouse -2 1
+1238 @mouse -2 1
+1240 @mouse -2 1
+1242 @mouse -2 1
+1244 @mouse -2 1
+1246 @mouse -2 1
+1248 @mouse -2 1
+1250 @mouse -2 1
+1252 @mouse -2 1
+1254 @mouse -2 1
+1256 @mouse -2 1
+1258 @mouse -2 1
+1260 @mouse -2 1
+1262 @mouse -2 1
+1264 @mouse -2 1
+1266 @mouse -2 1
+1268 @mouse -2 1
+1270 @mouse -2 1
+1272 @mouse -2 1
+1274 @mouse -2 1
+1276 @mouse -2 1
+1278 @mouse -2 1
+1280 @mouse -2 1
+1282 @mouse -2 1
+1284 @mouse -2 1
+1286 @mouse -2 1
+1288 @mouse -2 1
+1290 @mouse -2 1
+1292 @mouse -2 1
+1294 @mouse -2 1
+1296 @mouse -2 1
+1298 @mouse -2 1
+1300 @mouse -2 1
+1310 changelevel e1m2
+1400 @mouse 5 0
+1402 @mouse 5 0
+1404 @mouse 5 0
+1406 @mouse 5 0
+1408 @mouse 5 0
+1410 @mouse 5 0
+1412 @mouse 5 0
+1414 @mouse 5 0
+1416 @mouse 5 0
+1418 @mouse 5 0
+1420 @mouse 5 0
+1422 @mouse 5 0
+1424 @mouse 5 0
+1426 @mouse 5 0
+1428 @mouse 5 0
+1430 @mouse 5 0
+1432 @mouse 5 0
+1434 @mouse 5 0
+1436 @mouse 5 0
+1438 @mouse 5 0
+1440 @mouse 5 0
+1442 @mouse 5 0
+1444 @mouse 5 0
+1446 @mouse 5 0
+1448 @mouse 5 0
+1450 @mouse 5 0
+1452 @mouse 5 0
+1454 @mouse 5 0
+1456 @mouse 5 0
+1458 @mouse 5 0
+1460 @mouse 5 0
+1470 @buttons 1
+1480 @buttons 0
+1500 _windowed_mouse 0
+1510 @mouse 30 30

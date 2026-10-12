@@ -86,8 +86,10 @@ hooks for the traces that change nothing:
 - `vid_oracle.c`: `vid_win.c` with one windowed mode, rendered in memory at `-oraclevid <width> <height>` (320x240 by
   default). Kept from `vid_win.c`: its cvars and commands, the remapping of colormap entries 0 to the palette's closest
   other black (GDI cannot remap index 0; this changes the frames' pixel values, not their colours), S_Init between the
-  hidden first mode set and the real one, the pixel aspect, the surface cache, `ClearAllStates` and the mode name on
-  the console. The loading disc is never in the frame (WinQuake draws it on the screen and restores it).
+  hidden first mode set and the real one, the pixel aspect, the surface cache, `ClearAllStates`, the mode name on
+  the console, and what it does with the mouse: taken in a window only with `_windowed_mouse`, released while paused.
+  The window's client area is at the virtual screen's top left. The loading disc is never in the frame (WinQuake draws
+  it on the screen and restores it).
 - `snd_oracle.c`: a 64 KB, 16-bit stereo, 11025 Hz buffer standing in for DirectSound's, whose play position follows
   the virtual clock. The mixer then paints the same samples at the same frames in every run, which the game depends on:
   `S_StartSound` draws from `rand()` when an identical sound has not been painted yet. It prints what snd_win.c's
@@ -96,11 +98,17 @@ hooks for the traces that change nothing:
 - `cd_oracle.c`: the MCI commands of WinQuake's `cd_win.c` (compiled unchanged) go to a virtual drive holding Quake's
   disc, track 1 data and tracks 2-11 audio, instead of winmm (design.md decision 37). With no window procedure no MCI
   notification arrives, so no track ends. The console says "CD Audio Initialized" and the `cd` command works.
-- `in_oracle.c`, with `in_null.c` from WinQuake: no mouse.
-- `net_oracle.c`: WinQuake's network drivers (`net_win.c`'s list: loopback, then datagram, `net_dgrm.c`) over a
-  virtual LAN driver, net_wins.c without sockets (design.md decision 33): TCP/IP is available (the menus offer it and
-  a game started from them runs over loopback), the address is 127.0.0.1 once listening, the console says "Winsock
-  TCP/IP Initialized", no name or address resolves and no packet arrives.
+- `in_oracle.c`: the Win32 calls of WinQuake's `in_win.c` (compiled unchanged) go to a virtual machine instead of
+  user32 and winmm (design.md decision 43): a 1920x1080 screen whose cursor `-traceevents` moves (`@mouse`) and whose
+  buttons it presses (`@buttons`), each delivered as the window procedure gets it, the cursor confined to the screen or
+  to `ClipCursor`'s rectangle (its right and bottom edges excluded); winmm's 16 joystick slots, each unplugged, so the
+  console says "joystick not found -- no valid joysticks (a7)" as on Windows without one; the system's mouse
+  parameters, Windows' defaults. DirectInput (`-dinput`) is not part of it.
+- `net_oracle.c`: WinQuake's network drivers (`net_win.c`'s list: loopback, then datagram, `net_dgrm.c`) over its two
+  LAN drivers: net_wins.c without sockets (design.md decision 33): TCP/IP is available (the menus offer it and a game
+  started from them runs over loopback), the address is 127.0.0.1 once listening, the console says "Winsock TCP/IP
+  Initialized", no name or address resolves and no packet arrives; and net_wipx.c as today's Windows starts it, without
+  IPX: "WIPX_Init: Unable to open control socket" (design.md §3.4).
 - `trace.c`: the traces and the scripted input.
 
 ## Switches
@@ -111,15 +119,15 @@ hooks for the traces that change nothing:
 | `-tracequitafterdemo` | Quit when the demo playing ends |
 | `-oracleframes <n>` | Quit after n frames |
 | `-traceshot <frame>` | Also write that frame (any number of times) as `<trace>.<frame>.shot`: width, height (32-bit), the palette, the pixels; `quakesharp-tools shot2png` makes a PNG of it |
-| `-tracedump <frame>` | Also write that frame's state (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits: the client's entities, then the server (`server` line), the QuakeC globals and every edict's header and fields by name (`global`, `edict` lines, strings quoted with `\xHH` escapes), the messages sent during the frame in hexadecimal (`message <sender> <reliable> <result> <size> <bytes>`), the sound (`sound`: the mixer's times, `channel` lines, `painted <from> <to> <bytes>`: the samples painted during the frame from the device's buffer, in hexadecimal) and the CD (`cd`: cd_win.c's state, `cdvolume` as its bits, the remap table, the drive's); `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing line |
-| `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), or `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it) |
+| `-tracedump <frame>` | Also write that frame's state (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits: the client's entities, then the server (`server` line), the QuakeC globals and every edict's header and fields by name (`global`, `edict` lines, strings quoted with `\xHH` escapes), the messages sent during the frame in hexadecimal (`message <sender> <reliable> <result> <size> <bytes>`), the sound (`sound`: the mixer's times, `channel` lines, `painted <from> <to> <bytes>`: the samples painted during the frame from the device's buffer, in hexadecimal) and the CD (`cd`: cd_win.c's state, `cdvolume` as its bits, the remap table, the drive's) and the mouse and joystick (`input`: the `I` line's fields by name); `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing line |
+| `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it), `<frame> @mouse <dx> <dy>`, the mouse moved (the virtual cursor, then `IN_MouseEvent` as for `WM_MOUSEMOVE`), or `<frame> @buttons <state>`, the mouse buttons held (1 left, 2 right, 4 middle; `IN_MouseEvent`) |
 | `-oraclevid <w> <h>` | The video mode (320x200 to 1280x1024) |
 | `-oraclestep <n>` | Frames of 1/n s |
 | `-oracleverbose` | Print `Sys_Printf` (the console) to stdout |
 
 ## The trace format
 
-One line `H 5 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
+One line `H 6 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
 
 | Line | Fields |
 |---|---|
@@ -131,7 +139,7 @@ One line `H 5 <width> <height> <frames per second>`, then for every frame, after
 | `S <hash>` | The sound: `paintedtime`, `soundtime`, `total_channels` and the channels (sound, volumes, end, position, entity and channel, origin, attenuation): what decides `S_StartSound`'s `rand()` draws |
 | `T <hash>` | The console's text: `con_linewidth`, `con_totallines`, `con_current`, `con_x`, `con_times` and the whole `con_text` |
 | `R <hash>` | The view: `r_refdef`'s rectangle, origin, angles and field of view |
-| `V <frame> <palette>` | The frame (the 8-bit buffer, row by row) and the palette last passed to `VID_SetPalette` |
+| `V <frame> <palette>` | The mode (`vid_modenum`, `modestate`, `vid.width`, `vid.height`, `vid.rowbytes`) and the frame (the 8-bit buffer, row by row), then the palette last passed to `VID_SetPalette` |
 | `G <hash>` | The server: `sv.active`, `paused`, `loadgame`, and with an active server `time`, `lastcheck`, `lastchecktime`, `name`, `modelname`, the world model, the model precaches and models, the sound precaches, the light styles, `num_edicts`, `max_edicts`, `state` and the `datagram`, `reliable_datagram` and `signon` buffers (overflowed, size, bytes); then `svs` (`maxclients`, `maxclientslimit`, `serverflags`, `changelevel_issued`) and every client slot below `maxclients` (see `Server` in `src/trace.c`) |
 | `Q <hash>` | The QuakeC globals: the slots the progs' global definitions cover (not the compiler's temporaries, the return value or the parameters), strings by content |
 | `N <hash> <edicts>` | The edicts up to `sv.num_edicts`: `free`, `num_leafs` and the leaf numbers, the baseline, `freetime`, and the slots the field definitions cover, strings by content |
@@ -139,11 +147,12 @@ One line `H 5 <width> <height> <frames per second>`, then for every frame, after
 | `M <hash> <messages>` | The messages sent during the frame through `NET_SendMessage` and `NET_SendUnreliableMessage`: the sender (-1 the client, n the server to client n), reliable or not, the driver's result, the size and the bytes |
 | `P <hash>` | The sound device's buffer, all of it (`shm->buffer`, 64 KB): the samples painted, `S_ClearBuffer`'s clears and what stays from the laps before; nothing without a started sound system |
 | `A <hash>` | The CD: cd_win.c's `initialized`, `enabled`, `cdValid`, `playing`, `wasPlaying`, `playLooping`, `cdvolume`, `playTrack`, `maxTrack` and `remap`, then the virtual drive's state (open, door open, stopped, playing or paused, track) |
+| `I <hash>` | The mouse and the joystick: in_win.c's state (`mouseactive`, `mouseinitialized`, `mouseactivatetoggle`, `mouseshowtoggle`, `mouseparmsvalid`, `restore_spi`, `dinput`, `dinput_acquired`, `mstate_di`, `mouse_buttons`, `mouse_oldbuttonstate`, `current_pos`, `mx_accum`, `my_accum`, `mouse_x`, `mouse_y`, `old_mouse_x`, `old_mouse_y`, `joy_avail`, `joy_advancedinit`, `joy_haspov`, `joy_id`, `joy_flags`, `joy_numbuttons`, `joy_oldbuttonstate`, `joy_oldpovstate`, `dwAxisMap`, `dwControlMap`), vid_win.c's `windowed_mouse`, then the virtual machine's (the cursor, the clip rectangle, the buttons, the display counter, the capture, the mouse parameters) |
 | `Err <text>` | `Sys_Error`'s message, last |
 
 The client's lines (`F`, `C`, `E`, `X`, `S`, `T`, `R` and the palette) do not depend on the renderer; `D` and the frame
 are the renderer's; `G`, `Q`, `N` and `W` the server's (without an active server `G` hashes the flags and `svs`, the
-others nothing), `M` both; `P` the mixer's and `A` the CD's (trace format 5, milestone 8). `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
+others nothing), `M` both; `P` the mixer's and `A` the CD's (trace format 5, milestone 8), `I` the mouse's and the joystick's (trace format 6, milestone 10). `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
 console shows `./id1/pak0.pak`), as QuakeSharp's traces run wherever the game data is.
 
 Hashes are 64-bit FNV-1a over the fields' bytes: `int` and `float` as 4 little-endian bytes, `double` 8, vectors three

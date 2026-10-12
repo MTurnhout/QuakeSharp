@@ -14,7 +14,7 @@ using QuakeSharp.Render.Vulkan;
 //
 // -recordevents <file> (design.md decision 34) runs as a trace does instead: a virtual clock of 1/64 s steps, paced to
 // real time; the sound device's position following that clock, as the oracle's; the oracle's virtual CD (the track
-// files only heard); no config.cfg (a fresh user folder, thrown away); and writes the keys as -traceevents lines, so the game replays the same in the oracle and in
+// files only heard); no joystick; no config.cfg (a fresh user folder, thrown away); and writes the keys and the mouse as -traceevents lines, so the game replays the same in the oracle and in
 // quakesharp-tools trace (with -traceevents <file> -oracleframes <the frames it reports>, from the same command line).
 var commandLine = new CommandLine(["quakesharp", .. args]);
 try
@@ -58,7 +58,9 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     var system = new RealSystem();
     using var sound = new SdlSoundDma();
     using var cd = new FileCdDrive(CdTracks.Find(".", commandLine));
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound, presenter, cd);
+    using var joysticks = new SdlJoysticks();
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound, presenter, cd,
+        mouse: window, joysticks: joysticks);
 
     // WM_ACTIVATE: DirectSound silences the game while another program has the focus; AppActivate clears the buffer
     window.Activated = (active, minimized) =>
@@ -105,7 +107,9 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     using var recorder = new EventRecorder(window, path, () => frames);
     using var sound = new SdlSoundDma(clock: () => system.Time);
     using var cd = new ListeningCdDrive(CdTracks.Find(".", commandLine));
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound, presenter, cd);
+    // the window takes the mouse as in a game; no joystick, as the oracle has none
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound, presenter, cd,
+        mouse: window);
 
     // silent while another program has the focus, but without AppActivate's clears: the oracle never loses the focus
     window.Activated = (active, _) => sound.Muted = !active;

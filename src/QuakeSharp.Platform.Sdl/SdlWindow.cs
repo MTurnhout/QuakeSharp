@@ -1,4 +1,5 @@
 using QuakeSharp.Core;
+using QuakeSharp.Core.Input;
 using QuakeSharp.Core.Platform;
 using QuakeSharp.Core.UI;
 using SDL;
@@ -7,12 +8,17 @@ using static SDL.SDL3;
 namespace QuakeSharp.Platform.Sdl;
 
 /// <summary>
-/// The game's window, made for Vulkan, and its events: vid_win.c's window and MainWndProc's keys and mouse buttons
-/// (design.md §8). Borderless over the whole screen, or a window.
+/// The game's window, made for Vulkan, and its events: vid_win.c's window and the messages MainWndProc takes, the keys,
+/// the mouse's moves and its buttons (design.md §8, decision 43). Borderless over the whole screen, or a window. While
+/// in_win.c confines the cursor to the window, the window takes the mouse: relative motion, the pointer hidden.
 /// </summary>
-public sealed unsafe class SdlWindow : IInputEvents, IDisposable
+public sealed unsafe class SdlWindow : IInputEvents, IMouseCapture, IDisposable
 {
     private readonly string[] vulkanExtensions;
+
+    // the mouse's motion not yet delivered (WM_MOUSEMOVE moves the cursor whole pixels), and the buttons held
+    private float motionX, motionY;
+    private int buttons;
 
     /// <param name="fullscreen">Borderless over the whole screen at the desktop's resolution; otherwise a window of the
     /// given size (fitted to the screen).</param>
@@ -105,7 +111,7 @@ public sealed unsafe class SdlWindow : IInputEvents, IDisposable
     }
 
     // sys_win.c: Sys_SendKeyEvents; vid_win.c: MainWndProc
-    public bool SendKeyEvents(Action<int, bool> keyEvent)
+    public bool SendKeyEvents(IWindowMessages window)
     {
         bool open = true;
         SDL_Event e;
@@ -135,22 +141,37 @@ public sealed unsafe class SdlWindow : IInputEvents, IDisposable
                 // WM_KEYDOWN (held keys repeat, as Windows repeats them), WM_KEYUP
                 case SDL_EventType.SDL_EVENT_KEY_DOWN:
                 case SDL_EventType.SDL_EVENT_KEY_UP:
-                    keyEvent(KeyTranslation.MapKey(e.key.scancode), e.key.down);
+                    window.KeyEvent(KeyTranslation.MapKey(e.key.scancode), e.key.down);
                     break;
 
-                // in_win.c: IN_MouseEvent, the buttons as K_MOUSE1 + button
+                // WM_MOUSEMOVE: the cursor moved by whole pixels; what is left of the motion waits for more
+                case SDL_EventType.SDL_EVENT_MOUSE_MOTION:
+                    motionX += e.motion.xrel;
+                    motionY += e.motion.yrel;
+                    int dx = (int)motionX, dy = (int)motionY;
+                    if (dx != 0 || dy != 0)
+                    {
+                        motionX -= dx;
+                        motionY -= dy;
+                        window.MouseMove(dx, dy);
+                    }
+
+                    break;
+
+                // WM_LBUTTONDOWN...: the buttons held (MK_LBUTTON, MK_RBUTTON, MK_MBUTTON as 1, 2, 4)
                 case SDL_EventType.SDL_EVENT_MOUSE_BUTTON_DOWN:
                 case SDL_EventType.SDL_EVENT_MOUSE_BUTTON_UP:
                     int button = e.button.Button switch
                     {
-                        SDLButton.SDL_BUTTON_LEFT => 0,
-                        SDLButton.SDL_BUTTON_RIGHT => 1,
-                        SDLButton.SDL_BUTTON_MIDDLE => 2,
-                        _ => -1,
+                        SDLButton.SDL_BUTTON_LEFT => 1,
+                        SDLButton.SDL_BUTTON_RIGHT => 2,
+                        SDLButton.SDL_BUTTON_MIDDLE => 4,
+                        _ => 0,
                     };
-                    if (button >= 0)
+                    if (button != 0)
                     {
-                        keyEvent(Keys.K_MOUSE1 + button, e.button.down);
+                        buttons = e.button.down ? buttons | button : buttons & ~button;
+                        window.MouseButtons(buttons);
                     }
 
                     break;
@@ -160,8 +181,8 @@ public sealed unsafe class SdlWindow : IInputEvents, IDisposable
                     if (e.wheel.y != 0)
                     {
                         int key = e.wheel.y > 0 ? Keys.K_MWHEELUP : Keys.K_MWHEELDOWN;
-                        keyEvent(key, true);
-                        keyEvent(key, false);
+                        window.KeyEvent(key, true);
+                        window.KeyEvent(key, false);
                     }
 
                     break;
@@ -169,6 +190,26 @@ public sealed unsafe class SdlWindow : IInputEvents, IDisposable
         }
 
         return open;
+    }
+
+    // ClipCursor: the window takes the mouse (relative motion, the pointer kept in and hidden) or lets it go
+    public void ClipCursor(bool clipped)
+    {
+        SDL_SetWindowRelativeMouseMode(Handle, clipped);
+        motionX = motionY = 0;
+    }
+
+    // ShowCursor's display counter
+    public void ShowCursor(bool show)
+    {
+        if (show)
+        {
+            SDL_ShowCursor();
+        }
+        else
+        {
+            SDL_HideCursor();
+        }
     }
 
     public void Dispose()

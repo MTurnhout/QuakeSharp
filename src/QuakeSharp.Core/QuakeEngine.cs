@@ -1,4 +1,5 @@
 using QuakeSharp.Core.Common;
+using QuakeSharp.Core.Input;
 using QuakeSharp.Core.Platform;
 using QuakeSharp.Core.Sound;
 
@@ -47,12 +48,16 @@ public sealed class QuakeParms
 /// </summary>
 public sealed partial class QuakeEngine
 {
+    /// <param name="mouse">The platform's part of the mouse while in_win.c has it (none: the traces').</param>
+    /// <param name="joysticks">The platform's joysticks (none: winmm without any, as the oracle's).</param>
     public QuakeEngine(QuakeParms parms, ISystem system, IInputEvents? input = null, ISoundDma? sound = null,
-        IVideoOutput? video = null, ICdDrive? cd = null)
+        IVideoOutput? video = null, ICdDrive? cd = null, IMouseCapture? mouse = null, IJoystickDevice? joysticks = null)
     {
         host_parms = parms;
         this.system = system;
-        this.input = input;
+        events = input;
+        this.input = new VirtualInput(mouse, joysticks);
+        windowProcedure = new WindowProcedure(this);
         sounddma = sound;
         cddrive = cd;
         this.video = video;
@@ -72,8 +77,8 @@ public sealed partial class QuakeEngine
             new(true, 1, r_p1, r_p0, null, 1, r_p2, r_p0, null),
             new(false, 1, r_p0, r_p2, null, 1, r_p0, r_p1, null),
         ];
-        // net_win.c's drivers (the datagram driver over the virtual TCP/IP driver, decision 33) and net_main.c's and
-        // net_dgrm.c's poll procedures, which the C initializes statically
+        // net_win.c's drivers (the datagram driver over the virtual TCP/IP and IPX drivers, decision 33, §3.4) and
+        // net_main.c's and net_dgrm.c's poll procedures, which the C initializes statically
         net_drivers =
         [
             new()
@@ -95,7 +100,7 @@ public sealed partial class QuakeEngine
             },
         ];
         net_numdrivers = net_drivers.Length;
-        net_landrivers = [new Net.VirtualLanDriver(this)];
+        net_landrivers = [new Net.VirtualLanDriver(this), new Net.VirtualIpxDriver(this)];
         net_numlandrivers = net_landrivers.Length;
         pr_builtins = PR_Builtins();
         pr_numbuiltins = pr_builtins.Length;
@@ -118,7 +123,7 @@ public sealed partial class QuakeEngine
     public CommandLine com_argv { get; }
 
     private readonly ISystem system;
-    private readonly IInputEvents? input;
+    private readonly IInputEvents? events;
     private readonly ISoundDma? sounddma;
 
     // the CD drive cd_win.c sends its MCI commands to (null: none, as a machine without one)
@@ -140,11 +145,12 @@ public sealed partial class QuakeEngine
     // sys_win.c: Sys_FloatTime
     public double Sys_FloatTime() => system.FloatTime();
 
-    // sys_win.c: Sys_SendKeyEvents: the window's events, keys to Key_Event; closing the window quits (WinQuake asks
-    // first). The CD drive's MM_MCINOTIFY messages come to the window procedure too: CDAudio_MessageHandler
+    // sys_win.c: Sys_SendKeyEvents: the window's messages to vid_win.c's window procedure; closing the window quits
+    // (WinQuake asks first). The CD drive's MM_MCINOTIFY messages come to the window procedure too:
+    // CDAudio_MessageHandler
     public void Sys_SendKeyEvents()
     {
-        if (input != null && !input.SendKeyEvents(Key_Event))
+        if (events != null && !events.SendKeyEvents(windowProcedure))
         {
             throw Sys_Quit();
         }

@@ -17,7 +17,7 @@ namespace QuakeSharp.Core.Diagnostics;
 public sealed class TraceWriter
 {
     /// <summary>The trace format's version (the H line).</summary>
-    public const int Version = 5;
+    public const int Version = 6;
 
     private const ulong FNV_OFFSET = 0xcbf29ce484222325UL;
     private const ulong FNV_PRIME = 0x100000001b3UL;
@@ -78,6 +78,7 @@ public sealed class TraceWriter
         messages.Clear();
         lines.Add(Invariant($"P {Paint():x16}"));
         lines.Add(Invariant($"A {CD():x16}"));
+        lines.Add(Invariant($"I {Input():x16}"));
         lastFramePaintedtime = framePaintedtime;
         framePaintedtime = e.paintedtime;
         return lines;
@@ -119,6 +120,7 @@ public sealed class TraceWriter
 
         DumpServer(sb);
         DumpSound(sb);
+        DumpInput(sb);
         return sb.ToString();
     }
 
@@ -670,6 +672,47 @@ public sealed class TraceWriter
         return h.h;
     }
 
+    // I: the mouse and the joystick: in_win.c's state, vid_win.c's windowed_mouse, the virtual Windows' (VirtualInput)
+    private int[] InputState() =>
+        [.. engine.InState(), engine.windowed_mouse, .. engine.input.State()];
+
+    private ulong Input()
+    {
+        var h = new Hash();
+
+        foreach (int v in InputState())
+        {
+            h.Int(v);
+        }
+
+        return h.h;
+    }
+
+    // the I line's fields by name
+    private void DumpInput(StringBuilder sb)
+    {
+        string[] names =
+        [
+            "mouseactive", "mouseinitialized", "mouseactivatetoggle", "mouseshowtoggle", "mouseparmsvalid", "restore_spi",
+            "dinput", "dinput_acquired", "mstate_di", "mouse_buttons", "mouse_oldbuttonstate", "current_pos.x",
+            "current_pos.y", "mx_accum", "my_accum", "mouse_x", "mouse_y", "old_mouse_x", "old_mouse_y", "joy_avail",
+            "joy_advancedinit", "joy_haspov", "joy_id", "joy_flags", "joy_numbuttons", "joy_oldbuttonstate",
+            "joy_oldpovstate", "dwAxisMap0", "dwAxisMap1", "dwAxisMap2", "dwAxisMap3", "dwAxisMap4", "dwAxisMap5",
+            "dwControlMap0", "dwControlMap1", "dwControlMap2", "dwControlMap3", "dwControlMap4", "dwControlMap5",
+            "windowed_mouse", "cursor.x", "cursor.y", "clipping", "clip.left", "clip.top", "clip.right", "clip.bottom",
+            "buttons", "cursor_count", "captured", "mouse_parms0", "mouse_parms1", "mouse_parms2",
+        ];
+        int[] state = InputState();
+
+        sb.Append("input");
+        for (int i = 0; i < state.Length && i < names.Length; i++)
+        {
+            sb.Append(Invariant($" {names[i]} {state[i]}"));
+        }
+
+        sb.Append('\n');
+    }
+
     // T: the console's text (console.c)
     private ulong Text()
     {
@@ -715,6 +758,11 @@ public sealed class TraceWriter
         var h = new Hash();
         Video.VidDef vid = engine.vid;
 
+        h.Int(engine.vid_modenum);
+        h.Int((int)engine.modestate);
+        h.Int((int)vid.width);
+        h.Int((int)vid.height);
+        h.Int((int)vid.rowbytes);
         for (int y = 0; y < (int)vid.height; y++)
         {
             h.Bytes(vid.buffer.AsSpan(vid.bufferoffset + (y * (int)vid.rowbytes), (int)vid.width));

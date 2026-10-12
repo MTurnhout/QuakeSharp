@@ -9,7 +9,9 @@ namespace QuakeSharp.Core;
 // QuakeParms asks for, the 8-bit frame in memory, shown by the platform's IVideoOutput. What vid_win.c does that the
 // game shows is kept (design.md §6.4): its cvars and commands, the remapping of the colormap's entries 0, S_Init
 // between the hidden first mode set and the real one, the pixel aspect, the surface cache and the mode's name on the
-// console. Its other modes and their menu come with milestone 6.
+// console; and what it does with the mouse (in_win.c's, over VirtualInput's screen): taken in a window only with
+// _windowed_mouse, released while paused. The window's client area is at the screen's top left, as the oracle's. Its
+// other modes and their menu come with milestone 10 (design.md §11.4).
 /// <summary>winquake.h: modestate_t</summary>
 public enum modestate_t
 {
@@ -50,6 +52,22 @@ public sealed partial class QuakeEngine
     /// <summary>winquake.h: modestate (the mode is a window, as the oracle's)</summary>
     public modestate_t modestate = modestate_t.MS_UNINIT;
 
+    // vid_win.c: MODE_WINDOWED, NO_MODE, vid_modenum
+    private const int MODE_WINDOWED = 0;
+    private const int NO_MODE = MODE_WINDOWED - 1;
+    public int vid_modenum = NO_MODE;
+
+    // vid_win.c: the window's place and size on the screen, its rectangle and centre (in_win.c's cursor)
+    public int window_center_x, window_center_y, window_x, window_y, window_width, window_height;
+    public Input.Rect window_rect;
+
+    // vid_win.c: vid_stretched, windowed_mouse
+    private int vid_stretched;
+    public int windowed_mouse;
+
+    // vid_win.c: Minimized (only the full-screen DIB modes set it)
+    public bool Minimized;
+
     /// <summary>vid_win.c: vid_menudrawfn, vid_menukeyfn (menu.c's video menu calls them)</summary>
     public Action? vid_menudrawfn;
 
@@ -87,6 +105,16 @@ public sealed partial class QuakeEngine
     {
     }
 
+    // vid_win.c: VID_UpdateWindowStatus
+    private void VID_UpdateWindowStatus()
+    {
+        window_rect = new Input.Rect(window_x, window_y, window_x + window_width, window_y + window_height);
+        window_center_x = (window_rect.left + window_rect.right) / 2;
+        window_center_y = (window_rect.top + window_rect.bottom) / 2;
+
+        IN_UpdateClipCursor();
+    }
+
     // vid_win.c: ClearAllStates
     // send an up event for each key, to make sure the server clears them all
     private void ClearAllStates()
@@ -102,7 +130,20 @@ public sealed partial class QuakeEngine
         IN_ClearStates();
     }
 
-    // vid_win.c: VID_SetMode (with VID_SetWindowedMode's vid fields and VID_AllocBuffers)
+    // vid_win.c: VID_SetWindowedMode, the vid fields
+    private void VID_SetWindowedMode()
+    {
+        modestate = modestate_t.MS_WINDOWED;
+        vid.numpages = 1;
+        vid.maxwarpwidth = WARP_WIDTH;
+        vid.maxwarpheight = WARP_HEIGHT;
+        vid.height = vid.conheight = (uint)mode_height;
+        vid.width = vid.conwidth = (uint)mode_width;
+        vid.aspect = (float)((float)vid.height / vid.width * (320.0 / 240.0));
+        vid_stretched = 0;
+    }
+
+    // vid_win.c: VID_SetMode (with VID_AllocBuffers)
     public bool VID_SetMode(int modenum, byte[] palette)
     {
         bool temp;
@@ -117,13 +158,23 @@ public sealed partial class QuakeEngine
         CDAudio_Pause();
         S_ClearBuffer();
 
-        modestate = modestate_t.MS_WINDOWED;
-        vid.numpages = 1;
-        vid.maxwarpwidth = WARP_WIDTH;
-        vid.maxwarpheight = WARP_HEIGHT;
-        vid.height = vid.conheight = (uint)mode_height;
-        vid.width = vid.conwidth = (uint)mode_width;
-        vid.aspect = (float)((float)vid.height / vid.width * (320.0 / 240.0));
+        // the windowed mode, with the mouse taken or released around VID_SetWindowedMode
+        if (_windowed_mouse.value != 0)
+        {
+            VID_SetWindowedMode();
+            IN_ActivateMouse();
+            IN_HideMouse();
+        }
+        else
+        {
+            IN_DeactivateMouse();
+            IN_ShowMouse();
+            VID_SetWindowedMode();
+        }
+
+        window_width = (int)vid.width << vid_stretched;
+        window_height = (int)vid.height << vid_stretched;
+        VID_UpdateWindowStatus();
 
         CDAudio_Resume();
         scr_disabled_for_loading = temp;
@@ -134,7 +185,8 @@ public sealed partial class QuakeEngine
         }
 
         VID_SetPalette(palette);
-        Cvar_SetValue("vid_mode", 0);
+        vid_modenum = MODE_WINDOWED;
+        Cvar_SetValue("vid_mode", vid_modenum);
 
         if (d_pzbuffer != null)
         {
@@ -255,11 +307,31 @@ public sealed partial class QuakeEngine
     {
     }
 
-    // vid_win.c: VID_Update: the platform shows the frame
+    // vid_win.c: VID_Update: the platform shows the frame; the mouse taken or released when _windowed_mouse changes
     public void VID_Update(in VRect rects)
     {
         _ = rects;
         video?.Present(vid.buffer, (int)vid.width, (int)vid.height, (int)vid.rowbytes, vid_curpal);
+
+        // handle the mouse state when windowed if that's changed
+        if (modestate == modestate_t.MS_WINDOWED)
+        {
+            if ((int)_windowed_mouse.value != windowed_mouse)
+            {
+                if (_windowed_mouse.value != 0)
+                {
+                    IN_ActivateMouse();
+                    IN_HideMouse();
+                }
+                else
+                {
+                    IN_DeactivateMouse();
+                    IN_ShowMouse();
+                }
+
+                windowed_mouse = (int)_windowed_mouse.value;
+            }
+        }
     }
 
     // vid_win.c: VID_LockBuffer, VID_UnlockBuffer (DirectDraw's surface lock: nothing to lock)
@@ -271,8 +343,46 @@ public sealed partial class QuakeEngine
     {
     }
 
-    // vid_win.c: VID_HandlePause (releases the mouse while paused; the platform's input, milestone 6)
-    public static void VID_HandlePause(bool pause) => _ = pause;
+    // vid_win.c: VID_HandlePause
+    public void VID_HandlePause(bool pause)
+    {
+        if (modestate == modestate_t.MS_WINDOWED && _windowed_mouse.value != 0)
+        {
+            if (pause)
+            {
+                IN_DeactivateMouse();
+                IN_ShowMouse();
+            }
+            else
+            {
+                IN_ActivateMouse();
+                IN_HideMouse();
+            }
+        }
+    }
+
+    // vid_win.c: MainWndProc: the window's keys and mouse (the platform's other messages are its own)
+    private readonly WindowProcedure windowProcedure;
+
+    private sealed class WindowProcedure(QuakeEngine engine) : Platform.IWindowMessages
+    {
+        // WM_KEYDOWN, WM_KEYUP; WM_MOUSEWHEEL
+        public void KeyEvent(int key, bool down) => engine.Key_Event(key, down);
+
+        // WM_MOUSEMOVE: the cursor moved, the buttons' state to in_win.c
+        public void MouseMove(int dx, int dy)
+        {
+            engine.input.Move(dx, dy);
+            engine.IN_MouseEvent(engine.input.Buttons);
+        }
+
+        // WM_LBUTTONDOWN...
+        public void MouseButtons(int state)
+        {
+            engine.input.Buttons = state;
+            engine.IN_MouseEvent(state);
+        }
+    }
 
     // vid_win.c: ActiveApp, and AppActivate's static sound_active
     public bool ActiveApp = true;

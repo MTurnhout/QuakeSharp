@@ -3,7 +3,9 @@
  * memory, rendered at the size -oraclevid <width> <height> asks for (320x240, WinQuake's default windowed mode, by
  * default). What vid_win.c does that the game shows is kept: its cvars and commands (they go into config.cfg), the
  * remapping of colormap entries 0 to another black (GDI cannot remap palette index 0), S_Init between the two mode
- * sets of VID_Init, the pixel aspect, the surface cache, the mode description on the console and ClearAllStates.
+ * sets of VID_Init, the pixel aspect, the surface cache, the mode description on the console and ClearAllStates, and
+ * what it does with the mouse (in_win.c's, over in_oracle.c's virtual screen): taken in a window only with
+ * _windowed_mouse, released while paused. The window's client area is at the virtual screen's top left.
  */
 #include "quakedef.h"
 #include "d_local.h"
@@ -24,8 +26,14 @@ void (*vid_menukeyfn)(int key);
 modestate_t	modestate = MS_UNINIT;
 qboolean	DDActive;
 qboolean	ActiveApp = true, Minimized;
-int			window_center_x, window_center_y;
-qboolean	mouseinitialized;
+int			window_center_x, window_center_y, window_x, window_y, window_width, window_height;
+RECT		window_rect;
+
+#define MODE_WINDOWED	0
+#define NO_MODE			(MODE_WINDOWED - 1)
+
+int			vid_modenum = NO_MODE;
+static int	vid_stretched, windowed_mouse;
 
 // vid_win.c's cvars
 cvar_t		vid_mode = {"vid_mode","0", false};
@@ -85,6 +93,20 @@ static void VID_NoMode_f (void)
 {
 }
 
+// vid_win.c: VID_UpdateWindowStatus
+void VID_UpdateWindowStatus (void)
+{
+
+	window_rect.left = window_x;
+	window_rect.top = window_y;
+	window_rect.right = window_x + window_width;
+	window_rect.bottom = window_y + window_height;
+	window_center_x = (window_rect.left + window_rect.right) / 2;
+	window_center_y = (window_rect.top + window_rect.bottom) / 2;
+
+	IN_UpdateClipCursor ();
+}
+
 // vid_win.c: ClearAllStates
 // send an up event for each key, to make sure the server clears them all
 static void ClearAllStates (void)
@@ -100,7 +122,21 @@ static void ClearAllStates (void)
 	IN_ClearStates ();
 }
 
-// vid_win.c: VID_SetMode with VID_SetWindowedMode (the vid fields) and VID_AllocBuffers. There is one mode.
+// vid_win.c: VID_SetWindowedMode, the vid fields
+static void VID_SetWindowedMode (void)
+{
+	modestate = MS_WINDOWED;
+	vid.numpages = 1;
+	vid.maxwarpwidth = WARP_WIDTH;
+	vid.maxwarpheight = WARP_HEIGHT;
+	vid.height = vid.conheight = mode_height;
+	vid.width = vid.conwidth = mode_width;
+	vid.aspect = ((float)vid.height / (float)vid.width) *
+				(320.0 / 240.0);
+	vid_stretched = 0;
+}
+
+// vid_win.c: VID_SetMode with VID_AllocBuffers. There is one mode.
 int VID_SetMode (int modenum, unsigned char *palette)
 {
 	int		temp, surfcachesize;
@@ -112,14 +148,23 @@ int VID_SetMode (int modenum, unsigned char *palette)
 	CDAudio_Pause ();
 	S_ClearBuffer ();
 
-	modestate = MS_WINDOWED;
-	vid.numpages = 1;
-	vid.maxwarpwidth = WARP_WIDTH;
-	vid.maxwarpheight = WARP_HEIGHT;
-	vid.height = vid.conheight = mode_height;
-	vid.width = vid.conwidth = mode_width;
-	vid.aspect = ((float)vid.height / (float)vid.width) *
-				(320.0 / 240.0);
+	// the windowed mode, with the mouse taken or released around VID_SetWindowedMode as vid_win.c does
+	if (_windowed_mouse.value)
+	{
+		VID_SetWindowedMode ();
+		IN_ActivateMouse ();
+		IN_HideMouse ();
+	}
+	else
+	{
+		IN_DeactivateMouse ();
+		IN_ShowMouse ();
+		VID_SetWindowedMode ();
+	}
+
+	window_width = vid.width << vid_stretched;
+	window_height = vid.height << vid_stretched;
+	VID_UpdateWindowStatus ();
 
 	CDAudio_Resume ();
 	scr_disabled_for_loading = temp;
@@ -128,7 +173,8 @@ int VID_SetMode (int modenum, unsigned char *palette)
 		return true;
 
 	VID_SetPalette (palette);
-	Cvar_SetValue ("vid_mode", 0);
+	vid_modenum = MODE_WINDOWED;
+	Cvar_SetValue ("vid_mode", (float)vid_modenum);
 
 	if (d_pzbuffer)
 		D_FlushCaches ();
@@ -247,8 +293,34 @@ void	VID_Shutdown (void)
 {
 }
 
+// vid_win.c: VID_Update: the frame stays in memory; the mouse taken or released when _windowed_mouse changes
 void	VID_Update (vrect_t *rects)
 {
+// handle the mouse state when windowed if that's changed
+	if (modestate == MS_WINDOWED)
+	{
+		if ((int)_windowed_mouse.value != windowed_mouse)
+		{
+			if (_windowed_mouse.value)
+			{
+				IN_ActivateMouse ();
+				IN_HideMouse ();
+			}
+			else
+			{
+				IN_DeactivateMouse ();
+				IN_ShowMouse ();
+			}
+
+			windowed_mouse = (int)_windowed_mouse.value;
+		}
+	}
+}
+
+// the trace's I line (trace.c): vid_win.c's part of the mouse
+int Oracle_WindowedMouse (void)
+{
+	return windowed_mouse;
 }
 
 void VID_LockBuffer (void)
@@ -268,8 +340,23 @@ void VID_ForceLockState (int lk)
 {
 }
 
+// vid_win.c: VID_HandlePause
 void VID_HandlePause (qboolean pause)
 {
+
+	if ((modestate == MS_WINDOWED) && _windowed_mouse.value)
+	{
+		if (pause)
+		{
+			IN_DeactivateMouse ();
+			IN_ShowMouse ();
+		}
+		else
+		{
+			IN_ActivateMouse ();
+			IN_HideMouse ();
+		}
+	}
 }
 
 void VID_SetDefaultMode (void)

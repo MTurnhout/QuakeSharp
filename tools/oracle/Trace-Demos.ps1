@@ -18,7 +18,8 @@ when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.fi
                         a new game from the menu, the server's commands and fights, the end of a level and of an
                         episode, the network menus starting a deathmatch; tour: every map in turn, fighting; e1: a game played by hand
                         and recorded with -recordevents, e1m1 into e1m2; sound: the sound and CD commands and
-                        cvars, the menu's volume sliders, a game's pause and level changes), at
+                        cvars, the menu's volume sliders, a game's pause and level changes; mouse: the mouse taken and released, looking,
+                        moving, its buttons and cvars, the joystick's cvars), at
                         320x240; commands.640x480.trace the same at 640x480, sound.nosound.trace the sound game with
                         -nosound -nocdaudio; saves: a save on every map, the save and load menus, the refusals
   loads.trace           every save saves.trace's run wrote, loaded in turn and played on
@@ -109,7 +110,7 @@ Trace 'menus.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-o
 Trace 'attract.config' @('-oracleframes', '600') @('menus/config.cfg')
 
 # the scripted games (design.md §11.1): the frames each runs for are in GameTests too
-$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500; 'saves' = 17705 }
+$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500; 'saves' = 17705; 'mouse' = 1600 }
 foreach ($game in $games.Keys) {
     $events = Join-Path $PSScriptRoot "events\$game.events"
     Trace $game @('-traceevents', $events, '-oracleframes', "$($games[$game])")

@@ -286,7 +286,8 @@ Each C module becomes a C# class (or a few) in a namespace that mirrors it, so a
 | `snd_dma.c`, `snd_mix.c`, `snd_mem.c`, `cd_win.c`, snd_win.c's `SNDDMA_Init` messages | `Core/Sound` | The mixer paints the buffer of an `ISoundDma` (the device); cd_win.c drives an `ICdDrive` (§7) |
 | `net_main.c`, `net_dgrm.c`, `net_loop.c`, `net_udp.c`/`net_wins.c` | `Core/Net` | .NET sockets |
 | `vid_win.c` (what the game sees of it) | `Core/Video` | The mode's `vid` fields, the colormap remapping, `S_Init` between the mode sets, the palette (§6.4); the frame is shown through `IVideoOutput` |
-| `vid_*.c`, `in_*.c`, `snd_win.c`'s device, the CD drive, `sys_win.c` | `Platform.Sdl`, `Render.Vulkan`, exe | Rewritten against SDL3 and Vulkan |
+| `in_win.c` | `Core/Input` | The mouse and the joystick over `VirtualInput`, which answers the Win32 calls in_win.c makes as the oracle's `in_oracle.c` does (decision 43) |
+| `vid_*.c`, `snd_win.c`'s device, the CD drive, the mouse's capture, the game controllers, `sys_win.c` | `Platform.Sdl`, `Render.Vulkan`, exe | Rewritten against SDL3 and Vulkan |
 | `tools/oracle/src/trace.c` | `Core/Diagnostics` | The oracle's trace lines from QuakeSharp's state, and a run as the oracle's (`TraceRun`: virtual clock and sound device, base directory "."), for the tests and `quakesharp-tools trace` |
 | `gl_*.c` (GLQuake) | not ported in v1 | An enhanced renderer may borrow from it later (§6.6) |
 
@@ -354,8 +355,9 @@ file, as the C's `FILE *` does.
     file per C module (`Common/QuakeEngine.Cmd.cs` is cmd.c), keeping the C's names (`Cmd_AddCommand`, `cvar_vars`,
     `cls`, `MSG_WriteByte`): C had one namespace, so the names are unique and every line greps against the reference.
     Structures become classes (`client_static_t` is `ClientStatic`, `cvar_t` is `Cvar`) with the C's field names;
-    enums keep their typedef names (`cactive_t`, `keydest_t`). Functions of modules not ported yet are empty stand-ins
-    in `QuakeEngine.Pending.cs` until their module is. Varargs functions (`Con_Printf`, `Sys_Error`, `va`) take a
+    enums keep their typedef names (`cactive_t`, `keydest_t`). Functions of modules not ported yet were empty stand-ins
+    in `QuakeEngine.Pending.cs` until their module was (the last, in_win.c's, left with milestone 10, and the file with
+    them). Varargs functions (`Con_Printf`, `Sys_Error`, `va`) take a
     format and `PrintfArg`s, formatted by `CFormat`; `Sys_Error` returns the exception to throw.
 
 ### 6.3 Main loop and time
@@ -456,17 +458,25 @@ NVorbis decodes the rerelease's Ogg Vorbis files, SDL3 WAV files (decision 39).
 
 ## 8. Input
 
-Keyboard and mouse through SDL3, posted as `Key_Event` with Quake's key numbers; bindings, `+mlook`, `in_mouse`,
-`sensitivity`, `m_pitch`… as the original (`in_win.c`'s roles). A game controller works as the original joystick
-support (`in_win.c`'s `joy_*` cvars and `JOY1`-`AUX32` keys) where that maps cleanly.
+Keyboard and mouse through SDL3, handed to the engine as the messages vid_win.c's window procedure takes: the keys,
+the mouse's moves and its buttons. in_win.c is ported as it is (decision 43): the mouse moves a cursor that
+`VirtualInput` keeps as Windows keeps it, and in_win.c reads it with `GetCursorPos` and puts it back in the window's
+centre, so `sensitivity`, `m_filter`, `+mlook`, `lookstrafe`, `m_pitch`… work as the original, and a move larger than
+half the window in one frame is cut at the window's edge as WinQuake's is. As in WinQuake, the mouse is only taken in
+a window with `_windowed_mouse` 1 (the Options' Use Mouse) and is let go while paused; its buttons do nothing while it
+is not taken. While it is taken the window holds the pointer (SDL3's relative motion, `IMouseCapture`); the system's
+mouse acceleration, which in_win.c changed, is left alone. A game controller works as the original joystick
+(`in_win.c`'s `joy_*` cvars and `JOY1`-`AUX32` keys) through winmm's interface (`IJoystickDevice`): an SDL3 gamepad's
+left stick turns and moves, its other axes, buttons and direction pad as `SdlJoysticks` maps them. The traces and
+`-recordevents` have the oracle's machine: no joystick.
 
 Keys are read as WinQuake reads them (`vid_win.c`: `MapKey`): the PC scan code of the key message (SDL's scan code
 turned back into it, `KeyTranslation`) looked up in `scantokey` (generated from `vid_win.c`), without the extended-key
 prefix. So keys go by position (the typing keys give the US layout's characters on any keyboard), the grey keys give
 what their keypad twins do whatever NumLock says, the right-hand Ctrl and Alt are Ctrl and Alt, NumLock gives
-`K_PAUSE` as Pause does, and held keys repeat as Windows repeats them. Mouse buttons are `K_MOUSE1` + button (left,
-right, middle) and each wheel notch a press and release of `K_MWHEELUP` or `K_MWHEELDOWN`, as `MainWndProc` posts
-them. The key numbers (`keys.h`) are generated too.
+`K_PAUSE` as Pause does, and held keys repeat as Windows repeats them. Mouse buttons become `K_MOUSE1` + button (left,
+right, middle) through in_win.c's `IN_MouseEvent`, and each wheel notch is a press and release of `K_MWHEELUP` or
+`K_MWHEELDOWN`, as `MainWndProc` posts them. The key numbers (`keys.h`) are generated too.
 
 ## 9. Persistence
 
@@ -763,7 +773,7 @@ either emulated (the oracle and QuakeSharp alike) or documented, in a new §3.4:
 
 | Line | Fields |
 |---|---|
-| `I <hash>` | in_win.c: `mouseactive`, `mouseinitialized`, `mouse_buttons`, `mouse_oldbuttonstate`, `mx_accum`, `my_accum`, `mouse_x`, `mouse_y`, `old_mouse_x`, `old_mouse_y`, the joystick's state (`joy_avail`, `joy_advancedinit`, `joy_haspov`, `dwAxisMap`, `dwControlMap`, `joy_oldbuttonstate`, `joy_oldpovstate`) and vid_win.c's `windowed_mouse` |
+| `I <hash>` | in_win.c's state (the mouse's: `mouseactive`, `mouseinitialized`, the activation and show toggles, `mouse_buttons`, `mouse_oldbuttonstate`, `current_pos`, `mx_accum`, `my_accum`, `mouse_x`, `mouse_y`, `old_mouse_x`, `old_mouse_y`; the joystick's: `joy_avail`, `joy_advancedinit`, `joy_haspov`, `joy_id`, `joy_flags`, `dwAxisMap`, `dwControlMap`...), vid_win.c's `windowed_mouse`, then the virtual machine's (the cursor, the clip rectangle, the buttons, the display counter, the mouse parameters); the full list in tools/oracle/README.md |
 | `V <frame> <palette>` | As format 5's, the frame's hash also taking the mode: `vid_modenum`, `vid.width`, `vid.height`, `vid.rowbytes`, `modestate` |
 
 `-tracedump` writes in_win.c's fields and the mode by name; `trace-compare` knows `I`.
@@ -820,9 +830,17 @@ first and QuakeSharp follows them.
    relative motion; a gamepad as `joyGetPosEx`'s axes and buttons where that maps cleanly, §8), with vid_win.c's part:
    `VID_Update`'s `_windowed_mouse`, `IN_ActivateMouse` in the full-screen modes, `VID_HandlePause`, the options' Use
    Mouse. Every trace changes (the joystick's line on the console, `I`) and matches again. `mouse.events`: `+mlook`,
-   `sensitivity`, `m_filter`, `m_pitch`, `m_yaw`, `m_forward`, `m_side`, `lookstrafe`, `lookspring`, `freelook`, the
-   options' invert mouse, `_windowed_mouse` on and off, the buttons, `force_centerview`. The executable captures the
-   mouse when in_win.c activates it, and records it.
+   `sensitivity`, `m_filter`, `m_pitch`, `m_yaw`, `m_forward`, `m_side`, `lookstrafe`, `lookspring`, the options'
+   invert mouse, `_windowed_mouse` on and off, the buttons, `force_centerview`. The executable captures the mouse when
+   in_win.c activates it, and records it. *Done: the oracle compiles in_win.c over `in_oracle.c` (a 1920x1080 screen,
+   no joystick) and WinQuake's IPX driver as it fails today; trace format 6 (`I`, the mode in `V`). In QuakeSharp,
+   `QuakeEngine.InWin.cs` over `VirtualInput`, which answers in_win.c's Win32 calls and takes the window's messages
+   (`IWindowMessages`: keys, the mouse's moves, its buttons) in the game, the traces and `-recordevents` alike; the
+   platform only holds the pointer while in_win.c clips it (`IMouseCapture`: SDL3's relative mode) and lends its
+   gamepads (`IJoystickDevice`, `SdlJoysticks`). `QuakeEngine.Pending.cs` is gone (zone.c's two functions went to its
+   file). `mouse.events` (1,600 frames: the mouse untaken, taken, cut at the window's edges, looking past both pitch
+   limits, filtered, strafing, the buttons, a pause, the console, the joystick's cvars, the options' invert, speed and
+   Use Mouse, a level change) matched on every line at its first run, and every trace matches again.*
 4. **vid_win.c's modes** (decision 44): the mode list, `vid_mode` (set in `VID_Update`, so on a frame boundary), the
    `vid_*` commands, the Video menu (the arrows, Enter, `T` to test a mode for 5 seconds and come back, `D` to make it
    the default), the stretched modes, `_vid_default_mode_win` at the first frame. `video.events`: the menu, every mode
@@ -849,7 +867,7 @@ first and QuakeSharp follows them.
    registered one, same MD5), and plays demo1-3 against the last lines of their traces, kept in the test.
 
 **Done when** §3.4 holds the audit (each difference emulated or documented); in_win.c and vid_win.c's modes are ported
-and `QuakeEngine.Pending.cs` keeps only zone.c's `Cache_Report` and `Hunk_Check` (managed memory: nothing to do); the
+and no stand-in is left (`QuakeEngine.Pending.cs` gone); the
 mission packs' demos, attract loops, tours, saves and scripted games match the oracle on every frame, their files
 included; each function step 2 found unreached is reached by a trace in sync or listed with why; and the executable
 plays with the mouse, in every mode, and both mission packs.
