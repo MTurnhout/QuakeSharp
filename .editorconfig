@@ -1,0 +1,28 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,props,targets,csproj,slnx,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = true:silent
+csharp_style_var_for_built_in_types = true:silent
+csharp_style_var_when_type_is_apparent = true:silent
+dotnet_sort_system_directives_first = true
+
+# Ported integer arithmetic deliberately relies on 32-bit wraparound, as the C does.
+# Projects stay unchecked (the default); do not enable CheckForOverflowUnderflow.
+
+# Ported code keeps the original names (e.g. lump names, table names) where traceability matters.
+dotnet_diagnostic.CA1707.severity = none

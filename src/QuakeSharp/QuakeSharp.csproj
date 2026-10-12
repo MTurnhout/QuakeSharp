@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>QuakeSharp</RootNamespace>
+    <AssemblyName>QuakeSharp</AssemblyName>
+    <!-- Nothing depends on the user's culture, and the Linux builds need no ICU library -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\QuakeSharp.Core\QuakeSharp.Core.csproj" />
+    <ProjectReference Include="..\QuakeSharp.Platform.Sdl\QuakeSharp.Platform.Sdl.csproj" />
+    <ProjectReference Include="..\QuakeSharp.Render.Vulkan\QuakeSharp.Render.Vulkan.csproj" />
+  </ItemGroup>
+
+</Project>

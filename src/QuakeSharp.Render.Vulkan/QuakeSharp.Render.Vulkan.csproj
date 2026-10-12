@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>QuakeSharp.Render.Vulkan</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.Vulkan" />
+    <PackageReference Include="Vortice.VulkanMemoryAllocator" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\QuakeSharp.Core\QuakeSharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>

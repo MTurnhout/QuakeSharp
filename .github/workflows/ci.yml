@@ -1,0 +1,42 @@
+# Builds and tests QuakeSharp on Windows and Linux. CI has no game data and no reference traces, so the fidelity
+# tests skip there (design.md §10); they run locally with QUAKESHARP_QUAKE_DIR and QUAKESHARP_TRACE_DIR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build QuakeSharp.slnx -c Release
+
+      - name: Test
+        run: dotnet test --solution QuakeSharp.slnx -c Release --no-build

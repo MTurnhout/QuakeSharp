@@ -1,0 +1,25 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.user
+.vs/
+.idea/
+.vscode/
+
+# Game data is copyrighted: never commit it or anything extracted from it
+*.pak
+*.PAK
+*.dem
+*.DEM
+progs.dat
+
+# Runtime output
+*.sav
+config.cfg
+*.pcx
+*.trace
+
+# Local, per-developer notes for AI assistants
+CLAUDE.local.md

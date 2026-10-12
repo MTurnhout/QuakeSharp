@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/QuakeSharp.Core.Tests/QuakeSharp.Core.Tests.csproj" />
+  </Folder>
+  <Project Path="src/QuakeSharp.Core/QuakeSharp.Core.csproj" />
+  <Project Path="src/QuakeSharp.Platform.Sdl/QuakeSharp.Platform.Sdl.csproj" />
+  <Project Path="src/QuakeSharp.Render.Vulkan/QuakeSharp.Render.Vulkan.csproj" />
+  <Project Path="src/QuakeSharp/QuakeSharp.csproj" />
+</Solution>

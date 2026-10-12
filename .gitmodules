@@ -1,0 +1,3 @@
+[submodule "reference/Quake"]
+	path = reference/Quake
+	url = https://github.com/id-Software/Quake.git

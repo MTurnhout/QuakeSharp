@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.cs text eol=lf
+*.png binary
+*.pak binary
+*.dem binary
+*.lmp binary
+*.dat binary
