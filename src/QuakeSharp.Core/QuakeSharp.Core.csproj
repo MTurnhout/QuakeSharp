@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="QuakeSharp.Core.Tests" />
+    <InternalsVisibleTo Include="QuakeSharp.Fidelity.Tests" />
   </ItemGroup>
 
 </Project>

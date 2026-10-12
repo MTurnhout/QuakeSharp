@@ -1,6 +1,10 @@
 <Solution>
   <Folder Name="/tests/">
     <Project Path="tests/QuakeSharp.Core.Tests/QuakeSharp.Core.Tests.csproj" />
+    <Project Path="tests/QuakeSharp.Fidelity.Tests/QuakeSharp.Fidelity.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/QuakeSharp.Tools/QuakeSharp.Tools.csproj" />
   </Folder>
   <Project Path="src/QuakeSharp.Core/QuakeSharp.Core.csproj" />
   <Project Path="src/QuakeSharp.Platform.Sdl/QuakeSharp.Platform.Sdl.csproj" />

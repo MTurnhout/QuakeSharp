@@ -1,7 +1,8 @@
 # QuakeSharp: Design
 
-> Status: **v0.1**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestone 0
-> (repository skeleton) done; nothing is ported yet.
+> Status: **v0.2**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
+> (repository skeleton) and 1 (files and data: the file system, pack files, gfx.wad, game data by MD5, the tools'
+> dumps) done.
 
 ## 1. Goal
 
@@ -194,7 +195,7 @@ Each C module becomes a C# class (or a few) in a namespace that mirrors it, so a
 | Original | QuakeSharp | |
 |---|---|---|
 | `host.c`, `host_cmd.c`, `sys_*.c` (the portable parts) | `Core/Host` | `Host_Frame`, the virtual clock, server and client commands |
-| `common.c`, `cmd.c`, `cvar.c`, `crc.c`, `zone.c`, `mathlib.c`, `wad.c` | `Core/Common` | File system (search paths, PAKs, `-game`), command buffer, cvars, `MSG_*`/`SZ_*`; zone/hunk/cache become managed memory |
+| `common.c`, `cmd.c`, `cvar.c`, `crc.c`, `zone.c`, `mathlib.c`, `wad.c` | `Core/Common` | File system (search paths, PAKs, `-game`), command buffer, cvars, `MSG_*`/`SZ_*`; zone/hunk/cache become managed memory (see below) |
 | `model.c`, `bspfile.h`, `modelgen.h`, `spritegn.h` | `Core/Model` | BSP, alias and sprite loading (`Mod_*`) |
 | `pr_exec.c`, `pr_edict.c`, `pr_cmds.c`, `progs.h`, `pr_comp.h`, `progdefs.h` | `Core/Progs` | The QuakeC VM, edicts, builtins |
 | `sv_main.c`, `sv_phys.c`, `sv_move.c`, `sv_user.c`, `world.c` | `Core/Server` | |
@@ -205,6 +206,17 @@ Each C module becomes a C# class (or a few) in a namespace that mirrors it, so a
 | `net_main.c`, `net_dgrm.c`, `net_loop.c`, `net_udp.c`/`net_wins.c` | `Core/Net` | .NET sockets |
 | `vid_*.c`, `in_*.c`, `snd_win.c`…, `cd_*.c`, `sys_win.c` | `Platform.Sdl`, `Render.Vulkan`, exe | Rewritten against SDL3 and Vulkan |
 | `gl_*.c` (GLQuake) | not ported in v1 | An enhanced renderer may borrow from it later (§6.6) |
+
+**The file system** (`FileSystem`, common.c's second half) keeps the search path exactly: `id1`, then `-rogue` /
+`-hipnotic`, then `-game`, each directory followed in front by its `pak0.pak`, `pak1.pak`… (so a directory's paks go
+before its loose files), `-path`, `-proghack`, the shareware rule that loose files in subdirectories are not found,
+`com_modified` from the PAK0 count (339) and directory CRC (32981, which only the original pak0 matches: pak1 always
+counts as modified, as in the original), and `COM_CheckRegistered`'s `gfx/pop.lmp` test. Modernised: the hunk, zone,
+cache and stack variants of `COM_LoadFile` all return a managed buffer (still with the 0 byte appended); `-cachedir`
+(a developer convenience that copied files to a local disk) is left out; and file names on disk match whatever their
+case (the Steam release has `id1/PAK0.PAK`; on Linux the C would not find it), while names inside pack files still
+compare exactly. A file found in a pack is read through a stream on the pack, so reading past its end reads the next
+file, as the C's `FILE *` does.
 
 ### 6.2 Translation rules
 
@@ -234,6 +246,8 @@ Each C module becomes a C# class (or a few) in a namespace that mirrors it, so a
    field layout, the protocol constants, the menu and key tables) are generated into `*.g.cs` by `tools/codegen`
    from `reference/Quake`, committed, never edited by hand.
 8. **Binary data** is read with `BinaryPrimitives` (little-endian), never by marshalling structs.
+   **C strings** become .NET strings holding one byte per character (Latin-1), so the bytes survive: Quake's
+   character set uses the high bit for its brown text, and names compare byte for byte as `strcmp` does.
 9. **Errors.** `Sys_Error` becomes a typed `QuakeException` (fatal); `Host_Error` and its `longjmp` to
    `host_abortserver` become a `HostErrorException` caught by `Host_Frame`, keeping what the C unwinds and what it
    leaves behind.
@@ -341,7 +355,7 @@ first differing field or draw call. Traces are derived from game data and stay o
 | # | Milestone | Done when |
 |---|---|---|
 | 0 ✅ | Repo skeleton | Solution, projects, build & one test green, license, README, .gitignore (`*.pak`), reference submodule, CI |
-| 1 | Files & data | PAKs identified by MD5; search paths and `-game`; `gfx.wad` (WAD2), palette, colormap, pics, BSP textures, MDL skins dump to PNG through the tools |
+| 1 ✅ | Files & data | PAKs identified by MD5; search paths and `-game`; `gfx.wad` (WAD2), palette, colormap, pics, BSP textures, MDL skins dump to PNG through the tools |
 | 2 | Oracle & numerics | The headless oracle builds and writes traces of demo1-3; `mathlib`, the libm decision, `rand()`, printf/`Q_atof`, `anorms` etc. generated and tested |
 | 3 | Platform & presentation | SDL3 window, Vulkan presents an 8-bit frame with the palette at 4:3 (e.g. `gfx/conback.lmp`); input events; audio device open |
 | 4 | Host & common | `Host_Frame` with the virtual clock, command buffer, cvars, console text, `MSG_*`, `net_loop`, `quake.rc`/`default.cfg` executed |
@@ -366,6 +380,8 @@ first differing field or draw call. Traces are derived from game data and stay o
 | 6 | Floating point | The fidelity target is the C code with IEEE single precision per float operation (`FLT_EVAL_METHOD` 0) on both sides, not the original executables' x87 and assembly; one libm for both, musl's `sin`/`cos`/`tan`/`atan`/`atan2`/`pow` ported to C# and linked into the oracle; the Microsoft CRT's `rand()` (§3.1) | 2026-10-12 |
 | 7 | Oracle | id's own WinQuake 1.09 source built headless (clang-cl, 32-bit x86, SSE2, `id386` 0, null drivers, virtual clock) with a trace patch, in `tools/oracle`; Chocolate Quake (GPLv3) only consulted as a behavioural reference, never copied (§10) | 2026-10-12 |
 | 8 | Hosting | Private GitHub repository `MTurnhout/QuakeSharp`, pushed after each commit | 2026-10-12 |
+| 9 | Strings | C strings become .NET strings with one byte per character (Latin-1), keeping the high-bit characters and `strcmp` order (§6.2 rule 8) | 2026-10-12 |
+| 10 | File system | Search path, pack files, registered check and `com_modified` as common.c; managed buffers for every `COM_LoadFile` variant, no `-cachedir`, file names on disk matched in any case (§6.1) | 2026-10-12 |
 
 ## 13. Open decisions
 

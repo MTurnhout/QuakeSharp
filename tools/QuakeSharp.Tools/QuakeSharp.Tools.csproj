@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>QuakeSharp.Tools</RootNamespace>
+    <AssemblyName>quakesharp-tools</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QuakeSharp.Core\QuakeSharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>

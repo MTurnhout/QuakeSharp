@@ -40,3 +40,27 @@ jobs:
 
       - name: Test
         run: dotnet test --solution QuakeSharp.slnx -c Release --no-build
+
+  generated:
+    # The *.g.cs tables must be what tools/codegen makes from the reference sources.
+    name: Generated tables up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Generate
+        run: dotnet run tools/codegen/GenerateTables.cs
+
+      - name: Compare
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            git diff
+            exit 1
+          fi

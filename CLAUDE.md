@@ -7,6 +7,9 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
 
 - Build: `dotnet build QuakeSharp.slnx`
 - Test: `dotnet test --solution QuakeSharp.slnx` (Microsoft.Testing.Platform runner, configured in `global.json`)
+- Tables: `dotnet run tools/codegen/GenerateTables.cs` regenerates the `*.g.cs` files from `reference/Quake`.
+- Tools: `dotnet run --project tools/QuakeSharp.Tools` (identify, files, extract, dump-graphics); they refuse to
+  write inside the repository.
 - Shaders need the Vulkan SDK (`VULKAN_SDK` set; `slangc` from it).
 - Fidelity tests need `QUAKESHARP_QUAKE_DIR` (a folder with the original `id1/pak0.pak`, `id1/pak1.pak`) and
   `QUAKESHARP_TRACE_DIR` (traces from the oracle in `tools/oracle`); otherwise they skip. When one fails, find the
