@@ -828,6 +828,8 @@ public sealed partial class QuakeEngine
                 o.samples = i;
             }
 
+            o.lightdata = loadmodel.lightdata;
+
             // set the drawing flags flag
             if (Q_strncmp(o.texinfo.texture.name, "sky", 3) == 0)
             {

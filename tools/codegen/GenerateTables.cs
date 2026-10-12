@@ -27,6 +27,7 @@ Write("Protocol.g.cs", GenerateProtocol());
 Write("QuakeDef.g.cs", GenerateQuakeDef());
 Write("Model/BspFile.g.cs", GenerateBspFile());
 Write("Render/Anorms.g.cs", GenerateAnorms());
+Write("Render/Adivtab.g.cs", GenerateAdivtab());
 WriteTo("QuakeSharp.Platform.Sdl", "ScanToKey.g.cs", GenerateScanToKey());
 return 0;
 
@@ -102,6 +103,32 @@ string GenerateBspFile()
         sb.AppendLine($"    public const int {m.Groups[1].Value} = {m.Groups[2].Value};");
     }
 
+    sb.AppendLine("}");
+    return sb.ToString();
+}
+
+// adivtab.h (included by d_polyse.c): adivtab, the quotients and remainders of [-15...16] / [-15...16], as pairs
+string GenerateAdivtab()
+{
+    string c = StripComments(Source("adivtab.h"));
+    var pairs = Regex.Matches(c, @"\{\s*(-?\d+)\s*,\s*(-?\d+)\s*\}").Select(m => (m.Groups[1].Value, m.Groups[2].Value)).ToList();
+    if (pairs.Count != 32 * 32)
+    {
+        throw new InvalidOperationException($"adivtab.h: {pairs.Count} entries, not {32 * 32}");
+    }
+
+    var sb = Header("adivtab.h", "QuakeSharp.Core");
+    sb.AppendLine("public sealed partial class QuakeEngine");
+    sb.AppendLine("{");
+    sb.AppendLine("    /// <summary>d_polyse.c: adivtab[32*32], quotient and remainder of each, in pairs.</summary>");
+    sb.AppendLine("    private static readonly int[] adivtab =");
+    sb.AppendLine("    [");
+    foreach (var row in pairs.Chunk(8))
+    {
+        sb.AppendLine("        " + string.Join(" ", row.Select(p => $"{p.Item1}, {p.Item2},")));
+    }
+
+    sb.AppendLine("    ];");
     sb.AppendLine("}");
     return sb.ToString();
 }

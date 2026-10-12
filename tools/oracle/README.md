@@ -75,7 +75,7 @@ the executable) and removes `config.cfg` before every run, since the oracle writ
 | `-oracleframes <n>` | Quit after n frames |
 | `-traceshot <frame>` | Also write that frame (any number of times) as `<trace>.<frame>.shot`: width, height (32-bit), the palette, the pixels; `quakesharp-tools shot2png` makes a PNG of it |
 | `-tracedump <frame>` | Also write that frame's entities (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits; `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing `E` line |
-| `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (keys are console commands: `+forward`, `-forward`, `impulse 8`...) |
+| `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), or `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it) |
 | `-oraclevid <w> <h>` | The video mode (320x200 to 1280x1024) |
 | `-oraclestep <n>` | Frames of 1/n s |
 | `-oracleverbose` | Print `Sys_Printf` (the console) to stdout |

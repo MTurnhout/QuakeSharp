@@ -24,3 +24,20 @@ index e451827..fdb789d 100644
  #define __i386__	1
  #endif
  
+diff --git a/r_alias.c b/r_alias.c
+index 8607419..50de739 100644
+--- a/r_alias.c
++++ b/r_alias.c
+@@ -708,6 +708,12 @@ void R_AliasDrawModel (alight_t *plighting)
+ 
+ 	r_amodels_drawn++;
+ 
++#ifdef ORACLE
++// the z-clipped vertices are not projected, but R_Alias_clip_z reads their v[1]: start from zeros, as QuakeSharp
++// does, rather than from whatever the stack holds
++	memset (finalverts, 0, sizeof(finalverts));
++#endif
++
+ // cache align
+ 	pfinalverts = (finalvert_t *)
+ 			(((long)&finalverts[0] + CACHE_SIZE - 1) & ~(CACHE_SIZE - 1));

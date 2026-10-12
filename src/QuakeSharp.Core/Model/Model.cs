@@ -83,8 +83,8 @@ public sealed class MSurface
 
     public int numedges;
 
-    // surface generation data (the renderer's surface cache, milestone 6)
-    public readonly object?[] cachespots = new object?[MIPLEVELS];
+    // surface generation data
+    public readonly Render.SurfCache?[] cachespots = new Render.SurfCache?[MIPLEVELS];
 
     public readonly short[] texturemins = new short[2];
     public readonly short[] extents = new short[2];
@@ -95,6 +95,9 @@ public sealed class MSurface
 
     /// <summary>[numstyles*surfsize]: an offset in the model's lightdata, -1 for none</summary>
     public int samples;
+
+    /// <summary>the lightdata of the model the surface belongs to, which samples is an offset in</summary>
+    public byte[]? lightdata;
 }
 
 /// <summary>What model.h's mnode_t and mleaf_t have in common (a node's children can be either).</summary>

@@ -56,6 +56,21 @@ public sealed partial class QuakeEngine
         sounddma = sound;
         this.video = video;
         com_argv = parms.argv;
+        edgetables =
+        [
+            new(false, 1, r_p0, r_p2, null, 2, r_p0, r_p1, r_p2),
+            new(false, 2, r_p1, r_p0, r_p2, 1, r_p1, r_p2, null),
+            new(true, 1, r_p0, r_p2, null, 1, r_p1, r_p2, null),
+            new(false, 1, r_p1, r_p0, null, 2, r_p1, r_p2, r_p0),
+            new(false, 2, r_p0, r_p2, r_p1, 1, r_p0, r_p1, null),
+            new(false, 1, r_p2, r_p1, null, 1, r_p2, r_p0, null),
+            new(false, 1, r_p2, r_p1, null, 2, r_p2, r_p0, r_p1),
+            new(false, 2, r_p2, r_p1, r_p0, 1, r_p2, r_p0, null),
+            new(false, 1, r_p1, r_p0, null, 1, r_p1, r_p2, null),
+            new(true, 1, r_p2, r_p1, null, 1, r_p0, r_p1, null),
+            new(true, 1, r_p1, r_p0, null, 1, r_p2, r_p0, null),
+            new(false, 1, r_p0, r_p2, null, 1, r_p0, r_p1, null),
+        ];
         fileSystem = new FileSystem(parms.argv, text => Con_Printf("%s", text), text => Sys_Printf("%s", text))
         {
             UserDir = parms.userdir,

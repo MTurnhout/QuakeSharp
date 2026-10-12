@@ -38,7 +38,7 @@ static int dumps[MAX_SHOTS], num_dumps;
 static int quit_after_demo, was_playing, frame_limit;
 static unsigned long long palette_hash;
 
-// -traceevents: lines of "<frame> <console text>", run before that frame's commands
+// -traceevents: lines of "<frame> <console text>", run before that frame's commands, or "<frame> @key <key> <down>"
 static FILE *events;
 static int next_event_frame = -1;
 static char next_event[1024];
@@ -597,8 +597,19 @@ void Trace_Events (void)
 		}
 		if (next_event_frame > trace_frame + 1)
 			return;
-		Cbuf_AddText (next_event);
-		Cbuf_AddText ("\n");
+		if (!Q_strncmp (next_event, "@key ", 5))
+		{
+			// a key event: "@key <key number> <1 down, 0 up>"
+			int key, down;
+
+			if (sscanf (next_event + 5, "%d %d", &key, &down) == 2)
+				Key_Event (key, down);
+		}
+		else
+		{
+			Cbuf_AddText (next_event);
+			Cbuf_AddText ("\n");
+		}
 		next_event_frame = -1;
 	}
 }

@@ -3,15 +3,15 @@ using QuakeSharp.Core.Diagnostics;
 namespace QuakeSharp.Fidelity.Tests;
 
 /// <summary>
-/// The client against the oracle (milestone 5): demo1-3 at three video modes and the attract loop play with the
-/// client's state the oracle's on every frame. The lines compared are the oracle trace's F (time, rand()), C (cls,
-/// cl), E (the entities), X (temporary entities, beams, lights, light styles, particles), S (sound channels), T
-/// (console text), R (the view) and V's palette; D (what the renderer writes into the entities) and V's picture come
-/// with the renderer.
+/// The client and the renderer against the oracle (milestones 5 and 6): demo1-3 at three video modes and the attract
+/// loop play with the oracle's state and pictures on every frame. Every line of the oracle's trace is compared: F
+/// (time, rand()), C (cls, cl), E (the entities), D (what the renderer writes into them), X (temporary entities,
+/// beams, lights, light styles, particles), S (sound channels), T (console text), R (the view) and V (the frame and
+/// the palette).
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
-    private const string Lines = "FCEXSTR";
+    private const string Lines = "FCEDXSTRV";
 
     private readonly string userdir = Path.Combine(Path.GetTempPath(), "quakesharp-tests", Guid.NewGuid().ToString("N"));
 
@@ -68,10 +68,6 @@ public sealed class DemoTests : IDisposable
                 Assert.True(ours[key] == theirs.Current[key],
                     $"frame {frame}, {key}: the oracle's {theirs.Current[key]}, QuakeSharp's {ours[key]}");
             }
-
-            // the palette, the V line's second field
-            Assert.True(ours["V"].Split(' ')[1] == theirs.Current["V"].Split(' ')[1],
-                $"frame {frame}, the palette: the oracle's {theirs.Current["V"]}, QuakeSharp's {ours["V"]}");
         }
 
         Assert.False(theirs.MoveNext(), $"the oracle's trace goes on after QuakeSharp's {frame} frames");

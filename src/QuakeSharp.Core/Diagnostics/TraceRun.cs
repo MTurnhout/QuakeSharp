@@ -6,8 +6,8 @@ namespace QuakeSharp.Core.Diagnostics;
 
 /// <summary>
 /// Runs the engine as the oracle runs WinQuake (tools/oracle/src/sys_oracle.c's main): headless, on a virtual clock
-/// that moves one step before each frame, with the oracle's virtual sound device, from the game folder with the base
-/// directory "."; and writes the oracle's trace lines after each frame.
+/// that moves one step before each frame, with the oracle's virtual sound device and scripted input (-traceevents), from
+/// the game folder with the base directory "."; and writes the oracle's trace lines after each frame.
 /// </summary>
 public sealed class TraceRun
 {
@@ -27,8 +27,16 @@ public sealed class TraceRun
     {
         system = new VirtualSystem(print);
         step = 1.0 / framesPerSecond;
+        var commandLine = new CommandLine(["quake", .. args]);
+
+        // -traceevents <file>: the scripted input, read relative to the current folder as the oracle reads it
+        int e = commandLine.CheckParm("-traceevents");
+        TraceEvents? events = e != 0 && e < commandLine.Argc - 1
+            ? new TraceEvents(commandLine.Argv(e + 1), () => writer!.Frame)
+            : null;
+
         Engine = new QuakeEngine(
-            new QuakeParms(".", new CommandLine(["quake", .. args]))
+            new QuakeParms(".", commandLine)
             {
                 workdir = gameDir,
                 userdir = userDir,
@@ -36,8 +44,13 @@ public sealed class TraceRun
                 vidheight = height,
             },
             system,
+            input: events,
             sound: new VirtualSoundDma(system));
         writer = new TraceWriter(Engine, framesPerSecond);
+        if (events != null)
+        {
+            events.Engine = Engine;
+        }
     }
 
     public QuakeEngine Engine { get; }

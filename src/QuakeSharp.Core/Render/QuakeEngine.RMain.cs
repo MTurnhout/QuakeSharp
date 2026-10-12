@@ -4,11 +4,11 @@ using QuakeSharp.Core.Numerics;
 using QuakeSharp.Core.Render;
 using static QuakeSharp.Core.Common.MathLib;
 using static QuakeSharp.Core.Model.BspFile;
+using ModelT = QuakeSharp.Core.Model.Model;
 
 namespace QuakeSharp.Core;
 
-// r_main.c: the renderer's setup, the view's geometry and the frame's order of work. What it draws comes with the
-// renderer (milestone 6); until then those calls are stand-ins (QuakeEngine.Pending.cs).
+// r_main.c: the renderer's setup, the view's geometry, the entities and the frame's order of work
 public sealed partial class QuakeEngine
 {
     // r_local.h: XCENTERING, YCENTERING
@@ -29,6 +29,43 @@ public sealed partial class QuakeEngine
     public const int MAXWIDTH = 1280;
     public const int MAXHEIGHT = 1024;
 
+    // r_shared.h: MAXDIMENSION, SIN_BUFFER_SIZE, MAXSPANS
+    private const int MAXDIMENSION = MAXHEIGHT > MAXWIDTH ? MAXHEIGHT : MAXWIDTH;
+    private const int SIN_BUFFER_SIZE = MAXDIMENSION + CYCLE;
+    private const int MAXSPANS = 3000;
+
+    // r_shared.h: the flags in finalvert_t.flags
+    public const int ALIAS_LEFT_CLIP = 0x0001;
+    public const int ALIAS_TOP_CLIP = 0x0002;
+    public const int ALIAS_RIGHT_CLIP = 0x0004;
+    public const int ALIAS_BOTTOM_CLIP = 0x0008;
+    public const int ALIAS_Z_CLIP = 0x0010;
+    public const int ALIAS_ONSEAM = 0x0020;
+    public const int ALIAS_XY_CLIP_MASK = 0x000F;
+
+    // r_local.h: BMODEL_FULLY_CLIPPED, CLIP_EPSILON, BACKFACE_EPSILON, NEAR_CLIP, ALIAS_Z_CLIP_PLANE,
+    // AMP, AMP2, SPEED, MAX_BTOFPOLYS
+    private const int BMODEL_FULLY_CLIPPED = 0x10;
+    private const double CLIP_EPSILON = 0.001;
+    private const double BACKFACE_EPSILON = 0.01;
+    private const double NEAR_CLIP = 0.01;
+    private const int ALIAS_Z_CLIP_PLANE = 5;
+    private const int AMP = 8 * 0x10000;
+    private const int AMP2 = 3;
+    private const int SPEED = 20;
+    private const int MAX_BTOFPOLYS = 5000;
+
+    // d_iface.h: TURB_TEX_SIZE, CYCLE, TILE_SIZE, SKYSHIFT, SKYSIZE, SKYMASK
+    private const int TURB_TEX_SIZE = 64;
+    private const int CYCLE = 128;
+    private const int TILE_SIZE = 128;
+    private const int SKYSHIFT = 7;
+    private const int SKYSIZE = 1 << SKYSHIFT;
+    private const int SKYMASK = SKYSIZE - 1;
+
+    public Vec3 viewlightvec;
+    public readonly ALight r_viewlighting = new() { ambientlight = 128, shadelight = 192 };
+
     public float r_time1;
     public int r_numallocatededges;
     public bool r_drawpolys;
@@ -42,11 +79,16 @@ public sealed partial class QuakeEngine
     public bool r_dowarp, r_dowarpold, r_viewchanged;
 
     public int numbtofpolys;
+    public BtofPoly[] pbtofpolys = [];
+    public Vec3[] r_pcurrentvertbase = [];
     public int c_surf;
     public int r_maxsurfsseen, r_maxedgesseen, r_cnumsurfs;
     public bool r_surfsonstack;
     public int r_clipflags;
     public bool r_fov_greater_than_90;
+
+    /// <summary>r_main.c: r_warpbuffer (R_RenderView_'s warpbuffer, on the C's stack)</summary>
+    public readonly byte[] r_warpbuffer = new byte[WARP_WIDTH * WARP_HEIGHT];
 
     // view origin
     public Vec3 vup, base_vup;
@@ -70,6 +112,11 @@ public sealed partial class QuakeEngine
     public float xOrigin, yOrigin;
 
     public readonly MPlane[] screenedge = [new(), new(), new(), new()];
+
+    /// <summary>r_main.c: pfrustum_indexes, offsets in r_frustum_indexes</summary>
+    public readonly int[] pfrustum_indexes = new int[4];
+
+    public readonly int[] r_frustum_indexes = new int[4 * 6];
 
     // refresh flags
 
@@ -187,7 +234,12 @@ public sealed partial class QuakeEngine
         Cvar_SetValue("r_maxedges", NUMSTACKEDGES);
         Cvar_SetValue("r_maxsurfs", NUMSTACKSURFACES);
 
-        // (view_clipplanes[0..3]'s leftedge and rightedge: the renderer's clipping, milestone 6)
+        view_clipplanes[0].leftedge = true;
+        view_clipplanes[1].rightedge = true;
+        view_clipplanes[1].leftedge = view_clipplanes[2].leftedge =
+            view_clipplanes[3].leftedge = false;
+        view_clipplanes[0].rightedge = view_clipplanes[2].rightedge =
+            view_clipplanes[3].rightedge = false;
 
         r_refdef.xOrigin = (float)XCENTERING;
         r_refdef.yOrigin = (float)YCENTERING;
@@ -212,24 +264,40 @@ public sealed partial class QuakeEngine
         r_viewleaf = null;
         R_ClearParticles();
 
-        r_cnumsurfs = (int)r_maxsurfs.value;
+        r_cnumsurfs = X86.FtoI(r_maxsurfs.value);
 
         if (r_cnumsurfs <= MINSURFACES)
         {
             r_cnumsurfs = MINSURFACES;
         }
 
-        // (the surfaces beyond the stack's and the edges beyond it come with the renderer's edge lists, milestone 6)
+        // the surfaces: on the C's stack (R_EdgeDrawing) up to NUMSTACKSURFACES, else on the hunk; surface 0 doesn't
+        // really exist; it's just a dummy because index 0 is used to indicate no edge attached to surface
         r_surfsonstack = r_cnumsurfs <= NUMSTACKSURFACES;
+        surfaces = new Surf[r_cnumsurfs + 1];
+        for (i = 0; i < surfaces.Length; i++)
+        {
+            surfaces[i] = new Surf();
+        }
+
+        surface_p = 1;
+        surf_max = r_cnumsurfs + 1;
 
         r_maxedgesseen = 0;
         r_maxsurfsseen = 0;
 
-        r_numallocatededges = (int)r_maxedges.value;
+        r_numallocatededges = X86.FtoI(r_maxedges.value);
 
         if (r_numallocatededges < MINEDGES)
         {
             r_numallocatededges = MINEDGES;
+        }
+
+        // the edges: on the C's stack (R_EdgeDrawing) up to NUMSTACKEDGES, else on the hunk (auxedges)
+        r_edges = new Edge[r_numallocatededges];
+        for (i = 0; i < r_edges.Length; i++)
+        {
+            r_edges[i] = new Edge();
         }
 
         r_dowarpold = false;
@@ -496,4 +564,471 @@ public sealed partial class QuakeEngine
 
     // r_main.c: R_RenderView (its checks of the stack and of alignment are the C's)
     public void R_RenderView() => R_RenderView_();
+
+    // r_main.c: R_MarkLeaves
+    public void R_MarkLeaves()
+    {
+        byte[] vis;
+        MNodeBase? node;
+        int i;
+
+        if (r_oldviewleaf == r_viewleaf)
+        {
+            return;
+        }
+
+        r_visframecount++;
+        r_oldviewleaf = r_viewleaf;
+
+        vis = Mod_LeafPVS(r_viewleaf!, cl.worldmodel!);
+
+        for (i = 0; i < cl.worldmodel!.numleafs; i++)
+        {
+            if ((vis[i >> 3] & (1 << (i & 7))) != 0)
+            {
+                node = cl.worldmodel.leafs[i + 1];
+                do
+                {
+                    if (node.visframe == r_visframecount)
+                    {
+                        break;
+                    }
+
+                    node.visframe = r_visframecount;
+                    node = node.parent;
+                }
+                while (node != null);
+            }
+        }
+    }
+
+    // r_main.c: R_DrawEntitiesOnList
+    public void R_DrawEntitiesOnList()
+    {
+        int i;
+        int j;
+        int lnum;
+        var lighting = new ALight();
+
+        // FIXME: remove and do real lighting
+        Vec3 lightvec = new(-1, 0, 0);
+        Vec3 dist = default;
+        float add;
+
+        if (r_drawentities.value == 0)
+        {
+            return;
+        }
+
+        for (i = 0; i < cl_numvisedicts; i++)
+        {
+            currententity = cl_visedicts[i]!;
+
+            if (currententity == cl_entities[cl.viewentity])
+            {
+                continue; // don't draw the player
+            }
+
+            switch (currententity.model!.type)
+            {
+                case modtype_t.mod_sprite:
+                    VectorCopy(currententity.origin, ref r_entorigin);
+                    VectorSubtract(r_origin, r_entorigin, ref modelorg);
+                    R_DrawSprite();
+                    break;
+
+                case modtype_t.mod_alias:
+                    VectorCopy(currententity.origin, ref r_entorigin);
+                    VectorSubtract(r_origin, r_entorigin, ref modelorg);
+
+                    // see if the bounding box lets us trivially reject, also sets trivial accept status
+                    if (R_AliasCheckBBox())
+                    {
+                        j = R_LightPoint(currententity.origin);
+
+                        lighting.ambientlight = j;
+                        lighting.shadelight = j;
+
+                        lighting.plightvec = lightvec;
+
+                        for (lnum = 0; lnum < MAX_DLIGHTS; lnum++)
+                        {
+                            if (cl_dlights[lnum].die >= cl.time)
+                            {
+                                VectorSubtract(currententity.origin,
+                                    cl_dlights[lnum].origin,
+                                    ref dist);
+                                add = cl_dlights[lnum].radius - Length(dist);
+
+                                if (add > 0)
+                                {
+                                    lighting.ambientlight = X86.FtoI(lighting.ambientlight + add);
+                                }
+                            }
+                        }
+
+                        // clamp lighting so it doesn't overbright as much
+                        if (lighting.ambientlight > 128)
+                        {
+                            lighting.ambientlight = 128;
+                        }
+
+                        if (lighting.ambientlight + lighting.shadelight > 192)
+                        {
+                            lighting.shadelight = 192 - lighting.ambientlight;
+                        }
+
+                        R_AliasDrawModel(lighting);
+                    }
+
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
+    // r_main.c: R_DrawViewModel
+    public void R_DrawViewModel()
+    {
+        // FIXME: remove and do real lighting
+        Vec3 lightvec = new(-1, 0, 0);
+        int j;
+        int lnum;
+        Vec3 dist = default;
+        float add;
+        Client.Dlight dl;
+
+        if (r_drawviewmodel.value == 0 || r_fov_greater_than_90)
+        {
+            return;
+        }
+
+        if ((cl.items & QuakeDef.IT_INVISIBILITY) != 0)
+        {
+            return;
+        }
+
+        if (cl.stats[QuakeDef.STAT_HEALTH] <= 0)
+        {
+            return;
+        }
+
+        currententity = cl.viewent;
+        if (currententity.model == null)
+        {
+            return;
+        }
+
+        VectorCopy(currententity.origin, ref r_entorigin);
+        VectorSubtract(r_origin, r_entorigin, ref modelorg);
+
+        VectorCopy(vup, ref viewlightvec);
+        VectorInverse(ref viewlightvec);
+
+        j = R_LightPoint(currententity.origin);
+
+        if (j < 24)
+        {
+            j = 24; // allways give some light on gun
+        }
+
+        r_viewlighting.ambientlight = j;
+        r_viewlighting.shadelight = j;
+
+        // add dynamic lights
+        for (lnum = 0; lnum < MAX_DLIGHTS; lnum++)
+        {
+            dl = cl_dlights[lnum];
+            if (dl.radius == 0)
+            {
+                continue;
+            }
+
+            if (dl.radius == 0)
+            {
+                continue;
+            }
+
+            if (dl.die < cl.time)
+            {
+                continue;
+            }
+
+            VectorSubtract(currententity.origin, dl.origin, ref dist);
+            add = dl.radius - Length(dist);
+            if (add > 0)
+            {
+                r_viewlighting.ambientlight = X86.FtoI(r_viewlighting.ambientlight + add);
+            }
+        }
+
+        // clamp lighting so it doesn't overbright as much
+        if (r_viewlighting.ambientlight > 128)
+        {
+            r_viewlighting.ambientlight = 128;
+        }
+
+        if (r_viewlighting.ambientlight + r_viewlighting.shadelight > 192)
+        {
+            r_viewlighting.shadelight = 192 - r_viewlighting.ambientlight;
+        }
+
+        r_viewlighting.plightvec = lightvec;
+
+        R_AliasDrawModel(r_viewlighting);
+    }
+
+    // r_main.c: R_BmodelCheckBBox
+    public int R_BmodelCheckBBox(ModelT clmodel, ReadOnlySpan<float> minmaxs)
+    {
+        int i, pindex, clipflags;
+        Vec3 acceptpt = default, rejectpt = default;
+        double d;
+
+        clipflags = 0;
+
+        if (currententity.angles[0] != 0 || currententity.angles[1] != 0
+            || currententity.angles[2] != 0)
+        {
+            for (i = 0; i < 4; i++)
+            {
+                d = DotProduct(currententity.origin, view_clipplanes[i].normal);
+                d -= view_clipplanes[i].dist;
+
+                if (d <= -clmodel.radius)
+                {
+                    return BMODEL_FULLY_CLIPPED;
+                }
+
+                if (d <= clmodel.radius)
+                {
+                    clipflags |= 1 << i;
+                }
+            }
+        }
+        else
+        {
+            for (i = 0; i < 4; i++)
+            {
+                // generate accept and reject points
+                // FIXME: do with fast look-ups or integer tests based on the sign bit of the floating point values
+                pindex = pfrustum_indexes[i];
+
+                rejectpt[0] = minmaxs[r_frustum_indexes[pindex + 0]];
+                rejectpt[1] = minmaxs[r_frustum_indexes[pindex + 1]];
+                rejectpt[2] = minmaxs[r_frustum_indexes[pindex + 2]];
+
+                d = DotProduct(rejectpt, view_clipplanes[i].normal);
+                d -= view_clipplanes[i].dist;
+
+                if (d <= 0)
+                {
+                    return BMODEL_FULLY_CLIPPED;
+                }
+
+                acceptpt[0] = minmaxs[r_frustum_indexes[pindex + 3 + 0]];
+                acceptpt[1] = minmaxs[r_frustum_indexes[pindex + 3 + 1]];
+                acceptpt[2] = minmaxs[r_frustum_indexes[pindex + 3 + 2]];
+
+                d = DotProduct(acceptpt, view_clipplanes[i].normal);
+                d -= view_clipplanes[i].dist;
+
+                if (d <= 0)
+                {
+                    clipflags |= 1 << i;
+                }
+            }
+        }
+
+        return clipflags;
+    }
+
+    // r_main.c: R_DrawBEntitiesOnList
+    public void R_DrawBEntitiesOnList()
+    {
+        int i, j, k, clipflags;
+        Vec3 oldorigin = default;
+        ModelT clmodel;
+        Span<float> minmaxs = stackalloc float[6];
+
+        if (r_drawentities.value == 0)
+        {
+            return;
+        }
+
+        VectorCopy(modelorg, ref oldorigin);
+        insubmodel = true;
+        r_dlightframecount = r_framecount;
+
+        for (i = 0; i < cl_numvisedicts; i++)
+        {
+            currententity = cl_visedicts[i]!;
+
+            switch (currententity.model!.type)
+            {
+                case modtype_t.mod_brush:
+
+                    clmodel = currententity.model;
+
+                    // see if the bounding box lets us trivially reject, also sets trivial accept status
+                    for (j = 0; j < 3; j++)
+                    {
+                        minmaxs[j] = currententity.origin[j] +
+                            clmodel.mins[j];
+                        minmaxs[3 + j] = currententity.origin[j] +
+                            clmodel.maxs[j];
+                    }
+
+                    clipflags = R_BmodelCheckBBox(clmodel, minmaxs);
+
+                    if (clipflags != BMODEL_FULLY_CLIPPED)
+                    {
+                        VectorCopy(currententity.origin, ref r_entorigin);
+                        VectorSubtract(r_origin, r_entorigin, ref modelorg);
+
+                        // FIXME: is this needed?
+                        VectorCopy(modelorg, ref r_worldmodelorg);
+
+                        r_pcurrentvertbase = clmodel.vertexes;
+
+                        // FIXME: stop transforming twice
+                        R_RotateBmodel();
+
+                        // calculate dynamic lighting for bmodel if it's not an instanced model
+                        if (clmodel.firstmodelsurface != 0)
+                        {
+                            for (k = 0; k < MAX_DLIGHTS; k++)
+                            {
+                                if ((cl_dlights[k].die < cl.time) ||
+                                    (cl_dlights[k].radius == 0))
+                                {
+                                    continue;
+                                }
+
+                                R_MarkLights(cl_dlights[k], 1 << k,
+                                    clmodel.nodes[clmodel.hulls[0].firstclipnode]);
+                            }
+                        }
+
+                        // if the driver wants polygons, deliver those. Z-buffering is on at this point, so no
+                        // clipping to the world tree is needed, just frustum clipping
+                        if (r_drawpolys | r_drawculledpolys)
+                        {
+                            R_ZDrawSubmodelPolys(clmodel);
+                        }
+                        else
+                        {
+                            r_pefragtopnode = null;
+
+                            for (j = 0; j < 3; j++)
+                            {
+                                r_emins[j] = minmaxs[j];
+                                r_emaxs[j] = minmaxs[3 + j];
+                            }
+
+                            R_SplitEntityOnNode2(cl.worldmodel!.nodes[0]);
+
+                            if (r_pefragtopnode != null)
+                            {
+                                currententity.topnode = r_pefragtopnode;
+
+                                if (r_pefragtopnode.contents >= 0)
+                                {
+                                    // not a leaf; has to be clipped to the world BSP
+                                    r_clipflags = clipflags;
+                                    R_DrawSolidClippedSubmodelPolygons(clmodel);
+                                }
+                                else
+                                {
+                                    // falls entirely in one leaf, so we just put all the edges in the edge list
+                                    // and let 1/z sorting handle drawing order
+                                    R_DrawSubmodelPolygons(clmodel, clipflags);
+                                }
+
+                                currententity.topnode = null;
+                            }
+                        }
+
+                        // put back world rotation and frustum clipping
+                        // FIXME: R_RotateBmodel should just work off base_vxx
+                        VectorCopy(base_vpn, ref vpn);
+                        VectorCopy(base_vup, ref vup);
+                        VectorCopy(base_vright, ref vright);
+                        VectorCopy(base_modelorg, ref modelorg);
+                        VectorCopy(oldorigin, ref modelorg);
+                        R_TransformFrustum();
+                    }
+
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        insubmodel = false;
+    }
+
+    // r_main.c: R_EdgeDrawing (its edges and surfaces, on the C's stack, are allocated by R_NewMap)
+    public void R_EdgeDrawing()
+    {
+        // (R_SurfacePatch: nonintel.c's does nothing)
+        R_BeginEdgeFrame();
+
+        if (r_dspeeds.value != 0)
+        {
+            rw_time1 = (float)Sys_FloatTime();
+        }
+
+        R_RenderWorld();
+
+        if (r_drawculledpolys)
+        {
+            R_ScanEdges();
+        }
+
+        // only the world can be drawn back to front with no z reads or compares, just z writes, so have the driver
+        // turn z compares on now
+        D_TurnZOn();
+
+        if (r_dspeeds.value != 0)
+        {
+            rw_time2 = (float)Sys_FloatTime();
+            db_time1 = rw_time2;
+        }
+
+        R_DrawBEntitiesOnList();
+
+        if (r_dspeeds.value != 0)
+        {
+            db_time2 = (float)Sys_FloatTime();
+            se_time1 = db_time2;
+        }
+
+        if (r_dspeeds.value == 0)
+        {
+            VID_UnlockBuffer();
+            S_ExtraUpdate(); // don't let sound get messed up if going slow
+            VID_LockBuffer();
+        }
+
+        if (!(r_drawpolys | r_drawculledpolys))
+        {
+            R_ScanEdges();
+        }
+    }
+
+    // r_main.c: R_InitTurb
+    public void R_InitTurb()
+    {
+        int i;
+
+        for (i = 0; i < SIN_BUFFER_SIZE; i++)
+        {
+            sintable[i] = X86.FtoI(AMP + (Libm.sin(i * 3.14159 * 2 / CYCLE) * AMP));
+            intsintable[i] = X86.FtoI(AMP2 + (Libm.sin(i * 3.14159 * 2 / CYCLE) * AMP2)); // AMP2, not 20
+        }
+    }
 }
