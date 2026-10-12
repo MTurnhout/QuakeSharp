@@ -28,7 +28,7 @@ public sealed partial class QuakeEngine
     public readonly Cvar sv_accelerate = new("sv_accelerate", "10");
     public readonly Cvar sv_aim = new("sv_aim", "0.93");
 
-    // menu.c: the network menus (milestone 7, design.md ง11.1 step 8). The multiplayer menu reaches them now that
+    // menu.c: the network menus (milestone 7, design.md ยง11.1 step 8). The multiplayer menu reaches them now that
     // TCP/IP is available; until they are ported they do nothing.
     public void M_Menu_Net_f()
     {
@@ -90,17 +90,6 @@ public sealed partial class QuakeEngine
     {
     }
 
-    // pr_edict.c: pr_global_struct->deathmatch and a client's edict->v.frags, which net_dgrm.c reads (the VM, milestone
-    // 7)
-    public static float PR_GlobalDeathmatch() => 0;
-
-    public static float ClientFrags(ServerClient client) => 0;
-
-    // pr_edict.c: PR_Init (milestone 7)
-    public void PR_Init()
-    {
-    }
-
     // sv_main.c: SV_BroadcastPrintf; host.c: SV_ClientPrintf, Host_ServerFrame, Host_ShutdownServer (milestone 7)
     public void SV_BroadcastPrintf(string fmt, params ReadOnlySpan<PrintfArg> args)
     {
@@ -117,9 +106,6 @@ public sealed partial class QuakeEngine
     public void Host_ShutdownServer(bool crash)
     {
     }
-
-    // world.c: SV_RecursiveHullCheck (milestone 7)
-    public bool SV_RecursiveHullCheck(in Hull hull, int num, float p1f, float p2f, in Vec3 p1, in Vec3 p2, Trace trace) => true;
 
     // host_cmd.c: the server's and the QuakeC's commands (milestone 7)
     public void Host_Status_f()

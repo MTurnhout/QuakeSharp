@@ -39,9 +39,9 @@ public sealed partial class QuakeEngine
     // is the float with the bits of 1 (design.md §3.2).
     public void TraceLine(in Vec3 start, in Vec3 end, ref Vec3 impact)
     {
-        Trace trace = new();
+        Trace trace = default;
 
-        SV_RecursiveHullCheck(cl.worldmodel!.hulls[0], 0, 0, BitConverter.Int32BitsToSingle(1), start, end, trace);
+        SV_RecursiveHullCheck(cl.worldmodel!.hulls[0], 0, 0, BitConverter.Int32BitsToSingle(1), start, end, ref trace);
 
         VectorCopy(trace.endpos, ref impact);
     }

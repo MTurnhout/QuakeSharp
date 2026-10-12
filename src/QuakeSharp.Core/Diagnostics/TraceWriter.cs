@@ -642,8 +642,8 @@ public sealed class TraceWriter
         h.Bytes(b.data.AsSpan(0, b.cursize));
     }
 
-    // a client's edict's number, -1 without a server (the edicts come with the VM)
-    private static int EdictNumber(Server.ServerClient c) => -1;
+    // an edict's number (from its place, so a stale reference gives the C's number too), -1 without a server
+    private int EdictNumber(Progs.Edict? e) => e == null || !engine.sv.active ? -1 : e.num;
 
     // G: the server (sv, svs and the client slots up to svs.maxclients)
     private ulong Server()
@@ -708,7 +708,7 @@ public sealed class TraceWriter
             h.Float(c.cmd.upmove);
             h.Vec(c.wishdir);
             H_Sizebuf(ref h, c.message);
-            h.Int(EdictNumber(c));
+            h.Int(EdictNumber(c.edict));
             h.String(c.name);
             h.Int(c.colors);
             for (j = 0; j < Core.Server.ServerClient.NUM_PING_TIMES; j++)
@@ -728,18 +728,138 @@ public sealed class TraceWriter
         return h.h;
     }
 
-    // Q: the QuakeC globals (the VM comes later: without a server, nothing)
-    private ulong Globals() => new Hash().h;
+    // what each slot of the globals or of an edict's fields holds, from the progs' definitions: 0 no definition
+    // covers it (the compiler's temporaries, the return value, the parameters), 1 a number, an entity, a field or a
+    // function, 2 a string (hashed by content: its offset depends on the oracle's addresses)
+    private const byte SLOT_NONE = 0;
+    private const byte SLOT_VALUE = 1;
+    private const byte SLOT_STRING = 2;
+
+    private static byte[] SlotKinds(Progs.ddef_t[] defs, int numdefs, int numslots)
+    {
+        byte[] kinds = new byte[numslots];
+        for (int i = 0; i < numdefs; i++)
+        {
+            var type = (Progs.etype_t)(defs[i].type & ~Progs.PrComp.DEF_SAVEGLOBAL);
+            int size = type == Progs.etype_t.ev_vector ? 3 : 1;
+            for (int j = 0; j < size; j++)
+            {
+                if (defs[i].ofs + j >= numslots)
+                {
+                    break;
+                }
+
+                if (type == Progs.etype_t.ev_string)
+                {
+                    kinds[defs[i].ofs + j] = SLOT_STRING;
+                }
+                else if (kinds[defs[i].ofs + j] == SLOT_NONE)
+                {
+                    kinds[defs[i].ofs + j] = SLOT_VALUE;
+                }
+            }
+        }
+
+        return kinds;
+    }
+
+    private void H_Slots(ref Hash h, byte[] kinds, int[] mem, int start, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            if (kinds[i] == SLOT_STRING)
+            {
+                h.String(engine.PR_GetString(mem[start + i]));
+            }
+            else if (kinds[i] == SLOT_VALUE)
+            {
+                h.Int(mem[start + i]);
+            }
+        }
+    }
+
+    // Q: the QuakeC globals
+    private ulong Globals()
+    {
+        var h = new Hash();
+        Progs.dprograms_t? progs = engine.progs;
+
+        if (!engine.sv.active || progs == null)
+        {
+            return h.h;
+        }
+
+        byte[] kinds = SlotKinds(engine.pr_globaldefs, progs.numglobaldefs, progs.numglobals);
+        h.Int(progs.numglobals);
+        H_Slots(ref h, kinds, engine.pr_globals, 0, progs.numglobals);
+        return h.h;
+    }
 
     // N: the edicts up to sv.num_edicts, their header and their fields
     private ulong Edicts(out int count)
     {
+        var h = new Hash();
+        Progs.dprograms_t? progs = engine.progs;
+
         count = 0;
-        return new Hash().h;
+        if (!engine.sv.active || progs == null)
+        {
+            return h.h;
+        }
+
+        byte[] kinds = SlotKinds(engine.pr_fielddefs, progs.numfielddefs, progs.entityfields);
+        for (int i = 0; i < engine.sv.num_edicts; i++)
+        {
+            Progs.Edict e = engine.EDICT_NUM(i);
+            h.Bool(e.free);
+            h.Int(e.num_leafs);
+            for (int j = 0; j < e.num_leafs; j++)
+            {
+                h.Int(e.leafnums[j]);
+            }
+
+            H_EntityState(ref h, e.baseline);
+            h.Float(e.freetime);
+            H_Slots(ref h, kinds, engine.sv.edictmem, e.fields, progs.entityfields);
+        }
+
+        count = engine.sv.num_edicts;
+        return h.h;
     }
 
-    // W: the area nodes' trigger and solid lists, as edict numbers in their order
-    private ulong World() => new Hash().h;
+    // W: the area nodes' trigger and solid lists, as edict numbers in their order (-1 after each list)
+    private ulong World()
+    {
+        var h = new Hash();
+
+        if (!engine.sv.active)
+        {
+            return h.h;
+        }
+
+        var links = new List<int>();
+        for (int i = 0; i < engine.sv_numareanodes; i++)
+        {
+            Server.AreaNode node = engine.sv_areanodes[i];
+            foreach (Progs.Link list in new[] { node.trigger_edicts, node.solid_edicts })
+            {
+                for (Progs.Link? l = list.next; l != list && l != null; l = l.next)
+                {
+                    links.Add(engine.NUM_FOR_EDICT(l.owner!));
+                }
+
+                links.Add(-1);
+            }
+        }
+
+        h.Int(links.Count);
+        foreach (int n in links)
+        {
+            h.Int(n);
+        }
+
+        return h.h;
+    }
 
     // who sent a message: -1 the client, n the server to client n, -2 another socket
     private int MessageSender(Net.QSocket sock)
@@ -801,6 +921,28 @@ public sealed class TraceWriter
         sb.Append('"');
     }
 
+    // the slots of a definition: strings by content, the rest as their bits in hexadecimal
+    private void DumpDef(StringBuilder sb, string what, in Progs.ddef_t def, int[] mem, int start, int numslots)
+    {
+        var type = (Progs.etype_t)(def.type & ~Progs.PrComp.DEF_SAVEGLOBAL);
+        int size = type == Progs.etype_t.ev_vector ? 3 : 1;
+        sb.Append(what).Append(' ').Append(engine.PR_GetString(def.s_name));
+        for (int j = 0; j < size && def.ofs + j < numslots; j++)
+        {
+            sb.Append(' ');
+            if (type == Progs.etype_t.ev_string)
+            {
+                DumpString(sb, engine.PR_GetString(mem[start + def.ofs + j]));
+            }
+            else
+            {
+                sb.Append(Invariant($"{mem[start + def.ofs + j]:x8}"));
+            }
+        }
+
+        sb.Append('\n');
+    }
+
     // -tracedump: the server's state, the globals and the edicts by name, the frame's messages
     private void DumpServer(StringBuilder sb)
     {
@@ -813,6 +955,33 @@ public sealed class TraceWriter
         }
 
         sb.Append('\n');
+        if (sv.active && engine.progs is { } progs)
+        {
+            for (int i = 0; i < progs.numglobaldefs; i++)
+            {
+                DumpDef(sb, "global", engine.pr_globaldefs[i], engine.pr_globals, 0, progs.numglobals);
+            }
+
+            for (int i = 0; i < sv.num_edicts; i++)
+            {
+                Progs.Edict e = engine.EDICT_NUM(i);
+                sb.Append(Invariant($"edict {i} free {(e.free ? 1 : 0)} freetime {BitConverter.SingleToInt32Bits(e.freetime):x8} leafs"));
+                for (int j = 0; j < e.num_leafs; j++)
+                {
+                    sb.Append(Invariant($" {e.leafnums[j]}"));
+                }
+
+                DumpVec(sb, "baseline.origin", e.baseline.origin);
+                DumpVec(sb, "baseline.angles", e.baseline.angles);
+                sb.Append(Invariant($" modelindex {e.baseline.modelindex} frame {e.baseline.frame} colormap {e.baseline.colormap} skin {e.baseline.skin} effects {e.baseline.effects}\n"));
+                string what = Invariant($"edict {i}");
+                for (int j = 0; j < progs.numfielddefs; j++)
+                {
+                    DumpDef(sb, what, engine.pr_fielddefs[j], engine.sv.edictmem, e.fields, progs.entityfields);
+                }
+            }
+        }
+
         foreach ((int sender, bool reliable, int result, byte[] data) in lastMessages)
         {
             sb.Append(Invariant($"message {sender} {(reliable ? 1 : 0)} {result} {data.Length} "));

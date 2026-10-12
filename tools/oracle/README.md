@@ -43,7 +43,7 @@ the help pages and the renderer's cvars).
   assembly routines are used, as the Linux and non-Intel builds do. `_WIN32` stays defined: the code is WinQuake's
   (its menus, its console stamp "(WinQuake) 1.09", S_Init from the video driver).
 - **Its other changes** (`quake-oracle.patch`, each under `ORACLE`): fixed substitutes for memory the C reads without
-  owning it (design.md ง3.3: `R_AliasDrawModel`'s `finalverts` start zeroed; `COM_FileBase` stops at the start of a
+  owning it (design.md ยง3.3: `R_AliasDrawModel`'s `finalverts` start zeroed; `COM_FileBase` stops at the start of a
   name without `/`, where it read the memory before it), and two hooks for the traces that change nothing:
   `NET_SendMessage` and `NET_SendUnreliableMessage` pass every message to `Trace_Message`, and world.c's
   `Oracle_AreaLinks` lists the area nodes' edicts.
@@ -123,4 +123,4 @@ Hashes are 64-bit FNV-1a over the fields' bytes: `int` and `float` as 4 little-e
 floats, strings their bytes and then 4 zero bytes, a model its name, a colormap 0 (the normal one), 1 + n (player n's
 translation) or -1, an entity pointer its array and index (`cl_entities` index, `0x10000 +` static, `0x20000 +` temp,
 `0x30000` the view model). A QuakeC string is hashed by its contents: its offset from `pr_strings` depends on the
-oracle's addresses (design.md ง11.1).
+oracle's addresses (design.md ยง11.1).

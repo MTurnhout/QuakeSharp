@@ -40,6 +40,9 @@ public sealed class ServerClient
     /// <summary>can be added to at any time, copied and clear once per frame</summary>
     public SizeBuf message = new(QuakeDef.MAX_MSGLEN);
 
+    /// <summary>EDICT_NUM(clientnum+1)</summary>
+    public Progs.Edict? edict;
+
     /// <summary>for printing to other people (char[32])</summary>
     public string name = "";
 

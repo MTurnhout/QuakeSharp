@@ -59,4 +59,10 @@ public sealed class ServerState
     public SizeBuf reliable_datagram = new(MAX_DATAGRAM);
 
     public SizeBuf signon = new(8192);
+
+    /// <summary>can NOT be array indexed in C, because edict_t is variable sized, but can be used to reference the world ent</summary>
+    public Progs.Edict[] edicts = [];
+
+    /// <summary>The edicts' memory: max_edicts * pr_edict_size bytes as 4-byte slots (design.md §11.1).</summary>
+    public int[] edictmem = [];
 }

@@ -286,6 +286,200 @@ public static class QString
         return end < 0 ? str.Length : end;
     }
 
+    // The C runtime's atof (pr_edict.c's ED_ParseEpair and pr_cmds.c's PF_stof call it rather than Q_atof): strtod's
+    // longest valid prefix, correctly rounded as the Universal CRT's: white space, a sign, then "inf" or "infinity",
+    // "nan" (with an optional "(...)"), a hexadecimal "0x" number with an optional "p" exponent, or decimal digits with
+    // an optional point and "e" exponent; 0 when there is none.
+    public static double atof(string str)
+    {
+        int p = 0;
+        bool negative = false;
+
+        while (Ch(str, p) is ' ' or '\t' or '\n' or '\v' or '\f' or '\r')
+        {
+            p++;
+        }
+
+        if (Ch(str, p) is '-' or '+')
+        {
+            negative = Ch(str, p) == '-';
+            p++;
+        }
+
+        double value;
+        if (StartsWithNoCase(str, p, "inf"))
+        {
+            value = double.PositiveInfinity;
+        }
+        else if (StartsWithNoCase(str, p, "nan"))
+        {
+            value = double.NaN;
+        }
+        else if (Ch(str, p) == '0' && (Ch(str, p + 1) | 0x20) == 'x' && IsHexDigit(Ch(str, p + 2), out _)
+            || Ch(str, p) == '0' && (Ch(str, p + 1) | 0x20) == 'x' && Ch(str, p + 2) == '.' && IsHexDigit(Ch(str, p + 3), out _))
+        {
+            value = HexFloat(str, p + 2);
+        }
+        else
+        {
+            int start = p;
+            int digits = 0;
+            while (Ch(str, p) is >= '0' and <= '9')
+            {
+                p++;
+                digits++;
+            }
+
+            if (Ch(str, p) == '.')
+            {
+                p++;
+                while (Ch(str, p) is >= '0' and <= '9')
+                {
+                    p++;
+                    digits++;
+                }
+            }
+
+            if (digits == 0)
+            {
+                return 0;
+            }
+
+            int end = p;
+            if ((Ch(str, p) | 0x20) == 'e')
+            {
+                int e = p + 1;
+                if (Ch(str, e) is '-' or '+')
+                {
+                    e++;
+                }
+
+                if (Ch(str, e) is >= '0' and <= '9')
+                {
+                    while (Ch(str, e) is >= '0' and <= '9')
+                    {
+                        e++;
+                    }
+
+                    end = e;
+                }
+            }
+
+            value = double.Parse(str.AsSpan(start, end - start), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        return negative ? -value : value;
+    }
+
+    private static bool StartsWithNoCase(string s, int p, string word)
+    {
+        for (int i = 0; i < word.Length; i++)
+        {
+            if ((Ch(s, p + i) | 0x20) != word[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsHexDigit(int c, out int value)
+    {
+        value = c is >= '0' and <= '9' ? c - '0' : (c | 0x20) is >= 'a' and <= 'f' ? (c | 0x20) - 'a' + 10 : -1;
+        return value >= 0;
+    }
+
+    // a hexadecimal floating point number's digits, point and "p" exponent (the mantissa's first 60 bits are kept, the
+    // rest only as a sticky bit: rounded once, to nearest even, by the conversion to double)
+    private static double HexFloat(string str, int p)
+    {
+        ulong mantissa = 0;
+        int exponent = 0;
+        bool sticky = false;
+        bool point = false;
+
+        while (true)
+        {
+            int c = Ch(str, p);
+            if (c == '.' && !point)
+            {
+                point = true;
+                p++;
+                continue;
+            }
+
+            if (!IsHexDigit(c, out int d))
+            {
+                break;
+            }
+
+            if (mantissa >> 56 == 0)
+            {
+                mantissa = (mantissa << 4) | (uint)d;
+                if (point)
+                {
+                    exponent -= 4;
+                }
+            }
+            else
+            {
+                sticky |= d != 0;
+                if (!point)
+                {
+                    exponent += 4;
+                }
+            }
+
+            p++;
+        }
+
+        if ((Ch(str, p) | 0x20) == 'p')
+        {
+            int e = p + 1;
+            bool negative = false;
+            if (Ch(str, e) is '-' or '+')
+            {
+                negative = Ch(str, e) == '-';
+                e++;
+            }
+
+            if (Ch(str, e) is >= '0' and <= '9')
+            {
+                int value = 0;
+                while (Ch(str, e) is >= '0' and <= '9')
+                {
+                    value = Math.Min(value * 10 + (Ch(str, e) - '0'), 100000);
+                    e++;
+                }
+
+                exponent += negative ? -value : value;
+            }
+        }
+
+        if (mantissa == 0)
+        {
+            return 0;
+        }
+
+        // round the mantissa to 53 bits by hand, so the scaling below is exact (apart from subnormal results)
+        int shift = 64 - 53 - System.Numerics.BitOperations.LeadingZeroCount(mantissa);
+        if (shift > 0)
+        {
+            ulong rest = mantissa & ((1UL << shift) - 1);
+            ulong half = 1UL << (shift - 1);
+            mantissa >>= shift;
+            exponent += shift;
+            if (rest > half || (rest == half && (sticky || (mantissa & 1) != 0)) || (rest == half && sticky))
+            {
+                mantissa++;
+            }
+        }
+
+        return Math.ScaleB(mantissa, exponent);
+    }
+
     /// <summary>The C string's character at <paramref name="i"/> as a signed char: 0 at and after its end.</summary>
     public static int Ch(string s, int i)
     {

@@ -146,7 +146,7 @@ public sealed partial class QuakeEngine
         }
         else
         {
-            if (PR_GlobalDeathmatch() != 0 && !host_client!.privileged)
+            if (pr_global_struct.deathmatch != 0 && !host_client!.privileged)
             {
                 return;
             }
@@ -1055,7 +1055,7 @@ public sealed partial class QuakeEngine
             MSG_WriteByte(net_message, playerNumber);
             MSG_WriteString(net_message, client.name);
             MSG_WriteLong(net_message, client.colors);
-            MSG_WriteLong(net_message, (int)ClientFrags(client));
+            MSG_WriteLong(net_message, (int)client.edict!.v.frags);
             MSG_WriteLong(net_message, (int)(net_time - client.netconnection!.connecttime));
             MSG_WriteString(net_message, client.netconnection.address);
             SetControlHeader();

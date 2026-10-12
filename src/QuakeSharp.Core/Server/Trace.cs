@@ -1,4 +1,5 @@
 using QuakeSharp.Core.Common;
+using QuakeSharp.Core.Progs;
 
 namespace QuakeSharp.Core.Server;
 
@@ -9,8 +10,8 @@ public struct Plane
     public float dist;
 }
 
-/// <summary>world.h: trace_t (the edict it hit comes with the QuakeC's edicts, milestone 7)</summary>
-public sealed class Trace
+/// <summary>world.h: trace_t (a value, as the C returns and copies it)</summary>
+public struct Trace
 {
     /// <summary>if true, plane is not valid</summary>
     public bool allsolid;
@@ -30,5 +31,5 @@ public sealed class Trace
     public Plane plane;
 
     /// <summary>entity the surface is on</summary>
-    public object? ent;
+    public Edict? ent;
 }

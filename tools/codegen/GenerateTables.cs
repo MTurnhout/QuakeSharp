@@ -29,7 +29,108 @@ Write("Model/BspFile.g.cs", GenerateBspFile());
 Write("Render/Anorms.g.cs", GenerateAnorms());
 Write("Render/Adivtab.g.cs", GenerateAdivtab());
 WriteTo("QuakeSharp.Platform.Sdl", "ScanToKey.g.cs", GenerateScanToKey());
+Write("Progs/ProgDefs.g.cs", GenerateProgDefs());
+Write("Server/ServerDef.g.cs", GenerateServerDefs());
 return 0;
+
+// server.h: the numeric #defines without the QUAKE2 ones (move types, solids, flags, effects, spawn flags...), in
+// QuakeDef with quakedef.h's
+string GenerateServerDefs()
+{
+    string c = Regex.Replace(Source("server.h"), @"#ifdef\s+QUAKE2.*?(?:#else(.*?))?#endif", m => m.Groups[1].Value,
+        RegexOptions.Singleline);
+    c = StripComments(c);
+    var sb = Header("server.h", "QuakeSharp.Core");
+    sb.AppendLine("public static partial class QuakeDef");
+    sb.AppendLine("{");
+    foreach (Match m in Regex.Matches(c, @"^\s*#define\s+(\w+)\s+(\d+)\s*$", RegexOptions.Multiline))
+    {
+        sb.AppendLine($"    public const int {m.Groups[1].Value} = {m.Groups[2].Value};");
+    }
+
+    sb.AppendLine("}");
+    return sb.ToString();
+}
+
+// progdefs.q1 (progdefs.h without QUAKE2): globalvars_t and entvars_t, the globals and fields the engine knows, as
+// views over the QuakeC's 4-byte slots (design.md §6.2 rule 4): pr_global_struct.self, ent.v.origin are refs into
+// them, a float, an int (string_t, func_t, an entity's offset) or a vector reinterpreting the slots where the C does
+string GenerateProgDefs()
+{
+    string c = StripComments(Source("progdefs.q1"));
+    var sb = Header("progdefs.q1", "QuakeSharp.Core.Progs");
+    sb.Insert(sb.ToString().IndexOf("namespace", StringComparison.Ordinal),
+        "using System.Runtime.CompilerServices;\nusing QuakeSharp.Core.Common;\n\n");
+
+    void Struct(string typedef, string name, string summary, bool entity)
+    {
+        var m = Regex.Match(c, @"typedef\s+struct\s*\{([^}]*)\}\s*" + typedef + @"\s*;");
+        if (!m.Success)
+        {
+            throw new InvalidOperationException($"{typedef} not found");
+        }
+
+        sb.AppendLine($"/// <summary>{summary}</summary>");
+        sb.AppendLine($"public readonly struct {name}");
+        sb.AppendLine("{");
+        sb.AppendLine("    private readonly int[] mem;");
+        sb.AppendLine("    private readonly int @base;");
+        sb.AppendLine();
+        sb.AppendLine($"    public {name}(int[] mem, int @base)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        this.mem = mem;");
+        sb.AppendLine("        this.@base = @base;");
+        sb.AppendLine("    }");
+        int ofs = 0;
+        foreach (Match f in Regex.Matches(m.Groups[1].Value, @"(\w+)\s+(\w+)(?:\[(\d+)\])?\s*;"))
+        {
+            string type = f.Groups[1].Value, field = f.Groups[2].Value;
+            int count = f.Groups[3].Success ? int.Parse(f.Groups[3].Value, CultureInfo.InvariantCulture) : 1;
+            if (field == "pad")
+            {
+                ofs += count;
+                continue;
+            }
+
+            sb.AppendLine();
+            sb.AppendLine($"    /// <summary>{type} {field}: slot {ofs}</summary>");
+            switch (type)
+            {
+                case "float":
+                    sb.AppendLine($"    public ref float {field} => ref Unsafe.As<int, float>(ref mem[@base + {ofs}]);");
+                    ofs++;
+                    break;
+                case "int" or "string_t" or "func_t":
+                    sb.AppendLine($"    public ref int {field} => ref mem[@base + {ofs}];");
+                    ofs++;
+                    break;
+                case "vec3_t":
+                    sb.AppendLine($"    public ref Vec3 {field} => ref Unsafe.As<int, Vec3>(ref mem[@base + {ofs}]);");
+                    ofs += 3;
+                    break;
+                default:
+                    throw new InvalidOperationException($"{typedef}: type {type}");
+            }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>sizeof({typedef}) / 4</summary>");
+        sb.AppendLine($"    public const int Slots = {ofs};");
+        sb.AppendLine("}");
+        sb.AppendLine();
+    }
+
+    Struct("globalvars_t", "GlobalVars", "progdefs.q1: globalvars_t, the start of the progs' globals (pr_global_struct).", false);
+    Struct("entvars_t", "EntVars", "progdefs.q1: entvars_t, an edict's fields the engine knows (ed->v).", true);
+
+    var crc = Regex.Match(c, @"#define\s+PROGHEADER_CRC\s+(\d+)");
+    sb.AppendLine("public static class ProgDefs");
+    sb.AppendLine("{");
+    sb.AppendLine("    /// <summary>The CRC of progdefs.h the progs must have been compiled with.</summary>");
+    sb.AppendLine($"    public const int PROGHEADER_CRC = {crc.Groups[1].Value};");
+    sb.AppendLine("}");
+    return sb.ToString();
+}
 
 // keys.h: the key numbers (K_TAB, K_UPARROW...), as constants
 string GenerateKeys()
