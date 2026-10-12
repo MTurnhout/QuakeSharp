@@ -723,7 +723,7 @@ either emulated (the oracle and QuakeSharp alike) or documented, in a new §3.4:
 | The mouse | In a window and full screen, with `_windowed_mouse` 0 and 1 | In a window the mouse does nothing (buttons included) until `_windowed_mouse` is 1; `-dinput` off by default; in_win.c changes the system's mouse acceleration (`-noforcemparms`...) |
 | The network menus | The multiplayer menu | Whether IPX is offered |
 | The pixels | Frames of `timedemo demo1`-`3` (`wait` lines, then `screenshot`: a timedemo runs one demo message per frame whatever the time) against the oracle's same frames (`-traceshot`) | How many pixels the x87 arithmetic and the `id386` assembly change (§3.1: documented, not emulated; now measured) |
-| quake.exe (DOS) | Its version identified; read from the source's DOS drivers (sys_dos.c, vid_dos.c, vid_vga.c, vid_ext.c, in_dos.c, snd_dos.c, snd_gus.c, cd_audio.c, net_dos.c, net_ipx.c, net_ser.c...) and Chocolate Quake's notes (read, never copied) | DJGPP's `rand()`, VGA's palette index 0 (no colormap remapping), mode 0's 320×200 and the VESA modes, the serial and modem menus, the DOS start-up text; documented only (D4), unless D10 says otherwise |
+| quake.exe (DOS) | Its version identified; read from the source's DOS drivers (sys_dos.c, vid_dos.c, vid_vga.c, vid_ext.c, in_dos.c, snd_dos.c, snd_gus.c, cd_audio.c, net_dos.c, net_ipx.c, net_ser.c...) and Chocolate Quake's notes (read, never copied) | DJGPP's `rand()`, VGA's palette index 0 (no colormap remapping), mode 0's 320×200 and the VESA modes, the serial and modem menus, the DOS start-up text; documented only (D4, decision 47) |
 
 **Trace format 6** adds a line after `A`, and the frame line takes the mode:
 
@@ -751,7 +751,7 @@ mode list, its commands and the Video menu in `vid_oracle.c` over a virtual disp
 first and QuakeSharp follows them.
 
 1. **The audit**, above. §3.4 records it; D4 is settled with it.
-2. **What the traces reach.** A coverage run of the fidelity tests over Core (D9) lists, module by module, the ported
+2. **What the traces reach.** A coverage run of the fidelity tests over Core (decision 46) lists, module by module, the ported
    functions and branches no trace reaches. That list is the work of step 6, and the measure of its end. Without a
    coverage tool, the list comes from reading each C module against the scenarios.
 3. **in_win.c**: the oracle first (format 6, the scripted mouse, in_win.c over the virtual Win32), then
@@ -784,7 +784,7 @@ first and QuakeSharp follows them.
    `r_speeds`, `r_timegraph`, `r_aliasstats`, `r_polymodelstats`, `r_reportsurfout`, `r_reportedgeout`, the
    `r_maxsurfs` and `r_maxedges` overflows, `r_waterwarp`, `d_subdiv16`, `chase_active`), and the server's rarer
    commands. What no input can reach in the oracle's build is listed with the reason.
-7. **The shareware smoke test** (§10's last row, D11): CI fetches `quake106.zip`, extracts its `pak0.pak` (the
+7. **The shareware smoke test** (§10's last row, decision 48): CI fetches `quake106.zip`, extracts its `pak0.pak` (the
    registered one, same MD5), and plays demo1-3 against the last lines of their traces, kept in the test.
 
 **Done when** §3.4 holds the audit (each difference emulated or documented); in_win.c and vid_win.c's modes are ported
@@ -842,6 +842,9 @@ plays with the mouse, in every mode, and both mission packs.
 | 43 | Mouse and joystick | in_win.c is ported in Core and compiled unchanged in the oracle over a virtual Win32 (cursor, winmm's joystick); `-traceevents` takes window-level `@mouse <dx> <dy>` and `@buttons <state>` lines that in_win.c reads as WinQuake does, `@key` staying `Key_Event`; `-recordevents` records them, so the oracle has mouse motion (extends decision 34). Trace format 6 adds `I` (§11.4) | 2026-10-12 |
 | 44 | Video modes | vid_win.c's mode list (the three windowed modes, two of them stretched, and fixed full-screen modes as Winquake.exe lists them here), `vid_mode`, its commands and the Video menu, ported in Core and copied into `vid_oracle.c`; the frame's hash takes the mode. Supersedes decision 30 (§11.4) | 2026-10-12 |
 | 45 | Mission packs | Traced as id1 is: the oracle's game folders hold only the original PAKs (`hipnotic/pak0.pak`, `rogue/pak0.pak`, by MD5, never their loose config.cfg), run with `-hipnotic` and `-rogue`; their demos, attract loops, tours, saves and scripted games checked every frame (§11.4) | 2026-10-12 |
+| 46 | Coverage (was D9) | `coverlet.MTP` (MIT) in `QuakeSharp.Fidelity.Tests` only, switched on by a flag for local runs with the game data, so normal runs and CI stay as fast; the report stays outside the repository. It lists what no trace reaches (milestone 10, step 2); Microsoft's `Microsoft.Testing.Extensions.CodeCoverage` is the fallback if it misbehaves | 2026-10-12 |
+| 47 | quake.exe not run (was D10) | The DOS executable's differences are documented from the source's DOS drivers and Chocolate Quake's notes, not measured: nothing of DOS is emulated (D4), and DOSBox's emulated x87 and timing would measure DOSBox. Revisited only if the audit raises a question only quake.exe answers | 2026-10-12 |
+| 48 | Shareware in CI (was D11) | CI downloads `quake106.zip` from a fixed mirror (chosen with the user before it is committed), checks its MD5, extracts `pak0.pak` (the registered one, same MD5) and caches it, never committed; the test keeps only the last trace lines of demo1-3 (milestone 10, step 7) | 2026-10-12 |
 
 ## 13. Open decisions
 
@@ -852,6 +855,3 @@ To confirm with the user before the milestones they affect; the proposals are th
 | D4 | Fidelity target version | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`; the DOS 1.08 executable's differences (DJGPP's `rand()`, x87) documented, emulated later only if wanted |
 | D7 | Default video mode | 320×240 in a window scaled to the screen, as WinQuake's default mode (the fidelity target is WinQuake: decision 14); DOS's 320×200 and larger modes from the menu |
 | D8 | Scope of v1 | Quake and both mission packs on the WinQuake engine; GLQuake and QuakeWorld after v1 |
-| D9 | Coverage tool (milestone 10, step 2) | `coverlet.MTP` (MIT; Microsoft.Testing.Platform's coverage extension), in the fidelity tests only, run locally with the game data; never shipped. Without it, the list comes from reading the C |
-| D10 | Running quake.exe (milestone 10, step 1) | Not run: its differences come from the source and Chocolate Quake's notes. Running it would need DOSBox, a download |
-| D11 | Shareware in CI (milestone 10, step 7) | CI downloads `quake106.zip` from a fixed mirror, checks its MD5, extracts `pak0.pak` (7-Zip reads its LHA archive) and caches it; never committed |
