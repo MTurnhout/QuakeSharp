@@ -23,3 +23,6 @@ config.cfg
 
 # Local, per-developer notes for AI assistants
 CLAUDE.local.md
+
+# Compiled shaders (built from shaders/*.slang)
+*.spv
