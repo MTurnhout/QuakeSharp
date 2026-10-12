@@ -1,9 +1,11 @@
 # QuakeSharp: Design
 
-> Status: **v0.4**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
+> Status: **v0.5**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
 > (repository skeleton), 1 (files and data), 2 (the oracle and the numerics: WinQuake built headless writes traces of
-> every demo; musl's libm and `rand()` ported and checked against the C) and 3 (the platform: an SDL3 window showing
-> 8-bit frames through Vulkan, keys as WinQuake reads them, the sound device) done.
+> every demo; musl's libm and `rand()` ported and checked against the C), 3 (the platform: an SDL3 window showing
+> 8-bit frames through Vulkan, keys as WinQuake reads them, the sound device) and 4 (the host and the common code:
+> the frame loop, commands, cvars, console text, keys, `mathlib.c`, printf, all checked against WinQuake's own C)
+> done.
 
 ## 1. Goal
 
@@ -276,6 +278,9 @@ file, as the C's `FILE *` does.
 11. **Undefined behaviour** (reads past arrays, uninitialised memory) is documented case by case in a table as
     DoomSharp's §2 does, with a fixed substitute that the oracle is patched to share where needed. What the C leaves
     to the compiler (argument order, implicit declarations) follows the oracle's build (§3.2).
+12. **Vectors.** `vec3_t` is `Vec3`, an inline array of three floats indexed `v[0]` as in C, passed by `ref`/`in`
+    where C passes the pointer (so an output that is also an input aliases as in C); `float[3][3]` and `float[3][4]`
+    are `Mat3` and `Mat3x4`, indexed `m[i][j]`.
 13. **One engine object.** WinQuake's globals and functions are members of `QuakeEngine`, a partial class with a
     file per C module (`Common/QuakeEngine.Cmd.cs` is cmd.c), keeping the C's names (`Cmd_AddCommand`, `cvar_vars`,
     `cls`, `MSG_WriteByte`): C had one namespace, so the names are unique and every line greps against the reference.
@@ -283,9 +288,6 @@ file, as the C's `FILE *` does.
     enums keep their typedef names (`cactive_t`, `keydest_t`). Functions of modules not ported yet are empty stand-ins
     in `QuakeEngine.Pending.cs` until their module is. Varargs functions (`Con_Printf`, `Sys_Error`, `va`) take a
     format and `PrintfArg`s, formatted by `CFormat`; `Sys_Error` returns the exception to throw.
-12. **Vectors.** `vec3_t` is `Vec3`, an inline array of three floats indexed `v[0]` as in C, passed by `ref`/`in`
-    where C passes the pointer (so an output that is also an input aliases as in C); `float[3][3]` and `float[3][4]`
-    are `Mat3` and `Mat3x4`, indexed `m[i][j]`.
 
 ### 6.3 Main loop and time
 
@@ -374,9 +376,14 @@ them. The key numbers (`keys.h`) are generated too.
 
 ## 9. Persistence
 
-- **Config**: `config.cfg` written by `Host_WriteConfiguration` (key bindings and archived cvars), `autoexec.cfg`,
-  `quake.rc`, `default.cfg` from the PAK, exactly as the original reads them. Kept in a user folder rather than the
-  game folder (to decide with the user, like DoomSharp's decision 30).
+- **Config**: `config.cfg` written by `Host_WriteConfiguration` (key bindings and archived cvars, in text mode: CR
+  LF line ends, as WinQuake writes it), `autoexec.cfg`, `quake.rc`, `default.cfg` from the PAK, exactly as the
+  original reads them.
+- **Where files go**: what the game writes into `com_gamedir` (`config.cfg`, savegames, demos, screenshots,
+  `qconsole.log`) goes to the game directory's namesake in a user folder instead (`%APPDATA%\QuakeSharp\id1` on
+  Windows, `~/.config/QuakeSharp/id1` on Linux), and a game directory's loose files are looked for there first, then in
+  the game directory itself; the Quake installation is only read. As DoomSharp's decision 30. (`QuakeParms.userdir`;
+  without one, as the oracle runs, files go where WinQuake puts them.)
 - **Savegames**: the text `.sav` files (`SAVEGAME_VERSION` 5, `ED_Write`, `%f` floats), byte for byte as the oracle
   writes them; the original's and QuakeSharp's load into each other.
 - **Demos**: `record`, `playdemo`, `timedemo`; `.dem` files byte for byte as the oracle writes them.
@@ -421,7 +428,7 @@ Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 f
 | 1 ✅ | Files & data | PAKs identified by MD5; search paths and `-game`; `gfx.wad` (WAD2), palette, colormap, pics, BSP textures, MDL skins dump to PNG through the tools |
 | 2 ✅ | Oracle & numerics | The headless oracle builds and writes traces of demo1-3; the libm and `rand()` ported and tested. *Traces of the three demos at three sizes and of the attract loop; musl's six functions and `rand()` bit-exact against the C. `mathlib.c`, printf formatting and `Q_atof` move to milestone 4, the tables of the client and renderer to 5 and 6, with the code that uses them* |
 | 3 ✅ | Platform & presentation | SDL3 window, Vulkan presents an 8-bit frame with the palette at 4:3 (e.g. `gfx/conback.lmp`); input events; audio device open. *The executable shows `gfx/conback.lmp` at 4:3 in a window or over a 4K screen, clean under the validation layer; keys come as WinQuake's key numbers; the sound device plays a 16-bit stereo 11025 Hz buffer through SDL3; CI builds the shaders with a pinned Slang* |
-| 4 | Host & common | `Host_Frame` with the virtual clock, command buffer, cvars, console text, `MSG_*`, `net_loop`, `quake.rc`/`default.cfg` executed; `mathlib.c`, printf formatting (`%f`, `%5.1f`...) and `Q_atof` checked against the C |
+| 4 ✅ | Host & common | `Host_Frame` with the virtual clock, command buffer, cvars, console text, `MSG_*`, `quake.rc`/`default.cfg` executed; `mathlib.c`, printf formatting (`%f`, `%5.1f`...) and `Q_atof` checked against the C. *`mathlib.c`, `Q_atoi`, `Q_atof` and printf match WinQuake's C on 18 sets of 20,000 inputs; commands, cvars, console text and keys match on two scenarios; the host runs `Host_Init` and `Host_Frame` (the modules to come are stand-ins), executes `quake.rc` and `default.cfg`, and writes WinQuake's bindings to `config.cfg`. net_main.c and net_loop.c move to milestone 7, where the server uses them; host_cmd.c's commands to 5 and 7* |
 | 5 | Client & demos | `cl_*` parse and interpolate; **demo1-3 play with the client state in sync on every frame** (no rendering yet) |
 | 6 | Software renderer & 2D | `r_*`/`d_*`, `draw`, `screen`, `console`, `sbar`; **every frame of demo1-3 pixel-exact** at 320×200 and a larger mode; menus |
 | 7 | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable |
@@ -452,6 +459,8 @@ Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 f
 | 20 | Engine object | One `QuakeEngine` with a partial file per C module and the C's names for its members (§6.2 rule 13), instead of a class per subsystem: the modules reach into each other's globals as freely as the C does | 2026-10-12 |
 | 21 | Line buffer remnants | `Cbuf_Execute`'s line buffer is kept and passed whole so `COM_Parse` reads past an unterminated quote as the C does; between frames QuakeSharp keeps what the last line left (§3.2) | 2026-10-12 |
 | 22 | Memory limits | The zone's 48 KB and the hunk's 16 MB are not emulated: what would fill them runs on (§3.2) | 2026-10-12 |
+| 23 | Where files go | Files the game writes go to a user folder (`%APPDATA%\QuakeSharp\<game dir>`), searched before the game directory's own loose files; the installation is only read (§9) | 2026-10-12 |
+| 24 | Network VCR | net_vcr.c's recorder (`-record`, `-playback`: id's network debugging aid) is not ported | 2026-10-12 |
 | 15 | Oracle build | WinQuake's sources are copied and patched in the oracle's work folder (`quake-oracle.patch`: only `id386` off so far), never in `reference/Quake`; its platform layer lives in `tools/oracle/src` (§10) | 2026-10-12 |
 | 16 | Shaders in CI | The shaders are compiled at build time and embedded; CI downloads Slang 2026.18 from its GitHub release, checks its SHA-256 and caches it, rather than committing SPIR-V (§4) | 2026-10-12 |
 | 17 | Presentation | Two passes, integer nearest-neighbour then linear to the 4:3 rectangle, letterboxed; a UNORM swapchain so the palette's colours pass unchanged; borderless fullscreen by default, `-window`, `-noaspect` (§6.4) | 2026-10-12 |

@@ -24,6 +24,7 @@ Dictionary<string, long> keyDefines = Defines(File.ReadAllText(Path.Combine(src,
 Write("UI/Keys.g.cs", GenerateKeys());
 Write("UI/QuakeEngine.Keys.g.cs", GenerateKeyNames());
 Write("Protocol.g.cs", GenerateProtocol());
+Write("QuakeDef.g.cs", GenerateQuakeDef());
 WriteTo("QuakeSharp.Platform.Sdl", "ScanToKey.g.cs", GenerateScanToKey());
 return 0;
 
@@ -53,6 +54,35 @@ string GenerateProtocol()
     foreach (Match m in Regex.Matches(Source("protocol.h"), @"^\s*#define\s+(\w+)\s+(\(1<<\d+\)|\d+)\s*$", RegexOptions.Multiline))
     {
         sb.AppendLine($"    public const int {m.Groups[1].Value} = {m.Groups[2].Value.Replace("<<", " << ")};");
+    }
+
+    sb.AppendLine("}");
+    return sb.ToString();
+}
+
+// quakedef.h: the numeric #defines (limits, stats, item bits...), not the build switches id386 and UNALIGNED_OK
+string GenerateQuakeDef()
+{
+    var sb = Header("quakedef.h", "QuakeSharp.Core");
+    sb.AppendLine("public static partial class QuakeDef");
+    sb.AppendLine("{");
+    foreach (Match m in Regex.Matches(Source("quakedef.h"), @"^\s*#define\s+(\w+)\s+(\(1<<\d+\)|0x[0-9a-fA-F]+|\d+)\s*$", RegexOptions.Multiline))
+    {
+        string name = m.Groups[1].Value;
+        if (name is "id386" or "UNALIGNED_OK")
+        {
+            continue;
+        }
+
+        string value = m.Groups[2].Value.Replace("<<", " << ");
+
+        // 2147483648 is unsigned in C; Quake stores it in int fields, where it wraps (rogue's RIT_SUPERHEALTH)
+        if (long.TryParse(value, out long number) && number > int.MaxValue)
+        {
+            value = $"unchecked((int){value})";
+        }
+
+        sb.AppendLine($"    public const int {name} = {value};");
     }
 
     sb.AppendLine("}");

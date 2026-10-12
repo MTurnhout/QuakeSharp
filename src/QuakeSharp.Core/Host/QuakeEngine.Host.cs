@@ -1,8 +1,50 @@
+using System.Text;
+using QuakeSharp.Core.Client;
 using QuakeSharp.Core.Common;
+using QuakeSharp.Core.Server;
+using static QuakeSharp.Core.Common.QString;
+using static QuakeSharp.Core.QuakeDef;
 
 namespace QuakeSharp.Core;
 
-// host.c: the host's state (its functions are ported with the frame loop)
+/// <summary>host.c: host_abortserver. Host_Error and Host_EndGame throw it; _Host_Frame catches it, as its setjmp.</summary>
+public sealed class HostAbortException : Exception
+{
+    public HostAbortException()
+    {
+    }
+
+    public HostAbortException(string message)
+        : base(message)
+    {
+    }
+
+    public HostAbortException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>sys_win.c: Sys_Quit. The host has shut down; the program ends.</summary>
+public sealed class QuitException : Exception
+{
+    public QuitException()
+    {
+    }
+
+    public QuitException(string message)
+        : base(message)
+    {
+    }
+
+    public QuitException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+// host.c: the host. A server can always be started, even if the system started out as a client to a remote system.
+// A client can NOT be started if the system started as a dedicated server.
 public sealed partial class QuakeEngine
 {
     /// <summary>true if into command execution</summary>
@@ -20,6 +62,20 @@ public sealed partial class QuakeEngine
 
     public int host_framecount;
 
+    public int minimum_memory;
+
+    /// <summary>host.c: host_client, the current client</summary>
+    public ServerClient? host_client;
+
+    /// <summary>host.c: host_basepal, gfx/palette.lmp</summary>
+    public byte[] host_basepal = [];
+
+    /// <summary>host.c: host_colormap, gfx/colormap.lmp</summary>
+    public byte[] host_colormap = [];
+
+    /// <summary>sys_win.c: isDedicated (-dedicated)</summary>
+    public bool isDedicated;
+
     // host.c: the host's cvars
     public readonly Cvar host_framerate = new("host_framerate", "0"); // set for slow motion
     public readonly Cvar host_speeds = new("host_speeds", "0"); // set for running times
@@ -36,4 +92,493 @@ public sealed partial class QuakeEngine
     public readonly Cvar coop = new("coop", "0"); // 0 or 1
     public readonly Cvar pausable = new("pausable", "1");
     public readonly Cvar temp1 = new("temp1", "0");
+
+    // host.c: Host_Error's static inerror, Host_Shutdown's static isdown
+    private bool host_inerror;
+    private bool host_isdown;
+
+    // host.c: _Host_Frame's static time1, time2, time3; Host_Frame's static timetotal, timecount
+    private double host_time1, host_time2, host_time3;
+    private double host_timetotal;
+    private int host_timecount;
+
+    // host.c: Host_EndGame
+    public HostAbortException Host_EndGame(string message, params ReadOnlySpan<PrintfArg> args)
+    {
+        string @string = CFormat.Sprintf(message, args);
+        Con_DPrintf("Host_EndGame: %s\n", @string);
+
+        if (sv.active)
+        {
+            Host_ShutdownServer(false);
+        }
+
+        if (cls.state == cactive_t.ca_dedicated)
+        {
+            throw Sys_Error("Host_EndGame: %s\n", @string); // dedicated servers exit
+        }
+
+        if (cls.demonum != -1)
+        {
+            CL_NextDemo();
+        }
+        else
+        {
+            CL_Disconnect();
+        }
+
+        return new HostAbortException(@string);
+    }
+
+    // host.c: Host_Error
+    // This shuts down both the client and server
+    public HostAbortException Host_Error(string error, params ReadOnlySpan<PrintfArg> args)
+    {
+        if (host_inerror)
+        {
+            throw Sys_Error("Host_Error: recursively entered");
+        }
+
+        host_inerror = true;
+
+        SCR_EndLoadingPlaque(); // reenable screen updates
+
+        string @string = CFormat.Sprintf(error, args);
+        Con_Printf("Host_Error: %s\n", @string);
+
+        if (sv.active)
+        {
+            Host_ShutdownServer(false);
+        }
+
+        if (cls.state == cactive_t.ca_dedicated)
+        {
+            throw Sys_Error("Host_Error: %s\n", @string); // dedicated servers exit
+        }
+
+        CL_Disconnect();
+        cls.demonum = -1;
+
+        host_inerror = false;
+
+        return new HostAbortException(@string);
+    }
+
+    // host.c: Host_FindMaxClients
+    public void Host_FindMaxClients()
+    {
+        int i;
+
+        svs.maxclients = 1;
+
+        i = COM_CheckParm("-dedicated");
+        if (i != 0)
+        {
+            cls.state = cactive_t.ca_dedicated;
+            if (i != com_argv.Argc - 1)
+            {
+                svs.maxclients = Q_atoi(com_argv.Argv(i + 1));
+            }
+            else
+            {
+                svs.maxclients = 8;
+            }
+        }
+        else
+        {
+            cls.state = cactive_t.ca_disconnected;
+        }
+
+        i = COM_CheckParm("-listen");
+        if (i != 0)
+        {
+            if (cls.state == cactive_t.ca_dedicated)
+            {
+                throw Sys_Error("Only one of -dedicated or -listen can be specified");
+            }
+
+            if (i != com_argv.Argc - 1)
+            {
+                svs.maxclients = Q_atoi(com_argv.Argv(i + 1));
+            }
+            else
+            {
+                svs.maxclients = 8;
+            }
+        }
+
+        if (svs.maxclients < 1)
+        {
+            svs.maxclients = 8;
+        }
+        else if (svs.maxclients > MAX_SCOREBOARD)
+        {
+            svs.maxclients = MAX_SCOREBOARD;
+        }
+
+        svs.maxclientslimit = svs.maxclients;
+        if (svs.maxclientslimit < 4)
+        {
+            svs.maxclientslimit = 4;
+        }
+
+        svs.clients = [.. Enumerable.Range(0, svs.maxclientslimit).Select(_ => new ServerClient())];
+
+        if (svs.maxclients > 1)
+        {
+            Cvar_SetValue("deathmatch", 1.0f);
+        }
+        else
+        {
+            Cvar_SetValue("deathmatch", 0.0f);
+        }
+    }
+
+    // host.c: Host_InitLocal
+    public void Host_InitLocal()
+    {
+        Host_InitCommands();
+
+        Cvar_RegisterVariable(host_framerate);
+        Cvar_RegisterVariable(host_speeds);
+
+        Cvar_RegisterVariable(sys_ticrate);
+        Cvar_RegisterVariable(serverprofile);
+
+        Cvar_RegisterVariable(fraglimit);
+        Cvar_RegisterVariable(timelimit);
+        Cvar_RegisterVariable(teamplay);
+        Cvar_RegisterVariable(samelevel);
+        Cvar_RegisterVariable(noexit);
+        Cvar_RegisterVariable(skill);
+        Cvar_RegisterVariable(developer);
+        Cvar_RegisterVariable(deathmatch);
+        Cvar_RegisterVariable(coop);
+
+        Cvar_RegisterVariable(pausable);
+
+        Cvar_RegisterVariable(temp1);
+
+        Host_FindMaxClients();
+
+        host_time = 1.0; // so a think at time 0 won't get called
+    }
+
+    // host.c: Host_WriteConfiguration
+    // Writes key bindings and archived cvars to config.cfg
+    public void Host_WriteConfiguration()
+    {
+        // dedicated servers initialize the host but don't parse and set the config.cfg cvars
+        if (host_initialized && !isDedicated)
+        {
+            var f = new StringBuilder();
+            Key_WriteBindings(f);
+            Cvar_WriteVariables(f);
+            try
+            {
+                // fopen (..., "w"): text mode, so each \n is written as \r\n, as WinQuake writes it
+                File.WriteAllText(fileSystem.WritePath("config.cfg"),
+                    f.ToString().Replace("\n", "\r\n", StringComparison.Ordinal), Encoding.Latin1);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Con_Printf("Couldn't write config.cfg.\n");
+            }
+        }
+    }
+
+    // host.c: Host_FilterTime
+    // Returns false if the time is too short to run a frame
+    public bool Host_FilterTime(float time)
+    {
+        realtime += time;
+
+        if (!cls.timedemo && realtime - oldrealtime < 1.0 / 72.0)
+        {
+            return false; // framerate is too high
+        }
+
+        host_frametime = realtime - oldrealtime;
+        oldrealtime = realtime;
+
+        if (host_framerate.value > 0)
+        {
+            host_frametime = host_framerate.value;
+        }
+        else
+        {
+            // don't allow really long or short frames
+            if (host_frametime > 0.1)
+            {
+                host_frametime = 0.1;
+            }
+
+            if (host_frametime < 0.001)
+            {
+                host_frametime = 0.001;
+            }
+        }
+
+        return true;
+    }
+
+    // host.c: Host_GetConsoleCommands
+    // Add them exactly as if they had been typed at the console (a dedicated server's console: there is none here)
+    public static void Host_GetConsoleCommands()
+    {
+    }
+
+    // host.c: _Host_Frame
+    // Runs all active servers
+    private void _Host_Frame(float time)
+    {
+        int pass1, pass2, pass3;
+
+        try
+        {
+            // keep the random time dependent
+            rand();
+
+            // decide the simulation time
+            if (!Host_FilterTime(time))
+            {
+                return; // don't run too fast, or packets will flood out
+            }
+
+            // get new key events
+            Sys_SendKeyEvents();
+
+            // allow mice or other external controllers to add commands
+            IN_Commands();
+
+            // process console commands
+            Cbuf_Execute();
+
+            NET_Poll();
+
+            // if running the server locally, make intentions now
+            if (sv.active)
+            {
+                CL_SendCmd();
+            }
+
+            // -------------------
+            // server operations
+            // -------------------
+
+            // check for commands typed to the host
+            Host_GetConsoleCommands();
+
+            if (sv.active)
+            {
+                Host_ServerFrame();
+            }
+
+            // -------------------
+            // client operations
+            // -------------------
+
+            // if running the server remotely, send intentions now after
+            // the incoming messages have been read
+            if (!sv.active)
+            {
+                CL_SendCmd();
+            }
+
+            host_time += host_frametime;
+
+            // fetch results from server
+            if (cls.state == cactive_t.ca_connected)
+            {
+                CL_ReadFromServer();
+            }
+
+            // update video
+            if (host_speeds.value != 0)
+            {
+                host_time1 = Sys_FloatTime();
+            }
+
+            SCR_UpdateScreen();
+
+            if (host_speeds.value != 0)
+            {
+                host_time2 = Sys_FloatTime();
+            }
+
+            // update audio
+            if (cls.signon == SIGNONS)
+            {
+                S_Update(r_origin, vpn, vright, vup);
+                CL_DecayLights();
+            }
+            else
+            {
+                S_Update(MathLib.vec3_origin, MathLib.vec3_origin, MathLib.vec3_origin, MathLib.vec3_origin);
+            }
+
+            CDAudio_Update();
+
+            if (host_speeds.value != 0)
+            {
+                pass1 = Numerics.X86.FtoI((host_time1 - host_time3) * 1000);
+                host_time3 = Sys_FloatTime();
+                pass2 = Numerics.X86.FtoI((host_time2 - host_time1) * 1000);
+                pass3 = Numerics.X86.FtoI((host_time3 - host_time2) * 1000);
+                Con_Printf("%3i tot %3i server %3i gfx %3i snd\n", pass1 + pass2 + pass3, pass1, pass2, pass3);
+            }
+
+            host_framecount++;
+        }
+        catch (HostAbortException)
+        {
+            // something bad happened, or the server disconnected
+        }
+    }
+
+    // host.c: Host_Frame
+    public void Host_Frame(float time)
+    {
+        double time1, time2;
+        int i, c, m;
+
+        if (serverprofile.value == 0)
+        {
+            _Host_Frame(time);
+            return;
+        }
+
+        time1 = Sys_FloatTime();
+        _Host_Frame(time);
+        time2 = Sys_FloatTime();
+
+        host_timetotal += time2 - time1;
+        host_timecount++;
+
+        if (host_timecount < 1000)
+        {
+            return;
+        }
+
+        m = Numerics.X86.FtoI(host_timetotal * 1000 / host_timecount);
+        host_timecount = 0;
+        host_timetotal = 0;
+        c = 0;
+        for (i = 0; i < svs.maxclients; i++)
+        {
+            if (svs.clients[i].active)
+            {
+                c++;
+            }
+        }
+
+        Con_Printf("serverprofile: %2i clients %2i msec\n", c, m);
+    }
+
+    // host.c: Host_Init (net_vcr.c's recorder, Host_InitVCR, is not ported: a debugging aid of id's network code)
+    public void Host_Init()
+    {
+        if (com_argv.standard_quake)
+        {
+            minimum_memory = MINIMUM_MEMORY;
+        }
+        else
+        {
+            minimum_memory = MINIMUM_MEMORY + 0x100000; // MINIMUM_MEMORY_LEVELPAK
+        }
+
+        if (COM_CheckParm("-minmemory") != 0)
+        {
+            host_parms.memsize = minimum_memory;
+        }
+
+        if (host_parms.memsize < minimum_memory)
+        {
+            throw Sys_Error("Only %4.1f megs of memory available, can't execute game", host_parms.memsize / (float)0x100000);
+        }
+
+        isDedicated = COM_CheckParm("-dedicated") != 0;
+
+        Memory_Init();
+        Cbuf_Init();
+        Cmd_Init();
+        V_Init();
+        Chase_Init();
+        COM_Init(host_parms.basedir);
+        Host_InitLocal();
+        W_LoadWadFile("gfx.wad");
+        Key_Init();
+        Con_Init();
+        M_Init();
+        PR_Init();
+        Mod_Init();
+        NET_Init();
+        SV_Init();
+
+        Con_Printf("Exe: 09:30:49 Mar 21 1997\n"); // "Exe: "__TIME__" "__DATE__": Winquake.exe 1.09's
+        Con_Printf("%4.1f megabyte heap\n", host_parms.memsize / (1024 * 1024.0));
+
+        R_InitTextures(); // needed even for dedicated servers
+
+        if (cls.state != cactive_t.ca_dedicated)
+        {
+            host_basepal = COM_LoadHunkFile("gfx/palette.lmp") ?? throw Sys_Error("Couldn't load gfx/palette.lmp");
+            host_colormap = COM_LoadHunkFile("gfx/colormap.lmp") ?? throw Sys_Error("Couldn't load gfx/colormap.lmp");
+
+            VID_Init(host_basepal);
+
+            Draw_Init();
+            SCR_Init();
+            R_Init();
+
+            // on Win32, sound initialization has to come before video initialization (vid_win.c's VID_Init calls
+            // S_Init)
+            CDAudio_Init();
+            Sbar_Init();
+            CL_Init();
+            IN_Init();
+        }
+
+        Cbuf_InsertText("exec quake.rc\n");
+
+        host_initialized = true;
+
+        Sys_Printf("========Quake Initialized=========\n");
+    }
+
+    // host.c: Host_Shutdown
+    // FIXME: this is a callback from Sys_Quit and Sys_Error. It would be better to run quit through here before the
+    // final handoff to the sys code.
+    public void Host_Shutdown()
+    {
+        if (host_isdown)
+        {
+            Sys_Printf("recursive shutdown\n");
+            return;
+        }
+
+        host_isdown = true;
+
+        // keep Con_Printf from trying to update the screen
+        scr_disabled_for_loading = true;
+
+        Host_WriteConfiguration();
+
+        CDAudio_Shutdown();
+        NET_Shutdown();
+        S_Shutdown();
+        IN_Shutdown();
+
+        if (cls.state != cactive_t.ca_dedicated)
+        {
+            VID_Shutdown();
+        }
+    }
+
+    // sys_win.c: Sys_Quit: the host shuts down and the program ends
+    public QuitException Sys_Quit()
+    {
+        Host_Shutdown();
+        return new QuitException();
+    }
 }

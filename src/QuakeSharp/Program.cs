@@ -3,14 +3,14 @@ using System.Diagnostics;
 using System.Globalization;
 using QuakeSharp.Core;
 using QuakeSharp.Core.Common;
-using QuakeSharp.Core.Sound;
-using QuakeSharp.Core.UI;
+using QuakeSharp.Core.Platform;
 using QuakeSharp.Platform.Sdl;
 using QuakeSharp.Render.Vulkan;
 
-// Milestone 3: the platform and the presentation, before there is an engine to run. Shows gfx/conback.lmp through the
-// game's palette in the window (borderless over the screen; -window for a window, -noaspect for square pixels), logs
-// the key events as Quake's key numbers, and plays the sound device's (silent) buffer. Escape quits.
+// sys_win.c: WinMain. The engine runs Host_Init and then Host_Frame on the real clock. Until the renderer is ported
+// (milestone 6) the window shows gfx/conback.lmp and the console's text goes to stdout; keys reach the engine (type
+// "echo hello" and Enter). Closing the window quits. -window opens a window, -noaspect shows square pixels,
+// -vkvalidation turns on the Vulkan validation layer, -quitafter <seconds> quits by itself.
 var commandLine = new CommandLine(["quakesharp", .. args]);
 try
 {
@@ -25,18 +25,6 @@ catch (QuakeException e)
 
 static int Run(CommandLine commandLine)
 {
-    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"QuakeSharp, a port of WinQuake {QuakeDef.VERSION:F2}"));
-
-    var fileSystem = new FileSystem(commandLine, Console.Write, _ => { });
-    fileSystem.InitFilesystem(".");
-    byte[] palette = fileSystem.LoadFile("gfx/palette.lmp") ?? throw new QuakeException("Couldn't load gfx/palette.lmp");
-    byte[] conback = fileSystem.LoadFile("gfx/conback.lmp") ?? throw new QuakeException("Couldn't load gfx/conback.lmp");
-
-    // wad.h: qpic_t
-    int width = BinaryPrimitives.ReadInt32LittleEndian(conback);
-    int height = BinaryPrimitives.ReadInt32LittleEndian(conback.AsSpan(4));
-    byte[] frame = conback.AsSpan(8, width * height).ToArray();
-
     using var window = new SdlWindow("QuakeSharp", 960, 720, fullscreen: commandLine.CheckParm("-window") == 0);
     using var presenter = new VulkanPresenter(
         new VulkanSurfaceSource(window.RequiredVulkanInstanceExtensions, window.CreateVulkanSurface, () => window.PixelSize),
@@ -46,45 +34,56 @@ static int Run(CommandLine commandLine)
         SquarePixels = commandLine.CheckParm("-noaspect") != 0,
     };
 
-    using var sound = new SdlSoundDma();
-    Dma? shm = sound.Init();
-    Console.WriteLine(shm == null ? "No sound device" : $"Sound: {shm.speed} Hz, {shm.channels} channels, {shm.samplebits} bits");
+    // what the game writes goes to the user's folder (design.md §9)
+    string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
+    var system = new RealSystem();
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window);
 
-    // -quitafter <seconds>: for trying it out unattended
     int quitAfter = commandLine.CheckParm("-quitafter");
     double quitTime = quitAfter != 0 && quitAfter < commandLine.Argc - 1
         ? double.Parse(commandLine.Argv(quitAfter + 1), CultureInfo.InvariantCulture)
         : double.MaxValue;
 
-    bool running = true;
-    var clock = Stopwatch.StartNew();
-    double next = 0;
-    while (running && clock.Elapsed.TotalSeconds < quitTime)
+    try
     {
-        running = window.SendKeyEvents((key, down) =>
+        engine.Host_Init();
+
+        byte[] conback = engine.COM_LoadHunkFile("gfx/conback.lmp") ?? throw new QuakeException("Couldn't load gfx/conback.lmp");
+        int width = BinaryPrimitives.ReadInt32LittleEndian(conback);
+        int height = BinaryPrimitives.ReadInt32LittleEndian(conback.AsSpan(4));
+        byte[] frame = conback.AsSpan(8, width * height).ToArray();
+
+        // sys_win.c: WinMain's loop
+        double oldtime = system.FloatTime();
+        while (true)
         {
-            Console.WriteLine($"key {key} {(down ? "down" : "up")}");
-            if (key == Keys.K_ESCAPE && down)
+            double newtime = system.FloatTime();
+            engine.Host_Frame((float)(newtime - oldtime));
+            oldtime = newtime;
+
+            presenter.Present(frame, width, height, width, engine.host_basepal);
+
+            if (newtime > quitTime)
             {
-                running = false;
+                throw engine.Sys_Quit();
             }
-        }) && running;
 
-        presenter.Present(frame, width, height, width, palette);
-
-        // about 72 frames a second, Host_FilterTime's limit
-        next += 1.0 / 72;
-        double wait = next - clock.Elapsed.TotalSeconds;
-        if (wait > 0)
-        {
-            Thread.Sleep(TimeSpan.FromSeconds(wait));
-        }
-        else
-        {
-            next = clock.Elapsed.TotalSeconds;
+            // WinQuake runs Host_Frame as often as it can; a millisecond's rest changes nothing it shows
+            Thread.Sleep(1);
         }
     }
+    catch (QuitException)
+    {
+        return 0;
+    }
+}
 
-    sound.Shutdown();
-    return 0;
+/// <summary>sys_win.c's Sys_Printf and Sys_FloatTime: the console's text on stdout, the time from a stopwatch.</summary>
+internal sealed class RealSystem : ISystem
+{
+    private readonly Stopwatch clock = Stopwatch.StartNew();
+
+    public void Printf(string text) => Console.Write(text);
+
+    public double FloatTime() => clock.Elapsed.TotalSeconds;
 }

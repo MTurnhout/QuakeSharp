@@ -1,7 +1,7 @@
 namespace QuakeSharp.Core;
 
 /// <summary>Version constants of the engine QuakeSharp ports.</summary>
-public static class QuakeDef
+public static partial class QuakeDef
 {
     // quakedef.h: VERSION
     public const double VERSION = 1.09;

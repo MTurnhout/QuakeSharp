@@ -20,8 +20,14 @@ public sealed class QuakeParms
     /// <summary>com_argc and com_argv</summary>
     public CommandLine argv { get; }
 
+    /// <summary>
+    /// The folder for what the game writes (config.cfg, savegames, demos...), searched before the game directories'
+    /// own loose files; null: the game directories themselves, as WinQuake (design.md §9).
+    /// </summary>
+    public string? userdir { get; init; }
+
     /// <summary>WinQuake takes 16 MB on any machine with 32 MB or more (sys_win.c: MAXIMUM_WIN_MEMORY).</summary>
-    public int memsize { get; init; } = 0x1000000;
+    public int memsize { get; set; } = 0x1000000;
 }
 
 /// <summary>
@@ -32,12 +38,16 @@ public sealed class QuakeParms
 /// </summary>
 public sealed partial class QuakeEngine
 {
-    public QuakeEngine(QuakeParms parms, ISystem system)
+    public QuakeEngine(QuakeParms parms, ISystem system, IInputEvents? input = null)
     {
         host_parms = parms;
         this.system = system;
+        this.input = input;
         com_argv = parms.argv;
-        fileSystem = new FileSystem(parms.argv, text => Con_Printf("%s", text), text => Sys_Printf("%s", text));
+        fileSystem = new FileSystem(parms.argv, text => Con_Printf("%s", text), text => Sys_Printf("%s", text))
+        {
+            UserDir = parms.userdir,
+        };
     }
 
     /// <summary>host.c: host_parms</summary>
@@ -47,6 +57,8 @@ public sealed partial class QuakeEngine
     public CommandLine com_argv { get; }
 
     private readonly ISystem system;
+    private readonly IInputEvents? input;
+    private readonly Numerics.CRand crand = new();
     private readonly FileSystem fileSystem;
 
     // common.c: COM_CheckParm
@@ -61,6 +73,24 @@ public sealed partial class QuakeEngine
 
     // sys_win.c: Sys_FloatTime
     public double Sys_FloatTime() => system.FloatTime();
+
+    // sys_win.c: Sys_SendKeyEvents: the window's events, keys to Key_Event; closing the window quits (WinQuake asks
+    // first)
+    public void Sys_SendKeyEvents()
+    {
+        if (input != null && !input.SendKeyEvents(Key_Event))
+        {
+            throw Sys_Quit();
+        }
+    }
+
+    // The C runtime's rand and srand: one generator for the whole engine (design.md §3.1)
+    public int rand() => crand.rand();
+
+    public void srand(uint seed) => crand.srand(seed);
+
+    /// <summary>The state of rand's generator, for the traces.</summary>
+    public uint RandSeed => crand.Seed;
 
     // common.c: va (does a varargs printf into a temp buffer)
     public static string va(string format, params ReadOnlySpan<PrintfArg> args) => CFormat.Sprintf(format, args);

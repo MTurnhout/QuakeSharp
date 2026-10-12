@@ -186,8 +186,7 @@ public sealed partial class QuakeEngine
         {
             if (com_gamedir.Length < MAXGAMEDIRLEN - t2.Length)
             {
-                string temp = com_gamedir + t2;
-                File.Delete(temp);
+                File.Delete(fileSystem.WritePath(t2[1..]));
             }
         }
 
@@ -332,7 +331,7 @@ public sealed partial class QuakeEngine
         // log all messages to file
         if (con_debuglog)
         {
-            Con_DebugLog(va("%s/qconsole.log", com_gamedir), "%s", msg);
+            Con_DebugLog(fileSystem.WritePath("qconsole.log"), "%s", msg);
         }
 
         if (!con_initialized)

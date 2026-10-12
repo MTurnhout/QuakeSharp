@@ -9,11 +9,12 @@ A faithful C# port of id Software's Quake, translated from the original source r
 
 See [design.md](design.md) for the full design and milestones.
 
-> **Status:** milestone 3: the Quake file system, pack files and gfx.wad are ported, game data is identified by MD5,
-> the C library's maths functions (from musl) and `rand()` are ported bit for bit, the reference oracle (WinQuake 1.09's
-> own C, built headless) traces every demo frame by frame, and the platform layer shows 8-bit frames through Vulkan,
-> reads keys as WinQuake does and opens the sound device. Nothing is playable yet: the executable shows the console
-> background and logs the keys (Escape quits).
+> **Status:** milestone 4: the Quake file system, pack files and gfx.wad, the C library's maths functions (from musl)
+> and `rand()`, the host's frame loop, the commands, cvars, console text and keys are ported and checked against
+> WinQuake 1.09's own C, built headless as a reference oracle that traces every demo frame by frame; the platform
+> layer shows 8-bit frames through Vulkan, reads keys as WinQuake does and opens the sound device. Nothing is playable
+> yet: the executable runs the host (`quake.rc`, `default.cfg`), prints the console's text to its output and shows
+> the console background.
 
 ## Game data
 
@@ -38,7 +39,9 @@ cd path/to/Quake
 dotnet run --project path/to/QuakeSharp/src/QuakeSharp -- -window
 ```
 
-`-window` opens a window instead of covering the screen, `-noaspect` shows square pixels instead of a 4:3 picture,
+Closing the window quits. Settings (`config.cfg`) and everything else the game writes go to `%APPDATA%\QuakeSharp`
+(`~/.config/QuakeSharp` on Linux), never into the Quake folder. `-window` opens a window instead of covering the
+screen, `-noaspect` shows square pixels instead of a 4:3 picture,
 `-vkvalidation` turns on the Vulkan validation layer (it comes with the Vulkan SDK).
 
 ## Developer tools

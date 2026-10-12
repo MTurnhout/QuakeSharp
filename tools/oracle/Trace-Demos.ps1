@@ -10,6 +10,7 @@ Each trace starts from a clean game folder: the oracle's Quake folder holds only
   <demo>.320x200.trace  the same at 320x200 (DOS Quake's mode 0)
   <demo>.640x480.trace  the same at 640x480
   attract.trace         the attract loop (no command line), for -AttractFrames frames
+  attract.config.cfg    the config.cfg the oracle writes when it quits after the attract loop
 
 .PARAMETER Oracle
 quake-oracle.exe, as Build-Oracle.ps1 builds it.
@@ -64,3 +65,7 @@ foreach ($demo in 'demo1', 'demo2', 'demo3') {
     Trace "$demo.640x480" @('-oraclevid', '640', '480', '-tracequitafterdemo', '+playdemo', $demo)
 }
 Trace 'attract' @('-oracleframes', "$AttractFrames")
+
+# the config.cfg the oracle wrote when it quit: the bindings and archived cvars after quake.rc
+Copy-Item (Join-Path $id1 'config.cfg') (Join-Path $OutDir 'attract.config.cfg')
+Write-Host 'attract.config.cfg'

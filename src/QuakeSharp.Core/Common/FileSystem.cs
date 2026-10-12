@@ -13,6 +13,10 @@ namespace QuakeSharp.Core.Common;
 /// managed buffer; the developers' -cachedir copying is left out; and file names on disk are matched without regard
 /// to case where the file system is case sensitive (the Steam release's files are upper case: id1/PAK0.PAK), while
 /// names inside pack files still compare exactly, as in C.
+///
+/// With a <see cref="UserDir"/>, what the game writes into its game directory (config.cfg, savegames, demos,
+/// screenshots, qconsole.log) goes to the game directory's namesake under it instead, and a game directory's loose
+/// files are looked for there first, then in the game directory itself (design.md §9).
 /// </remarks>
 public sealed partial class FileSystem
 {
@@ -48,6 +52,30 @@ public sealed partial class FileSystem
 
     /// <summary>common.c: com_gamedir</summary>
     public string GameDir { get; private set; } = "";
+
+    /// <summary>
+    /// The folder that takes the game's writes and is searched before each game directory's own loose files: its
+    /// namesake under this folder (id1, a -game directory...). Null: the game directory itself, as in WinQuake.
+    /// </summary>
+    public string? UserDir { get; init; }
+
+    /// <summary>Where a file the game writes into com_gamedir goes: the game directory's folder under
+    /// <see cref="UserDir"/>, or com_gamedir itself.</summary>
+    public string WritePath(string filename)
+    {
+        string dir = UserDirFor(GameDir) ?? GameDir;
+        string path = $"{dir}/{filename}";
+        if (UserDir != null)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        }
+
+        return HostPath.ResolveForWrite(path);
+    }
+
+    // A game directory's namesake under UserDir
+    private string? UserDirFor(string dir) =>
+        UserDir == null || dir.Length == 0 ? null : Path.Combine(UserDir, Path.GetFileName(dir.TrimEnd('/', '\\')));
 
     /// <summary>common.c: com_modified, set true if using non-id files</summary>
     public bool Modified { get; private set; }
@@ -286,7 +314,12 @@ public sealed partial class FileSystem
                 }
 
                 string netpath = $"{search.FileName}/{filename}";
-                string? path = HostPath.Resolve(netpath);
+                string? path = UserDirFor(search.FileName) is string user ? HostPath.Resolve($"{user}/{filename}") : null;
+                if (path == null || !File.Exists(path))
+                {
+                    path = HostPath.Resolve(netpath);
+                }
+
                 if (path == null || !File.Exists(path))
                 {
                     continue;
@@ -341,7 +374,7 @@ public sealed partial class FileSystem
         FileStream handle;
         try
         {
-            handle = new FileStream(HostPath.ResolveForWrite(name), FileMode.Create, FileAccess.Write);
+            handle = new FileStream(WritePath(filename), FileMode.Create, FileAccess.Write);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
