@@ -152,6 +152,23 @@ index 8607419..50de739 100644
  // cache align
  	pfinalverts = (finalvert_t *)
  			(((long)&finalverts[0] + CACHE_SIZE - 1) & ~(CACHE_SIZE - 1));
+diff --git a/snd_dma.c b/snd_dma.c
+index 4240a12..a564e73 100644
+--- a/snd_dma.c
++++ b/snd_dma.c
+@@ -123,7 +123,12 @@ void S_SoundInfo_f(void)
+     Con_Printf("%5d samplebits\n", shm->samplebits);
+     Con_Printf("%5d submission_chunk\n", shm->submission_chunk);
+     Con_Printf("%5d speed\n", shm->speed);
++#ifdef ORACLE
++// the buffer's address depends on the build: print 0, as QuakeSharp does
++    Con_Printf("0x%x dma buffer\n", 0);
++#else
+     Con_Printf("0x%x dma buffer\n", shm->buffer);
++#endif
+ 	Con_Printf("%5d total_channels\n", total_channels);
+ }
+ 
 diff --git a/world.c b/world.c
 index e1acfea..b2e7850 100644
 --- a/world.c

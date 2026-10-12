@@ -43,7 +43,8 @@ menu's name and colours sent to it), `tour.trace` (every map of the four episode
 maps in turn, 600 frames each, in god mode with all the weapons, shooting while turning and moving; the routes through
 walls are flown with `noclip`, planned from the edicts' positions in `-tracedump`), and `e1.trace`: a game played by
 hand in QuakeSharp and recorded with `-recordevents`, from the menu through e1m1 into e1m2, ending on the quit screen
-(24,500 frames).
+(24,500 frames), and `sound.trace`: the sound and CD commands and cvars, the menu's volume sliders, a game's
+pause and level changes (3,500 frames), also traced with `-nosound -nocdaudio` (`sound.nosound.trace`).
 
 ## How the oracle is built
 
@@ -53,7 +54,8 @@ hand in QuakeSharp and recorded with `-recordevents`, from the menu through e1m1
   (its menus, its console stamp "(WinQuake) 1.09", S_Init from the video driver).
 - **Its other changes** (`quake-oracle.patch`, each under `ORACLE`): fixed substitutes for memory the C reads without
   owning it (design.md §3.3: `R_AliasDrawModel`'s `finalverts` start zeroed; `COM_FileBase` stops at the start of a
-  name without `/`, where it read the memory before it), and three hooks for the traces that change nothing:
+  name without `/`, where it read the memory before it; `soundinfo` prints 0 for the sound buffer's address, which
+  moves with every build), and three hooks for the traces that change nothing:
   `NET_SendMessage` and `NET_SendUnreliableMessage` pass every message to `Trace_Message`, world.c's
   `Oracle_AreaLinks` lists the area nodes' edicts, and cd_win.c's `Oracle_CDState` gives its static state.
 - **Floating point** as design.md §3.1: SSE2, every float operation rounded to single precision.

@@ -26,7 +26,8 @@ public sealed class HostTests : IDisposable
 
         var console = new StringBuilder();
         var system = new VirtualSystem(t => console.Append(t));
-        var engine = new QuakeEngine(new QuakeParms(baseDir, new CommandLine(["quake"])) { userdir = userdir }, system);
+        var engine = new QuakeEngine(new QuakeParms(baseDir, new CommandLine(["quake"])) { userdir = userdir }, system,
+            cd: new Core.Sound.VirtualCdDrive());
         engine.Host_Init();
         for (int frame = 1; frame <= 10; frame++)
         {

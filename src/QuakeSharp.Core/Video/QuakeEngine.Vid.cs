@@ -273,4 +273,33 @@ public sealed partial class QuakeEngine
 
     // vid_win.c: VID_HandlePause (releases the mouse while paused; the platform's input, milestone 6)
     public static void VID_HandlePause(bool pause) => _ = pause;
+
+    // vid_win.c: ActiveApp, and AppActivate's static sound_active
+    public bool ActiveApp = true;
+    private bool sound_active;
+
+    // vid_win.c: AppActivate, its part the game shows (the palette and the mouse are the platform's): the sound blocked
+    // and its buffer cleared when the window loses the focus, unblocked and cleared when it gets it back. The platform
+    // calls it from its events, as WM_ACTIVATE does; never in a trace or a recording, as the oracle never loses the
+    // focus (design.md §7.1). minimize only counts in the full-screen DIB modes (vid_fulldib_on_focus_mode), never in
+    // a window
+    public void AppActivate(bool fActive, bool minimize)
+    {
+        _ = minimize;
+        ActiveApp = fActive;
+
+        // enable/disable sound on focus gain/loss
+        if (!ActiveApp && sound_active)
+        {
+            S_BlockSound();
+            S_ClearBuffer();
+            sound_active = false;
+        }
+        else if (ActiveApp && !sound_active)
+        {
+            S_UnblockSound();
+            S_ClearBuffer();
+            sound_active = true;
+        }
+    }
 }

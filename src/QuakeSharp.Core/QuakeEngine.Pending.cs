@@ -19,32 +19,6 @@ public sealed partial class QuakeEngine
     {
     }
 
-    // cd_win.c: CDAudio_Init, CDAudio_Update, CDAudio_Shutdown, CDAudio_Play, CDAudio_Pause, CDAudio_Resume
-    // (milestone 8)
-    public void CDAudio_Init()
-    {
-    }
-
-    public void CDAudio_Update()
-    {
-    }
-
-    public void CDAudio_Shutdown()
-    {
-    }
-
-    public void CDAudio_Play(byte track, bool looping)
-    {
-    }
-
-    public void CDAudio_Pause()
-    {
-    }
-
-    public void CDAudio_Resume()
-    {
-    }
-
     // in_win.c: IN_Init, IN_Commands, IN_Shutdown, IN_Move, IN_Accumulate, IN_ClearStates (milestone 6, with the
     // mouse)
     public void IN_Init()

@@ -45,7 +45,8 @@ public sealed class TraceRun
             },
             system,
             input: events,
-            sound: new VirtualSoundDma(system));
+            sound: new VirtualSoundDma(system),
+            cd: new VirtualCdDrive());
         writer = new TraceWriter(Engine, framesPerSecond);
         if (events != null)
         {

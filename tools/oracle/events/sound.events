@@ -1,0 +1,132 @@
+100 soundinfo
+110 soundlist
+130 play misc/talk.wav
+160 playvol weapons/r_exp3.wav 0.4
+200 play misc/secret.wav
+210 play items/health1.wav
+260 stopsound
+300 volume 0.3
+330 play misc/talk.wav
+400 volume 1
+420 loadas8bit 1
+430 play items/armor1.wav
+480 loadas8bit 0
+500 ambient_level 0.6
+510 ambient_fade 50
+560 ambient_level 0.3
+570 ambient_fade 100
+600 _snd_mixahead 0.2
+650 play player/plyrjmp8.wav
+700 _snd_mixahead 0.05
+730 play misc/talk.wav
+760 _snd_mixahead 0.1
+800 snd_noextraupdate 1
+900 snd_noextraupdate 0
+950 nosound 1
+960 play misc/secret.wav
+1050 nosound 0
+1100 cd info
+1110 cd remap 3 4 5
+1120 cd remap
+1130 cd play 2
+1140 cd info
+1150 cd pause
+1160 cd info
+1170 cd resume
+1180 cd loop 5
+1190 cd stop
+1200 cd info
+1210 cd off
+1220 cd play 4
+1230 cd on
+1235 developer 1
+1240 cd play 12
+1250 cd play 1
+1260 cd reset
+1270 cd play 1
+1280 cd eject
+1290 cd info
+1300 cd play 3
+1310 cd close
+1320 cd loop 3
+1330 cd foo
+1340 cd
+1345 developer 0
+1400 bgmvolume 0.5
+1410 cd info
+1450 bgmvolume 0.2
+1460 cd info
+1500 @key 27 1
+1501 @key 27 0
+1540 @key 129 1
+1541 @key 129 0
+1560 @key 129 1
+1561 @key 129 0
+1580 @key 13 1
+1581 @key 13 0
+1620 @key 129 1
+1621 @key 129 0
+1640 @key 129 1
+1641 @key 129 0
+1660 @key 129 1
+1661 @key 129 0
+1680 @key 129 1
+1681 @key 129 0
+1700 @key 129 1
+1701 @key 129 0
+1720 @key 129 1
+1721 @key 129 0
+1740 @key 130 1
+1741 @key 130 0
+1780 @key 131 1
+1781 @key 131 0
+1820 @key 130 1
+1821 @key 130 0
+1840 @key 131 1
+1841 @key 131 0
+1860 @key 129 1
+1861 @key 129 0
+1880 @key 130 1
+1881 @key 130 0
+1900 @key 130 1
+1901 @key 130 0
+1920 @key 130 1
+1921 @key 130 0
+1940 @key 131 1
+1941 @key 131 0
+1960 @key 131 1
+1961 @key 131 0
+1980 @key 131 1
+1981 @key 131 0
+2000 @key 131 1
+2001 @key 131 0
+2020 @key 131 1
+2021 @key 131 0
+2060 @key 27 1
+2061 @key 27 0
+2080 @key 27 1
+2081 @key 27 0
+2100 @key 128 1
+2101 @key 128 0
+2120 @key 27 1
+2121 @key 27 0
+2200 map e1m1
+2300 +forward
+2400 -forward
+2410 impulse 2
+2420 +attack
+2500 -attack
+2510 pause
+2600 cd info
+2650 pause
+2700 +right
+2760 -right
+2770 +attack
+2850 -attack
+2900 play misc/talk.wav
+3000 changelevel e1m2
+3100 cd info
+3150 +forward
+3250 -forward
+3300 map start
+3400 cd info

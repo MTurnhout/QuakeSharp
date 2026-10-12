@@ -9,12 +9,12 @@ namespace QuakeSharp.Fidelity.Tests;
 /// frame. Every line of the oracle's trace is compared: F
 /// (time, rand()), C (cls, cl), E (the entities), D (what the renderer writes into them), X (temporary entities,
 /// beams, lights, light styles, particles), S (sound channels), T (console text), R (the view), V (the frame and
-/// the palette), and the server's lines, G (sv, svs), Q (the QuakeC globals), N (the edicts), W (the area lists) and M
-/// (the messages sent).
+/// the palette), the server's lines, G (sv, svs), Q (the QuakeC globals), N (the edicts), W (the area lists) and M
+/// (the messages sent), and the sound's of milestone 8, P (the sound device's buffer) and A (the CD).
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
-    private const string Lines = "FCEDXSTRVGQNWM";
+    private const string Lines = "FCEDXSTRVGQNWMPA";
 
     private readonly string userdir = Path.Combine(Path.GetTempPath(), "quakesharp-tests", Guid.NewGuid().ToString("N"));
 
@@ -74,7 +74,8 @@ public sealed class DemoTests : IDisposable
     // into e1m1, the server's commands with fights, saves and level changes, e1m1's exit and intermission, e1m7's
     // exit and the episode's finale, the network menus (a search, the game options starting a deathmatch, the setup),
     // a tour of every map of the episodes, the end and the deathmatch maps, fighting in each, and a game played by hand
-    // (recorded with the executable's -recordevents) from the menu through e1m1 into e1m2, ending on the quit screen
+    // (recorded with the executable's -recordevents) from the menu through e1m1 into e1m2, ending on the quit screen,
+    // and the sound's (design.md §11.2): its commands and cvars, the CD's, the menu's volume sliders, a game's pause
     [Theory]
     [InlineData("start", 2000, 320, 240, "start.trace")]
     [InlineData("commands", 3800, 320, 240, "commands.trace")]
@@ -84,6 +85,7 @@ public sealed class DemoTests : IDisposable
     [InlineData("netmenus", 3000, 320, 240, "netmenus.trace")]
     [InlineData("tour", 22200, 320, 240, "tour.trace")]
     [InlineData("e1", 24500, 320, 240, "e1.trace")]
+    [InlineData("sound", 3500, 320, 240, "sound.trace")]
     public void GamePlaysInSyncWithTheOracle(string game, int frames, int width, int height, string trace)
     {
         string baseDir = GameDataLocator.RequireBaseDir();
@@ -92,6 +94,18 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", frames.ToString(CultureInfo.InvariantCulture)], width, height);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: frames));
+    }
+
+    // The sound game without a sound device or a CD (WinQuake's -nosound and -nocdaudio)
+    [Fact]
+    public void SoundGameWithoutSoundPlaysInSyncWithTheOracle()
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile("sound.nosound.trace");
+        string events = Path.Combine(RepositoryRoot(), "tools", "oracle", "events", "sound.events");
+
+        var run = new TraceRun(baseDir, userdir, ["-nosound", "-nocdaudio", "-traceevents", events, "-oracleframes", "3500"]);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 3500));
     }
 
     private static string RepositoryRoot()

@@ -117,7 +117,7 @@ public sealed partial class QuakeEngine
 
         if (!fakedma)
         {
-            shm = sounddma?.Init();
+            shm = SNDDMA_Init();
 
             if (shm == null)
             {

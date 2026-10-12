@@ -17,7 +17,7 @@ namespace QuakeSharp.Core.Diagnostics;
 public sealed class TraceWriter
 {
     /// <summary>The trace format's version (the H line).</summary>
-    public const int Version = 4;
+    public const int Version = 5;
 
     private const ulong FNV_OFFSET = 0xcbf29ce484222325UL;
     private const ulong FNV_PRIME = 0x100000001b3UL;
@@ -30,6 +30,10 @@ public sealed class TraceWriter
     private Hash messageHash = new();
     private List<(int Sender, bool Reliable, int Result, byte[] Data)> messages = [];
     private List<(int Sender, bool Reliable, int Result, byte[] Data)> lastMessages = [];
+
+    // paintedtime when the frame running began, and when the frame just traced began (Dump writes what it painted)
+    private int framePaintedtime;
+    private int lastFramePaintedtime;
 
     public TraceWriter(QuakeEngine engine, int framesPerSecond)
     {
@@ -72,6 +76,10 @@ public sealed class TraceWriter
         messageHash = new Hash();
         (lastMessages, messages) = (messages, lastMessages);
         messages.Clear();
+        lines.Add(Invariant($"P {Paint():x16}"));
+        lines.Add(Invariant($"A {CD():x16}"));
+        lastFramePaintedtime = framePaintedtime;
+        framePaintedtime = e.paintedtime;
         return lines;
     }
 
@@ -110,6 +118,7 @@ public sealed class TraceWriter
         }
 
         DumpServer(sb);
+        DumpSound(sb);
         return sb.ToString();
     }
 
@@ -147,6 +156,54 @@ public sealed class TraceWriter
             : engine.cl.scores is { } scores && Array.FindIndex(scores, s => s.translations == e.colormap) is int n && n >= 0 && n < engine.cl.maxclients ? 1 + n
             : -1;
         sb.Append(Invariant($" model {e.model?.name ?? ""} frame {e.frame} syncbase {BitConverter.SingleToInt32Bits(e.syncbase):x8} colormap {colormap} effects {e.effects} skinnum {e.skinnum}\n"));
+    }
+
+    // the sound channels, the samples painted during the frame (in the device's buffer, from paintedtime at the frame's
+    // start to its end) and the CD's state
+    private void DumpSound(StringBuilder sb)
+    {
+        string[] cd_names = ["initialized", "enabled", "cdValid", "playing", "wasPlaying", "playLooping", "cdvolume", "playTrack", "maxTrack"];
+        QuakeEngine e = engine;
+
+        sb.Append(Invariant($"sound paintedtime {e.paintedtime} soundtime {e.soundtime} total_channels {e.total_channels}\n"));
+        for (int i = 0; i < e.total_channels; i++)
+        {
+            Channel ch = e.channels[i];
+            sb.Append(Invariant($"channel {i} sfx "));
+            DumpString(sb, ch.sfx?.name ?? "");
+            sb.Append(Invariant($" leftvol {ch.leftvol} rightvol {ch.rightvol} end {ch.end} pos {ch.pos} looping {ch.looping} entnum {ch.entnum} entchannel {ch.entchannel}"));
+            DumpVec(sb, "origin", ch.origin);
+            sb.Append(Invariant($" dist_mult {BitConverter.SingleToInt32Bits(ch.dist_mult):x8} master_vol {ch.master_vol}\n"));
+        }
+
+        if (e.sound_started != 0 && e.shm != null)
+        {
+            Core.Sound.Dma shm = e.shm;
+            int frames = shm.samples / shm.channels;
+            int size = shm.channels * (shm.samplebits / 8);
+            sb.Append(Invariant($"painted {lastFramePaintedtime} {e.paintedtime} "));
+            for (int t = lastFramePaintedtime; t < e.paintedtime && t - lastFramePaintedtime < frames; t++)
+            {
+                sb.Append(Convert.ToHexStringLower(shm.buffer, (t & (frames - 1)) * size, size));
+            }
+
+            sb.Append('\n');
+        }
+
+        int[] state = CDState();
+        sb.Append("cd");
+        for (int i = 0; i < 9; i++)
+        {
+            sb.Append(Invariant($" {cd_names[i]} {(i == 6 ? state[i].ToString("x8", CultureInfo.InvariantCulture) : state[i].ToString(CultureInfo.InvariantCulture))}"));
+        }
+
+        sb.Append(" remap");
+        for (int i = 9; i < 109; i++)
+        {
+            sb.Append(Invariant($" {state[i]}"));
+        }
+
+        sb.Append(Invariant($" drive open {state[109]} door {state[110]} mode {state[111]} track {state[112]}\n"));
     }
 
     private static void DumpVec(StringBuilder sb, string name, in Vec3 v) =>
@@ -553,6 +610,61 @@ public sealed class TraceWriter
             h.Vec(ch.origin);
             h.Float(ch.dist_mult);
             h.Int(ch.master_vol);
+        }
+
+        return h.h;
+    }
+
+    // P: the sound device's buffer, all of it: what the device plays (the samples painted, S_ClearBuffer's clears, what
+    // stays from the laps before). Without a started sound system, nothing
+    private ulong Paint()
+    {
+        var h = new Hash();
+        Core.Sound.Dma? shm = engine.shm;
+
+        if (engine.sound_started != 0 && shm != null)
+        {
+            h.Bytes(shm.buffer.AsSpan(0, shm.samples * (shm.samplebits / 8)));
+        }
+
+        return h.h;
+    }
+
+    // cd_win.c's state (trace.c: Oracle_CDState: initialized, enabled, cdValid, playing, wasPlaying, playLooping,
+    // cdvolume's bits, playTrack, maxTrack, remap), then the virtual drive's (cd_oracle.c: Oracle_CDDrive)
+    private int[] CDState()
+    {
+        QuakeEngine e = engine;
+        var state = new List<int>(113)
+        {
+            e.cd_initialized ? 1 : 0,
+            e.cd_enabled ? 1 : 0,
+            e.cdValid ? 1 : 0,
+            e.cd_playing ? 1 : 0,
+            e.wasPlaying ? 1 : 0,
+            e.playLooping ? 1 : 0,
+            BitConverter.SingleToInt32Bits(e.cdvolume),
+            e.playTrack,
+            e.maxTrack,
+        };
+        foreach (byte r in e.cd_remap)
+        {
+            state.Add(r);
+        }
+
+        // a drive other than the virtual one (the executable's) has no state the oracle could match: as if none
+        state.AddRange((e.cddrive as Core.Sound.VirtualCdDrive)?.State() ?? [0, 0, 0, 0]);
+        return [.. state];
+    }
+
+    // A: the CD
+    private ulong CD()
+    {
+        var h = new Hash();
+
+        foreach (int v in CDState())
+        {
+            h.Int(v);
         }
 
         return h.h;

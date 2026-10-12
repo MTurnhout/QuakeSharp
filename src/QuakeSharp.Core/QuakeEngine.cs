@@ -48,12 +48,13 @@ public sealed class QuakeParms
 public sealed partial class QuakeEngine
 {
     public QuakeEngine(QuakeParms parms, ISystem system, IInputEvents? input = null, ISoundDma? sound = null,
-        IVideoOutput? video = null)
+        IVideoOutput? video = null, ICdDrive? cd = null)
     {
         host_parms = parms;
         this.system = system;
         this.input = input;
         sounddma = sound;
+        cddrive = cd;
         this.video = video;
         com_argv = parms.argv;
         edgetables =
@@ -119,6 +120,9 @@ public sealed partial class QuakeEngine
     private readonly ISystem system;
     private readonly IInputEvents? input;
     private readonly ISoundDma? sounddma;
+
+    // the CD drive cd_win.c sends its MCI commands to (null: none, as a machine without one)
+    internal readonly ICdDrive? cddrive;
     private readonly IVideoOutput? video;
     private readonly Numerics.CRand crand = new();
     private readonly FileSystem fileSystem;
@@ -137,12 +141,17 @@ public sealed partial class QuakeEngine
     public double Sys_FloatTime() => system.FloatTime();
 
     // sys_win.c: Sys_SendKeyEvents: the window's events, keys to Key_Event; closing the window quits (WinQuake asks
-    // first)
+    // first). The CD drive's MM_MCINOTIFY messages come to the window procedure too: CDAudio_MessageHandler
     public void Sys_SendKeyEvents()
     {
         if (input != null && !input.SendKeyEvents(Key_Event))
         {
             throw Sys_Quit();
+        }
+
+        while (cddrive != null && cddrive.PeekNotify(out uint wParam, out uint lParam))
+        {
+            CDAudio_MessageHandler(wParam, lParam);
         }
     }
 
