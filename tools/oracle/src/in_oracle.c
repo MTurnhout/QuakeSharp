@@ -2,7 +2,7 @@
  * in_oracle.c: the oracle's mouse and joystick (design.md decision 43). WinQuake's in_win.c is compiled unchanged; the
  * Win32 calls it makes come here instead of to user32 and winmm, and a virtual machine answers them:
  *
- * - a screen of ORACLE_SCREEN_WIDTH x ORACLE_SCREEN_HEIGHT with a cursor, which -traceevents moves (@mouse <dx> <dy>)
+ * - a screen of ORACLE_SCREEN_WIDTH x ORACLE_SCREEN_HEIGHT (oracle.h) with a cursor, which -traceevents moves (@mouse <dx> <dy>)
  *   and whose buttons it sets (@buttons <state>), each delivered as the window procedure would get it: the cursor
  *   confined to the screen, or to the rectangle ClipCursor gives, as Windows confines it (the right and bottom edges
  *   excluded); a move is followed by WM_MOUSEMOVE's IN_MouseEvent, a button change by its WM_xBUTTONxxx's;
@@ -17,8 +17,6 @@
 #include <mmsystem.h>
 #include <string.h>
 
-#define ORACLE_SCREEN_WIDTH		1920
-#define ORACLE_SCREEN_HEIGHT	1080
 #define ORACLE_JOYSTICKS		16
 #define ORACLE_WHEEL_MESSAGE	0xc0f0		// RegisterWindowMessage's number for "MSWHEEL_ROLLMSG"
 

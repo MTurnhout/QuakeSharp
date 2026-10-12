@@ -83,13 +83,18 @@ hooks for the traces that change nothing:
   run. The step is a binary fraction, exact in the `float` that `Host_Frame` takes, and above 1/72 s so
   `Host_FilterTime` runs a frame every time. 16 MB of memory, as WinQuake takes on any machine with 32 MB or more
   (`-heapsize <kb>`).
-- `vid_oracle.c`: `vid_win.c` with one windowed mode, rendered in memory at `-oraclevid <width> <height>` (320x240 by
-  default). Kept from `vid_win.c`: its cvars and commands, the remapping of colormap entries 0 to the palette's closest
-  other black (GDI cannot remap index 0; this changes the frames' pixel values, not their colours), S_Init between the
-  hidden first mode set and the real one, the pixel aspect, the surface cache, `ClearAllStates`, the mode name on
-  the console, and what it does with the mouse: taken in a window only with `_windowed_mouse`, released while paused.
-  The window's client area is at the virtual screen's top left. The loading disc is never in the frame (WinQuake draws
-  it on the screen and restores it).
+- `vid_oracle.c`: `vid_win.c` with the machine taken out (design.md decision 44), every frame in memory. Kept: the
+  mode list, `VID_SetMode` and its windowed and full-screen modes, the `vid_*` commands, the Video menu, the first
+  frame's switch to `_vid_default_mode_win`, the buffer's locking (in the full-screen modes locking sets `vid.buffer`
+  and `vid.rowbytes`), the cvars, the remapping of colormap entries 0 to the palette's closest other black (GDI cannot
+  remap index 0; this changes the frames' pixel values, not their colours), S_Init between the hidden first mode set
+  and the real one, the surface cache, `ClearAllStates`, `AppActivate`'s part, and what it does with the mouse. The
+  machine is the one Winquake.exe was audited on: a 1920x1080 desktop, the windowed modes 320x240 (`-oraclevid`'s size),
+  640x480 and 800x600 (stretched), and DirectDraw's 8-bit full-screen modes 320x240, 640x480, 800x600 and 1024x768, one
+  page each (drawn in a memory DC). The window's client area is at the screen's top left and gets the focus when first
+  shown. Not part of it: `-dibonly` and the full-screen DIB modes, the window's position, minimizing, an 8-bit desktop's
+  palette, and the loading disc (WinQuake draws it on the screen and restores it: never in the frame).
+  `Trace-Demos.ps1` starts every run with `-startwindowed -noautostretch`: in mode 0.
 - `snd_oracle.c`: a 64 KB, 16-bit stereo, 11025 Hz buffer standing in for DirectSound's, whose play position follows
   the virtual clock. The mixer then paints the same samples at the same frames in every run, which the game depends on:
   `S_StartSound` draws from `rand()` when an identical sound has not been painted yet. It prints what snd_win.c's
@@ -121,7 +126,7 @@ hooks for the traces that change nothing:
 | `-traceshot <frame>` | Also write that frame (any number of times) as `<trace>.<frame>.shot`: width, height (32-bit), the palette, the pixels; `quakesharp-tools shot2png` makes a PNG of it |
 | `-tracedump <frame>` | Also write that frame's state (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits: the client's entities, then the server (`server` line), the QuakeC globals and every edict's header and fields by name (`global`, `edict` lines, strings quoted with `\xHH` escapes), the messages sent during the frame in hexadecimal (`message <sender> <reliable> <result> <size> <bytes>`), the sound (`sound`: the mixer's times, `channel` lines, `painted <from> <to> <bytes>`: the samples painted during the frame from the device's buffer, in hexadecimal) and the CD (`cd`: cd_win.c's state, `cdvolume` as its bits, the remap table, the drive's) and the mouse and joystick (`input`: the `I` line's fields by name); `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing line |
 | `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it), `<frame> @mouse <dx> <dy>`, the mouse moved (the virtual cursor, then `IN_MouseEvent` as for `WM_MOUSEMOVE`), or `<frame> @buttons <state>`, the mouse buttons held (1 left, 2 right, 4 middle; `IN_MouseEvent`) |
-| `-oraclevid <w> <h>` | The video mode (320x200 to 1280x1024) |
+| `-oraclevid <w> <h>` | Mode 0's size, the first windowed mode (320x200 to 1280x1024; 320x240 by default) |
 | `-oraclestep <n>` | Frames of 1/n s |
 | `-oracleverbose` | Print `Sys_Printf` (the console) to stdout |
 

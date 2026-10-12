@@ -24,4 +24,11 @@ void oracle_srand (unsigned int seed);
 #undef __DATE__
 #define __DATE__ "Mar 21 1997"
 
+/*
+ * The virtual machine's screen (vid_oracle.c's desktop, in_oracle.c's cursor): as the machine Winquake.exe was audited
+ * on (design.md §3.4).
+ */
+#define ORACLE_SCREEN_WIDTH		1920
+#define ORACLE_SCREEN_HEIGHT	1080
+
 #endif

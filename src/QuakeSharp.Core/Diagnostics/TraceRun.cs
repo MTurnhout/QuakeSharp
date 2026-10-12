@@ -19,15 +19,17 @@ public sealed class TraceRun
     /// <param name="userDir">Where the game writes (config.cfg...): an empty folder, as the oracle's runs start
     /// without config.cfg.</param>
     /// <param name="args">The command line after the program's name (e.g. +playdemo demo1).</param>
-    /// <param name="width">The video mode (-oraclevid).</param>
-    /// <param name="height">The video mode (-oraclevid).</param>
+    /// <param name="width">Mode 0's size (-oraclevid).</param>
+    /// <param name="height">Mode 0's size (-oraclevid).</param>
     /// <param name="framesPerSecond">The clock's steps per second (-oraclestep).</param>
     public TraceRun(string gameDir, string userDir, IEnumerable<string> args, int width = 320, int height = 240,
         int framesPerSecond = 64, Action<string>? print = null)
     {
         system = new VirtualSystem(print);
         step = 1.0 / framesPerSecond;
-        var commandLine = new CommandLine(["quake", .. args]);
+
+        // in a window, in mode 0, as Trace-Demos.ps1 runs the oracle (design.md decision 50)
+        var commandLine = new CommandLine(["quake", "-startwindowed", "-noautostretch", .. args]);
 
         // -traceevents <file>: the scripted input, read relative to the current folder as the oracle reads it
         int e = commandLine.CheckParm("-traceevents");

@@ -8,15 +8,21 @@ using QuakeSharp.Platform.Sdl;
 using QuakeSharp.Render.Vulkan;
 
 // sys_win.c: WinMain. The engine runs Host_Init and then Host_Frame on the real clock, showing each frame it draws and
-// playing its sound and the CD's music from the user's track files (design.md §7.2); closing the window quits. -window
-// opens a window, -noaspect shows square pixels, -vkvalidation turns on the Vulkan validation layer, -quitafter
-// <seconds> quits by itself.
+// playing its sound and the CD's music from the user's track files (design.md §7.2); closing the window quits. It
+// starts as Winquake.exe does, in the first full-screen mode (design.md decision 50); -window (WinQuake's
+// -startwindowed) starts in a window. -noaspect shows square pixels, -vkvalidation turns on the Vulkan validation
+// layer, -quitafter <seconds> quits by itself.
 //
 // -recordevents <file> (design.md decision 34) runs as a trace does instead: a virtual clock of 1/64 s steps, paced to
 // real time; the sound device's position following that clock, as the oracle's; the oracle's virtual CD (the track
-// files only heard); no joystick; no config.cfg (a fresh user folder, thrown away); and writes the keys and the mouse as -traceevents lines, so the game replays the same in the oracle and in
-// quakesharp-tools trace (with -traceevents <file> -oracleframes <the frames it reports>, from the same command line).
-var commandLine = new CommandLine(["quakesharp", .. args]);
+// files only heard); no joystick; no config.cfg (a fresh user folder, thrown away); in a window in mode 0
+// (-startwindowed -noautostretch, as the traces); and writes the keys and the mouse as -traceevents lines, so the game
+// replays the same in the oracle and in quakesharp-tools trace (with -traceevents <file> -oracleframes <the frames it
+// reports>, from the same command line).
+string[] switches = args.Contains("-recordevents") ? ["-startwindowed", "-noautostretch"]
+    : args.Contains("-window") ? ["-startwindowed"]
+    : [];
+var commandLine = new CommandLine(["quakesharp", .. switches, .. args]);
 try
 {
     return Run(commandLine);
@@ -30,7 +36,8 @@ catch (QuakeException e)
 
 static int Run(CommandLine commandLine)
 {
-    using var window = new SdlWindow("QuakeSharp", 960, 720, fullscreen: commandLine.CheckParm("-window") == 0);
+    // a window until the engine sets its first mode
+    using var window = new SdlWindow("QuakeSharp", 640, 480, fullscreen: false);
     using var presenter = new VulkanPresenter(
         new VulkanSurfaceSource(window.RequiredVulkanInstanceExtensions, window.CreateVulkanSurface, () => window.PixelSize),
         enableValidation: Debugger.IsAttached || commandLine.CheckParm("-vkvalidation") != 0,
@@ -59,14 +66,14 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     using var sound = new SdlSoundDma();
     using var cd = new FileCdDrive(CdTracks.Find(".", commandLine));
     using var joysticks = new SdlJoysticks();
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound, presenter, cd,
-        mouse: window, joysticks: joysticks);
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound,
+        new WindowVideo(window, presenter), cd, mouse: window, joysticks: joysticks);
 
     // WM_ACTIVATE: DirectSound silences the game while another program has the focus; AppActivate clears the buffer
     window.Activated = (active, minimized) =>
     {
         sound.Muted = !active;
-        engine.AppActivate(active, minimized);
+        engine.WM_ACTIVATE(active, minimized);
     };
 
     try
@@ -108,8 +115,8 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     using var sound = new SdlSoundDma(clock: () => system.Time);
     using var cd = new ListeningCdDrive(CdTracks.Find(".", commandLine));
     // the window takes the mouse as in a game; no joystick, as the oracle has none
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound, presenter, cd,
-        mouse: window);
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound,
+        new WindowVideo(window, presenter), cd, mouse: window);
 
     // silent while another program has the focus, but without AppActivate's clears: the oracle never loses the focus
     window.Activated = (active, _) => sound.Muted = !active;
@@ -150,6 +157,15 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
             Directory.Delete(userdir, recursive: true);
         }
     }
+}
+
+/// <summary>vid_win.c's screen: the frames through the presenter, the modes on the window.</summary>
+internal sealed class WindowVideo(SdlWindow window, VulkanPresenter presenter) : IVideoOutput
+{
+    public void Present(ReadOnlySpan<byte> pixels, int width, int height, int rowBytes, ReadOnlySpan<byte> palette) =>
+        presenter.Present(pixels, width, height, rowBytes, palette);
+
+    public void SetMode(int width, int height, bool fullscreen) => window.SetMode(width, height, fullscreen);
 }
 
 /// <summary>sys_win.c's Sys_Printf and Sys_FloatTime: the console's text on stdout, the time from a stopwatch.</summary>

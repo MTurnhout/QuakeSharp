@@ -11,4 +11,12 @@ public interface IVideoOutput
     /// <paramref name="rowBytes"/> apart, through <paramref name="palette"/> (256 RGB triples, 768 bytes).
     /// </summary>
     void Present(ReadOnlySpan<byte> pixels, int width, int height, int rowBytes, ReadOnlySpan<byte> palette);
+
+    /// <summary>
+    /// vid_win.c set a mode: a window whose client area is <paramref name="width"/> by <paramref name="height"/>
+    /// (a stretched mode's frame is half of it), or the whole screen in that resolution.
+    /// </summary>
+    void SetMode(int width, int height, bool fullscreen)
+    {
+    }
 }

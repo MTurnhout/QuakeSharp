@@ -375,12 +375,20 @@ signon keepalives in `cl_parse.c`, `Host_Spawn`'s connect time). The executable 
 
 The software renderer draws into an 8-bit buffer of the current video mode's size; WinQuake supports any size up to
 `MAXWIDTH`×`MAXHEIGHT` (1280×1024), with the pixel aspect in `vid.aspect` (`vid_win.c`: height over width times
-320/240). QuakeSharp offers the original modes (WinQuake's 320×240 window by default, DOS's 320×200 mode 0, and the
-list up to 1280×1024) through `vid_mode` and the Video Options menu; each is pixel-exact against the oracle at that
-size. What `vid_win.c` does that shows is kept: it remaps the colormap's entries 0 to the palette's closest other
-black (GDI cannot remap palette index 0), which changes the frames' pixel values but not their colours; `S_Init` runs
-between its hidden first mode set and the real one; the mode set prints the surface cache size and the mode name; and
-its cvars go into `config.cfg`. The console shows Winquake.exe 1.09's build stamp, `Exe: 09:30:49 Mar 21 1997`.
+320/240). vid_win.c is ported with its machine taken out (decision 44): the mode list of the machine Winquake.exe was
+audited on (§3.4), `vid_mode` and the `vid_*` commands, the Video menu, the first frame's switch to
+`_vid_default_mode_win`, the buffer's locking (in the full-screen modes `vid.rowbytes` is set by `VID_LockBuffer`, so
+the refdef recalculated right after a mode change still sees the old value, as WinQuake's does), `AppActivate`'s part
+and the mouse's. The modes: windowed 320×240 (mode 0), 640×480 and 800×600 (stretched: frames of 320×240 and 400×300
+shown doubled; mode 2's size follows `vid_config_x` and `vid_config_y`), and DirectDraw's 8-bit full-screen 320×240,
+640×480, 800×600 and 1024×768 (modes 3-6, each drawn in a memory DC: the display has one page). As Winquake.exe, the
+game starts in mode 3, full screen; `-window` (WinQuake's `-startwindowed`) starts in the windowed default, mode 1
+(the desktop is wider than 640, so WinQuake stretches it). The traces and `-recordevents` run with `-startwindowed
+-noautostretch`: mode 0, 320×240 or `-oraclevid`'s size (decision 50). Kept from before: the colormap's entries 0
+remapped to the palette's closest other black (GDI cannot remap palette index 0), which changes the frames' pixel
+values but not their colours; `S_Init` between the hidden first mode set and the real one; the surface cache size and
+the mode name printed at each set; the cvars in `config.cfg`. The console shows Winquake.exe 1.09's build stamp,
+`Exe: 09:30:49 Mar 21 1997`.
 
 `Render.Vulkan` presents the frame: the 8-bit buffer and the 256-colour palette (the one `V_UpdatePalette` computes,
 gamma and shifts included) are uploaded each frame, a fragment shader looks up the palette, and the picture is
@@ -392,8 +400,8 @@ As built (`VulkanPresenter`, `PresentationLayout`): the frame's rectangle is the
 through its palette into an image k times its size, k the smallest whole number that covers the rectangle; the second
 (`scale.slang`) filters that linearly into the rectangle, black around. The palette's colours pass through unchanged
 (a UNORM swapchain, not sRGB: they are already what the screen shows). Two frames in flight; mailbox presentation
-where the driver has it, else FIFO. The window is borderless over the whole screen by default, `-window` a window
-(as DoomSharp).
+where the driver has it, else FIFO. The window follows the mode (`IVideoOutput.SetMode`): a window of the mode's
+window size (fitted to the screen) in the windowed modes, borderless over the whole screen in the full-screen ones.
 
 ### 6.5 Networking
 
@@ -847,7 +855,16 @@ first and QuakeSharp follows them.
    set from the menu and the console, in a game too (the z-buffer and the surface cache at the new size, the refdef
    recalculated), a save and a demo across a change. The existing traces keep their sizes (`-oraclevid`, a mode of its
    own as now). The executable's window follows the mode: a window of the mode's size for the windowed modes,
-   borderless full screen for the others, the frame scaled as §6.4. D7 is settled with it.
+   borderless full screen for the others, the frame scaled as §6.4. D7 is settled with it. *Done: vid_win.c ported in
+   `vid_oracle.c` and `QuakeEngine.Vid.cs` alike over the audited machine (§6.4: modes 0-2 windowed, 3-6 DirectDraw
+   full screen, one page each), with the buffer's locking, `AppActivate`'s part and the window's first activation;
+   the oracle's runs, the traces and `-recordevents` start with `-startwindowed -noautostretch` (decision 50), so only
+   the menus traces changed (the Video menu lists the modes). `video.events` (2,500 frames: the `vid_*` commands, an
+   invalid mode, a test mode, every mode while fighting, a screenshot and a save in a full-screen mode, the settable
+   window with `vid_stretch_by_2` 0 and `vid_config_x`/`_y` (whose values vid_win.c raises without their strings), the
+   mouse in a full-screen mode, a demo recorded across changes, the Video menu's Enter, D and T) matched on every line
+   at its first run, its files too. The executable starts full screen in mode 3 as Winquake.exe, `-window` in mode 1,
+   and its window follows the mode.*
 5. **The mission packs**: the MD5s confirmed as the original releases (the "to verify" of §2 goes); with `-hipnotic`
    and `-rogue`: their demos (hipnotic's `hipdemo1`-`4`, rogue's `demo1`-`3`) and attract loops (their own `quake.rc`);
    `hiptour.events` and `roguetour.events`, generated as `tour.events`: every map of each pack with its weapons and
@@ -925,6 +942,7 @@ plays with the mouse, in every mode, and both mission packs.
 | 47 | quake.exe not run (was D10) | The DOS executable's differences are documented from the source's DOS drivers and Chocolate Quake's notes, not measured: nothing of DOS is emulated (D4), and DOSBox's emulated x87 and timing would measure DOSBox. Revisited only if the audit raises a question only quake.exe answers | 2026-10-12 |
 | 48 | Shareware in CI (was D11) | CI downloads `quake106.zip` from a fixed mirror (chosen with the user before it is committed), checks its MD5, extracts `pak0.pak` (the registered one, same MD5) and caches it, never committed; the test keeps only the last trace lines of demo1-3 (milestone 10, step 7) | 2026-10-12 |
 | 49 | Fidelity target version (was D4) | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`. Audited (§3.4): Winquake.exe's start-up lines (IPX, the joystick), its `joystick` cvar and its seven modes are emulated; its real-time `rand()` and its x87 and assembly rounding are documented; DOS quake.exe 1.08's differences (DJGPP's `rand()`, VGA's palette, its drivers) are documented, not emulated | 2026-10-12 |
+| 50 | Default video mode (was D7) | As Winquake.exe 1.09 on the audited machine: the game starts in mode 3, 320×240 full screen (vid_win.c's `vid_default` once DirectDraw offers modes), where the mouse is taken; `-window` is WinQuake's `-startwindowed` (mode 1, a 640×480 window showing 320×240 doubled). The oracle's runs, the traces and `-recordevents` start with `-startwindowed -noautostretch`: mode 0, a 320×240 window (`-oraclevid` its size), so the existing traces keep their frames and the recorded playthrough its windowed mouse (§6.4) | 2026-10-13 |
 
 ## 13. Open decisions
 
@@ -932,5 +950,4 @@ To confirm with the user before the milestones they affect; the proposals are th
 
 | # | Question | Proposal |
 |---|---|---|
-| D7 | Default video mode | 320×240 in a window scaled to the screen, as WinQuake's default mode (the fidelity target is WinQuake: decision 14); DOS's 320×200 and larger modes from the menu |
 | D8 | Scope of v1 | Quake and both mission packs on the WinQuake engine; GLQuake and QuakeWorld after v1 |

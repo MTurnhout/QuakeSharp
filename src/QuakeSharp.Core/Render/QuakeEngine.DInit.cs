@@ -71,7 +71,7 @@ public sealed partial class QuakeEngine
     }
 
     // d_init.c: D_EnableBackBufferAccess
-    public static void D_EnableBackBufferAccess() => VID_LockBuffer();
+    public void D_EnableBackBufferAccess() => VID_LockBuffer();
 
     // d_init.c: D_TurnZOn
     public static void D_TurnZOn()
@@ -80,7 +80,7 @@ public sealed partial class QuakeEngine
     }
 
     // d_init.c: D_DisableBackBufferAccess
-    public static void D_DisableBackBufferAccess() => VID_UnlockBuffer();
+    public void D_DisableBackBufferAccess() => VID_UnlockBuffer();
 
     // d_init.c: D_SetupFrame
     public void D_SetupFrame()

@@ -19,7 +19,8 @@ when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.fi
                         episode, the network menus starting a deathmatch; tour: every map in turn, fighting; e1: a game played by hand
                         and recorded with -recordevents, e1m1 into e1m2; sound: the sound and CD commands and
                         cvars, the menu's volume sliders, a game's pause and level changes; mouse: the mouse taken and released, looking,
-                        moving, its buttons and cvars, the joystick's cvars), at
+                        moving, its buttons and cvars, the joystick's cvars; video: every mode, from the console and the Video menu, with a
+                        save, a demo and a screenshot across the changes), at
                         320x240; commands.640x480.trace the same at 640x480, sound.nosound.trace the sound game with
                         -nosound -nocdaudio; saves: a save on every map, the save and load menus, the refusals
   loads.trace           every save saves.trace's run wrote, loaded in turn and played on
@@ -81,9 +82,9 @@ function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @()) 
     }
     $trace = Join-Path $OutDir "$name.trace"
     # from the Quake folder with WinQuake's base directory ".": the console shows "./id1/pak0.pak", as QuakeSharp's
-    # traces do wherever the game data is
+    # traces do wherever the game data is; in a window, mode 0 (design.md decision 50)
     Push-Location $base
-    try { & $Oracle -trace $trace @arguments | Out-Null } finally { Pop-Location }
+    try { & $Oracle -startwindowed -noautostretch -trace $trace @arguments | Out-Null } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "the oracle failed on $name" }
     $frames = (Select-String -Path $trace -Pattern '^F ' | Measure-Object).Count
 
@@ -110,7 +111,7 @@ Trace 'menus.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-o
 Trace 'attract.config' @('-oracleframes', '600') @('menus/config.cfg')
 
 # the scripted games (design.md §11.1): the frames each runs for are in GameTests too
-$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500; 'saves' = 17705; 'mouse' = 1600 }
+$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500; 'saves' = 17705; 'mouse' = 1600; 'video' = 2500 }
 foreach ($game in $games.Keys) {
     $events = Join-Path $PSScriptRoot "events\$game.events"
     Trace $game @('-traceevents', $events, '-oracleframes', "$($games[$game])")

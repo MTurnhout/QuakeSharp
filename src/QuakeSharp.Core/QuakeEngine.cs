@@ -31,7 +31,7 @@ public sealed class QuakeParms
     /// <summary>The folder relative paths (basedir ".") start from; null: the process's current folder.</summary>
     public string? workdir { get; init; }
 
-    /// <summary>The video mode's size (WinQuake's default window is 320x240; vid_win.c's modes, milestone 6).</summary>
+    /// <summary>Mode 0's size: vid_win.c's first windowed mode, 320x240 (the oracle's -oraclevid).</summary>
     public int vidwidth { get; init; } = 320;
 
     public int vidheight { get; init; } = 240;

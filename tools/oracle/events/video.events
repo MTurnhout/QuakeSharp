@@ -1,0 +1,160 @@
+5 map e1m1
+60 god
+62 impulse 9
+64 impulse 2
+80 vid_nummodes
+82 vid_describemodes
+84 vid_describecurrentmode
+86 vid_describemode 4
+88 vid_describemode 99
+100 +attack
+101 +left
+120 vid_mode 1
+220 vid_mode 2
+320 vid_mode 4
+420 vid_mode 6
+520 vid_mode 3
+620 vid_mode 5
+720 vid_mode 0
+730 -attack
+731 -left
+740 vid_mode 99
+750 vid_testmode 5 2
+900 vid_forcemode 0
+910 vid_fullscreen
+920 impulse 4
+930 +attack
+960 screenshot
+990 -attack
+1000 save vid1
+1010 vid_windowed
+1050 load vid1
+1100 vid_stretch_by_2 0
+1110 vid_mode 2
+1160 vid_config_x 512
+1162 vid_config_y 384
+1170 vid_mode 1
+1180 vid_mode 2
+1230 vid_stretch_by_2 1
+1232 vid_mode 0
+1250 _windowed_mouse 1
+1260 @mouse 6 -2
+1262 @mouse 6 -2
+1264 @mouse 6 -2
+1266 @mouse 6 -2
+1268 @mouse 6 -2
+1270 @mouse 6 -2
+1272 @mouse 6 -2
+1274 @mouse 6 -2
+1276 @mouse 6 -2
+1278 @mouse 6 -2
+1280 @mouse 6 -2
+1282 @mouse 6 -2
+1284 @mouse 6 -2
+1286 @mouse 6 -2
+1288 @mouse 6 -2
+1290 @mouse 6 -2
+1300 vid_mode 4
+1310 @mouse -9 3
+1312 @mouse -9 3
+1314 @mouse -9 3
+1316 @mouse -9 3
+1318 @mouse -9 3
+1320 @mouse -9 3
+1322 @mouse -9 3
+1324 @mouse -9 3
+1326 @mouse -9 3
+1328 @mouse -9 3
+1330 @mouse -9 3
+1332 @mouse -9 3
+1334 @mouse -9 3
+1336 @mouse -9 3
+1338 @mouse -9 3
+1340 @mouse -9 3
+1342 @mouse -9 3
+1344 @mouse -9 3
+1346 @mouse -9 3
+1348 @mouse -9 3
+1350 @mouse -9 3
+1360 @mouse 900 0
+1400 vid_mode 0
+1410 @mouse 2 2
+1412 @mouse 2 2
+1414 @mouse 2 2
+1416 @mouse 2 2
+1418 @mouse 2 2
+1420 @mouse 2 2
+1422 @mouse 2 2
+1424 @mouse 2 2
+1426 @mouse 2 2
+1428 @mouse 2 2
+1430 @mouse 2 2
+1440 _windowed_mouse 0
+1450 record vd e1m1
+1460 vid_mode 3
+1470 +forward
+1520 -forward
+1560 vid_mode 0
+1600 stop
+1650 @key 27 1
+1651 @key 27 0
+1670 @key 129 1
+1671 @key 129 0
+1680 @key 129 1
+1681 @key 129 0
+1690 @key 13 1
+1691 @key 13 0
+1710 @key 129 1
+1711 @key 129 0
+1720 @key 129 1
+1721 @key 129 0
+1730 @key 129 1
+1731 @key 129 0
+1740 @key 129 1
+1741 @key 129 0
+1750 @key 129 1
+1751 @key 129 0
+1760 @key 129 1
+1761 @key 129 0
+1770 @key 129 1
+1771 @key 129 0
+1780 @key 129 1
+1781 @key 129 0
+1790 @key 129 1
+1791 @key 129 0
+1800 @key 129 1
+1801 @key 129 0
+1810 @key 129 1
+1811 @key 129 0
+1820 @key 129 1
+1821 @key 129 0
+1830 @key 13 1
+1831 @key 13 0
+1850 @key 131 1
+1851 @key 131 0
+1860 @key 129 1
+1861 @key 129 0
+1870 @key 13 1
+1871 @key 13 0
+1900 @key 100 1
+1901 @key 100 0
+1920 @key 131 1
+1921 @key 131 0
+1940 @key 116 1
+1941 @key 116 0
+2300 @key 130 1
+2301 @key 130 0
+2310 @key 130 1
+2311 @key 130 0
+2320 @key 128 1
+2321 @key 128 0
+2330 @key 13 1
+2331 @key 13 0
+2360 @key 27 1
+2361 @key 27 0
+2380 @key 27 1
+2381 @key 27 0
+2400 @key 27 1
+2401 @key 27 0
+2420 vid_describecurrentmode
+2430 vid_describemodes

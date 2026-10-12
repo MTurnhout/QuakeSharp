@@ -94,7 +94,8 @@ public sealed class DemoTests : IDisposable
     // a tour of every map of the episodes, the end and the deathmatch maps, fighting in each, and a game played by hand
     // (recorded with the executable's -recordevents) from the menu through e1m1 into e1m2, ending on the quit screen,
     // and the sound's (design.md §11.2): its commands and cvars, the CD's, the menu's volume sliders, a game's pause;
-    // and the mouse's (design.md §11.4): taken and released, looking and moving, its buttons and cvars, the joystick's
+    // and the mouse's (design.md §11.4): taken and released, looking and moving, its buttons and cvars, the joystick's;
+    // and the video modes': every mode from the console and the Video menu, a save, a demo and a screenshot across them
     [Theory]
     [InlineData("start", 2000, 320, 240, "start.trace")]
     [InlineData("commands", 3800, 320, 240, "commands.trace")]
@@ -107,6 +108,7 @@ public sealed class DemoTests : IDisposable
     [InlineData("sound", 3500, 320, 240, "sound.trace")]
     [InlineData("saves", 17705, 320, 240, "saves.trace")]
     [InlineData("mouse", 1600, 320, 240, "mouse.trace")]
+    [InlineData("video", 2500, 320, 240, "video.trace")]
     public void GamePlaysInSyncWithTheOracle(string game, int frames, int width, int height, string trace)
     {
         string baseDir = GameDataLocator.RequireBaseDir();

@@ -133,9 +133,10 @@ public sealed class TraceWriter
         BinaryPrimitives.WriteInt32LittleEndian(shot, width);
         BinaryPrimitives.WriteInt32LittleEndian(shot.AsSpan(4), height);
         engine.vid_curpal.CopyTo(shot, 8);
+        (byte[] frame, int rowbytes) = engine.VID_Frame();
         for (int y = 0; y < height; y++)
         {
-            vid.buffer.AsSpan(vid.bufferoffset + (y * (int)vid.rowbytes), width).CopyTo(shot.AsSpan(8 + 768 + (y * width)));
+            frame.AsSpan(y * rowbytes, width).CopyTo(shot.AsSpan(8 + 768 + (y * width)));
         }
 
         return shot;
@@ -763,9 +764,12 @@ public sealed class TraceWriter
         h.Int((int)vid.width);
         h.Int((int)vid.height);
         h.Int((int)vid.rowbytes);
+
+        // the DIB or the full-screen memory DC (vid.buffer and vid.rowbytes wait for a lock in a full-screen mode)
+        (byte[] frame, int rowbytes) = engine.VID_Frame();
         for (int y = 0; y < (int)vid.height; y++)
         {
-            h.Bytes(vid.buffer.AsSpan(vid.bufferoffset + (y * (int)vid.rowbytes), (int)vid.width));
+            h.Bytes(frame.AsSpan(y * rowbytes, (int)vid.width));
         }
 
         return h.h;

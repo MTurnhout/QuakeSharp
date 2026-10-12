@@ -35,6 +35,7 @@ void Oracle_MouseMove (int dx, int dy);		// in_oracle.c
 void Oracle_MouseButtons (int state);		// in_oracle.c
 extern int vid_modenum;						// vid_oracle.c
 extern int modestate;						// vid_oracle.c (winquake.h's modestate_t)
+byte *Oracle_Frame (int *rowbytes);			// vid_oracle.c
 
 static FILE *trace;
 static char trace_name[MAX_OSPATH];
@@ -484,19 +485,22 @@ static hash_t Input (void)
 	return h;
 }
 
-// V: the mode (vid_modenum, modestate, vid.width, vid.height, vid.rowbytes), then the frame (vid.buffer, row by row)
+// V: the mode (vid_modenum, modestate, vid.width, vid.height, vid.rowbytes), then the frame (the DIB or the full-screen
+// memory DC, row by row)
 static hash_t Frame (void)
 {
 	hash_t h = FNV_OFFSET;
-	int y;
+	byte *frame;
+	int y, rowbytes;
 
 	H_Int (&h, vid_modenum);
 	H_Int (&h, modestate);
 	H_Int (&h, vid.width);
 	H_Int (&h, vid.height);
 	H_Int (&h, vid.rowbytes);
+	frame = Oracle_Frame (&rowbytes);	// vid.buffer is NULL in a full-screen mode while unlocked
 	for (y = 0; y < (int)vid.height; y++)
-		H_Bytes (&h, vid.buffer + y * vid.rowbytes, vid.width);
+		H_Bytes (&h, frame + y * rowbytes, vid.width);
 	return h;
 }
 
@@ -802,7 +806,8 @@ void Trace_Init (void)
 static void Shot (void)
 {
 	FILE *f;
-	int y, size[2];
+	byte *frame;
+	int y, size[2], rowbytes;
 
 	f = fopen (va ("%s.%d.shot", trace_name, trace_frame), "wb");
 	if (!f)
@@ -811,8 +816,9 @@ static void Shot (void)
 	size[1] = vid.height;
 	fwrite (size, 4, 2, f);
 	fwrite (vid_curpal, 1, 768, f);
+	frame = Oracle_Frame (&rowbytes);
 	for (y = 0; y < (int)vid.height; y++)
-		fwrite (vid.buffer + y * vid.rowbytes, 1, vid.width, f);
+		fwrite (frame + y * rowbytes, 1, vid.width, f);
 	fclose (f);
 }
 

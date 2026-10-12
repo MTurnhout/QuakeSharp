@@ -192,6 +192,31 @@ public sealed unsafe class SdlWindow : IInputEvents, IMouseCapture, IDisposable
         return open;
     }
 
+    /// <summary>
+    /// vid_win.c set a mode: a window whose client area has the mode's size (fitted to the screen, as at its creation),
+    /// or the whole screen, borderless.
+    /// </summary>
+    public void SetMode(int width, int height, bool fullscreen)
+    {
+        if (fullscreen)
+        {
+            SDL_SetWindowFullscreen(Handle, true);
+            return;
+        }
+
+        SDL_SetWindowFullscreen(Handle, false);
+        SDL_Rect usable;
+        if (SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(Handle), &usable) && usable.w > 0 && usable.h > 0)
+        {
+            float fit = MathF.Min(1f, MathF.Min(0.9f * usable.w / width, 0.9f * usable.h / height));
+            width = (int)(width * fit);
+            height = (int)(height * fit);
+        }
+
+        SDL_SetWindowSize(Handle, width, height);
+        SDL_SetWindowPosition(Handle, (int)SDL_WINDOWPOS_CENTERED_MASK, (int)SDL_WINDOWPOS_CENTERED_MASK);
+    }
+
     // ClipCursor: the window takes the mouse (relative motion, the pointer kept in and hidden) or lets it go
     public void ClipCursor(bool clipped)
     {
