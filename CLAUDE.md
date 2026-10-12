@@ -20,8 +20,9 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
 - The oracle (WinQuake 1.09's C, headless; see `tools/oracle/README.md`): `tools/oracle/Build-Oracle.ps1 -WorkDir
   <dir outside the repo>`, then `tools/oracle/Trace-Demos.ps1`. If its sources, `src/` or the patch change, rebuild
   and regenerate the traces. `-traceshot <frame>` and `quakesharp-tools shot2png` show a frame.
-- `LibmTests` and `RandTests` keep hashes printed by the oracle's `numerics.exe`; if the input sets change, change
-  `numerics.c` alike and take the new hashes from it.
+- `LibmTests` and `RandTests` keep hashes printed by the oracle's `numerics.exe`, `OracleUnitTests` those of
+  `quake-oracle.exe -oracleunits` (`tools/oracle/src/units.c`); if the input sets change, change the C alike and take
+  the new hashes from it. Mind the oracle's right-to-left argument order when mirroring C calls (design.md §3.2).
 
 ## Rules
 

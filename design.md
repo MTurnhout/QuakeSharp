@@ -110,7 +110,19 @@ code's own semantics, made deterministic and identical on both sides (decision 6
   order of calls is part of the fidelity contract, so it lives on the engine root, and the time step is
   deterministic (§6.3).
 - **Formatting and parsing**: `sprintf("%5.1f")` (QuakeC's `ftos`, `vtos`), `%f` in savegames and `Q_atof` are
-  ported or emulated exactly (correctly rounded decimal output, as the UCRT prints).
+  ported or emulated exactly (correctly rounded decimal output, as the UCRT prints). `CFormat.Sprintf` is the C
+  library's printf for the conversions Quake uses: `%f` rounds the double's exact value, halfway cases to even, which
+  the oracle's UCRT confirms.
+
+### 3.2 The C as compiled
+
+What the C leaves to the compiler is part of the target, as the oracle's build (and WinQuake's MSVC 6 build) does it:
+
+| What | The C | QuakeSharp |
+|---|---|---|
+| Order of evaluation of function arguments | Unspecified; MSVC, and clang-cl for its ABI, evaluate them right to left (the oracle's first test printed its two `rand()` arguments in that order) | Where two arguments have side effects (`rand()`, `MSG_Read*`, `COM_Parse`...), they are evaluated into temporaries in the oracle's order, last argument first |
+| Calls without a prototype (C89's implicit declarations) | Arguments get the default promotions: a float is passed as a double, an int as an int, whatever the callee expects | The callee gets what it would read. Quake's software engine has one such call that matters: chase.c's `TraceLine` calls `SV_RecursiveHullCheck (hulls, 0, 0, 1, ...)`, so `p1f` is 0.0 and `p2f` is the float with the bits of the int 1 (1.4e-45), not 1.0 (only `trace.fraction` is affected; `TraceLine` uses `endpos`). The oracle's own sources are compiled with implicit declarations as errors |
+| Signed `char` | `char` is signed: characters of 128 and over are negative (`Q_atoi`'s `'x` form, comparisons) | Strings are read through `QString.Ch`, which gives a signed char |
 
 The DOS/Windows x87 differences are then documented, not emulated, like DoomSharp's table of DOS differences: they
 show up only in the last bits of positions and angles.
@@ -260,7 +272,11 @@ file, as the C's `FILE *` does.
     `MAX_MSGLEN` 8000, `MAX_VISEDICTS` 256, `MAX_PARTICLES` 2048, `MAX_CHANNELS` 128, the renderer's edge and surface
     counts, the VM's 32-deep stack and 2048-slot local stack…). Overflowing them does what the C does.
 11. **Undefined behaviour** (reads past arrays, uninitialised memory) is documented case by case in a table as
-    DoomSharp's §2 does, with a fixed substitute that the oracle is patched to share where needed.
+    DoomSharp's §2 does, with a fixed substitute that the oracle is patched to share where needed. What the C leaves
+    to the compiler (argument order, implicit declarations) follows the oracle's build (§3.2).
+12. **Vectors.** `vec3_t` is `Vec3`, an inline array of three floats indexed `v[0]` as in C, passed by `ref`/`in`
+    where C passes the pointer (so an output that is also an input aliases as in C); `float[3][3]` and `float[3][4]`
+    are `Mat3` and `Mat3x4`, indexed `m[i][j]`.
 
 ### 6.3 Main loop and time
 

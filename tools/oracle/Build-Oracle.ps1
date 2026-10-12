@@ -97,6 +97,7 @@ $quakeObjects = foreach ($s in $quakeSources) {
     Compile (Join-Path $quake $s) (Join-Path $WorkDir 'obj\quake') $quakeFlags
 }
 $quakeObjects += foreach ($s in (Get-ChildItem (Join-Path $oracleSrc '*.c'))) {
-    Compile $s.FullName (Join-Path $WorkDir 'obj\oracle') $quakeFlags
+    # the oracle's own files must declare what they call: a float argument to an undeclared function is passed as a double
+    Compile $s.FullName (Join-Path $WorkDir 'obj\oracle') ($quakeFlags + '/clang:-Werror=implicit-function-declaration')
 }
 Link (Join-Path $WorkDir 'quake-oracle.exe') ($quakeObjects + $muslObjects)

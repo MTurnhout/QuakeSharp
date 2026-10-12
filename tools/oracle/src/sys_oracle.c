@@ -244,12 +244,22 @@ void Sys_SetFPCW (void)
 
 //=============================================================================
 
+void Oracle_Units (int argc, char **argv);
+
 int main (int argc, char **argv)
 {
 	static quakeparms_t    parms;
 	int t;
 
 	COM_InitArgv (argc, argv);
+
+	// -oracleunits [<set> <n>]: the unit sets (units.c), then quit
+	t = COM_CheckParm ("-oracleunits");
+	if (t)
+	{
+		Oracle_Units (com_argc - t - 1, com_argv + t + 1);
+		return 0;
+	}
 
 	// sys_win.c: the memory WinQuake takes on any machine with 32 MB or more (MAXIMUM_WIN_MEMORY), or -heapsize
 	parms.memsize = 0x1000000;

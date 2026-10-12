@@ -8,6 +8,7 @@ and write a trace, and the traces must agree on every frame. See design.md §10.
 | `Build-Oracle.ps1` | Builds `numerics.exe` and `quake-oracle.exe` in a work folder outside the repository (clang-cl, 32-bit x86, SSE2 arithmetic, no FMA contraction, static C runtime) |
 | `Trace-Demos.ps1` | Writes the reference traces of the demos and the attract loop |
 | `numerics.c` | musl's libm and the C runtime's `rand()` on fixed input sets: the expected values of `LibmTests` and `RandTests` |
+| `src/units.c` | `quake-oracle.exe -oracleunits`: WinQuake's own functions (`Q_atoi`, `Q_atof`, printf formatting, `mathlib.c`...) on fixed input sets, the expected values of `OracleUnitTests`; `-oracleunits <set> <n>` prints a set's first results |
 | `quake-oracle.patch` | The changes to WinQuake's sources (a copy in the work folder; `reference/Quake` is never touched) |
 | `src/` | The oracle's platform layer in place of WinQuake's Windows drivers, and the trace writer |
 | `musl/` | Stands in for musl's internal headers so its libm builds on Windows; `musl_names.h` renames its functions `musl_*` |
