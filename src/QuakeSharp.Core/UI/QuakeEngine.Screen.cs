@@ -36,9 +36,9 @@ public sealed partial class QuakeEngine
     /// <summary>ready to draw</summary>
     public bool scr_initialized;
 
-    public QPic? scr_ram;
-    public QPic? scr_net;
-    public QPic? scr_turtle;
+    public QPic scr_ram = null!;
+    public QPic scr_net = null!;
+    public QPic scr_turtle = null!;
 
     public int scr_fullupdate;
 

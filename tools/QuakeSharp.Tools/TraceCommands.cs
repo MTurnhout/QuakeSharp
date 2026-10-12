@@ -8,7 +8,8 @@ namespace QuakeSharp.Tools;
 internal static class TraceCommands
 {
     // trace <quake-dir> <out.trace> [args]: QuakeSharp's trace of a run, the oracle's switches read as it reads them
-    // (-tracequitafterdemo, -oracleframes <n>, -oraclevid <w> <h>, -oraclestep <n>, -tracedump <frame>)
+    // (-tracequitafterdemo, -oracleframes <n>, -oraclevid <w> <h>, -oraclestep <n>, -tracedump <frame>,
+    // -traceshot <frame>)
     public static int Trace(string baseDir, string output, string[] args)
     {
         var commandLine = new CommandLine(["quake", .. args]);
@@ -20,11 +21,17 @@ internal static class TraceCommands
             : 240;
         bool quitAfterDemo = commandLine.CheckParm("-tracequitafterdemo") != 0;
         var dumps = new HashSet<int>();
+        var shots = new HashSet<int>();
         for (int i = 1; i < commandLine.Argc - 1; i++)
         {
             if (commandLine.Argv(i) == "-tracedump")
             {
                 dumps.Add(QString.Q_atoi(commandLine.Argv(i + 1)));
+            }
+
+            if (commandLine.Argv(i) == "-traceshot")
+            {
+                shots.Add(QString.Q_atoi(commandLine.Argv(i + 1)));
             }
         }
 
@@ -48,6 +55,11 @@ internal static class TraceCommands
                     if (dumps.Contains(count))
                     {
                         File.WriteAllText($"{output}.{count}.dump", run.Writer.Dump());
+                    }
+
+                    if (shots.Contains(count))
+                    {
+                        File.WriteAllBytes($"{output}.{count}.shot", run.Writer.Shot());
                     }
                 }
             }
@@ -112,6 +124,65 @@ internal static class TraceCommands
         }
 
         return same ? 0 : 1;
+    }
+
+    // shot-diff <a.shot> <b.shot> [out.png]: where two frames (-traceshot) differ; the PNG shows a, b and a with the
+    // differing pixels in magenta, side by side
+    public static int ShotDiff(string a, string b, string? output)
+    {
+        byte[] left = File.ReadAllBytes(a);
+        byte[] right = File.ReadAllBytes(b);
+        int width = BitConverter.ToInt32(left, 0), height = BitConverter.ToInt32(left, 4);
+        if (width != BitConverter.ToInt32(right, 0) || height != BitConverter.ToInt32(right, 4))
+        {
+            Console.WriteLine("the frames' sizes differ");
+            return 1;
+        }
+
+        const int pixels = 8 + 768;
+        int differ = 0, minx = width, miny = height, maxx = -1, maxy = -1;
+        byte[] panels = new byte[width * 3 * height];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                byte l = left[pixels + (y * width) + x], r = right[pixels + (y * width) + x];
+                int row = y * width * 3;
+                panels[row + x] = l;
+                panels[row + width + x] = r;
+                panels[row + (2 * width) + x] = l;
+                if (l != r)
+                {
+                    if (differ < 10)
+                    {
+                        Console.WriteLine($"({x}, {y}): {l} | {r}");
+                    }
+
+                    differ++;
+                    minx = Math.Min(minx, x);
+                    miny = Math.Min(miny, y);
+                    maxx = Math.Max(maxx, x);
+                    maxy = Math.Max(maxy, y);
+                    panels[row + (2 * width) + x] = 255;
+                }
+            }
+        }
+
+        bool samePalette = left.AsSpan(8, 768).SequenceEqual(right.AsSpan(8, 768));
+        Console.WriteLine(differ == 0
+            ? $"the pixels are the same{(samePalette ? "" : "; the palettes differ")}"
+            : $"{differ} pixels differ, in ({minx}, {miny})-({maxx}, {maxy}){(samePalette ? "" : "; the palettes differ")}");
+        if (output != null)
+        {
+            Commands.RefuseRepository(output);
+            byte[] palette = left.AsSpan(8, 768).ToArray();
+            palette[765] = 255;
+            palette[766] = 0;
+            palette[767] = 255;
+            PngWriter.WriteIndexed(output, width * 3, height, panels, palette);
+        }
+
+        return differ == 0 ? 0 : 1;
     }
 
     // The lines of each frame, by their letter (an F line starts a frame; for F, the line without its letter)

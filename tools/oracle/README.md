@@ -82,14 +82,14 @@ the executable) and removes `config.cfg` before every run, since the oracle writ
 
 ## The trace format
 
-One line `H 2 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
+One line `H 3 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
 
 | Line | Fields |
 |---|---|
 | `F <frame> <host_framecount> <realtime> <seed> <calls>` | The frame number (from 1), `host_framecount`, `realtime` as the hexadecimal bits of the double, the `rand()` state (`holdrand`) and the number of `rand()` calls so far |
 | `C <hash>` | The client state: `cls` and `cl` (see `Client` in `src/trace.c` for the fields and their order) |
 | `E <hash>` | The entities as the client keeps them: `cl_entities` up to `cl.num_entities`, the static entities, the view model, the visible list without the static entities |
-| `D <hash>` | What the renderer writes into the entities (`visframe`, `dlightframe`, `dlightbits`, `trivial_accept`, `topnode`) of `cl_entities`, the statics, the view model and the temp entities, and the whole visible list (`R_StoreEfrags` adds the static entities to it while drawing) |
+| `D <hash>` | What the renderer writes into the entities (`visframe`, `dlightframe`, `dlightbits`, `trivial_accept`, `topnode`: a node's index, or `0x10000 +` a leaf's) of `cl_entities`, the statics, the view model and the temp entities, and the whole visible list (`R_StoreEfrags` adds the static entities to it while drawing) |
 | `X <hash> <particles>` | The effects: temp entities, beams, dynamic lights, light styles and `d_lightstylevalue`, the active particles (and their number) |
 | `S <hash>` | The sound: `paintedtime`, `soundtime`, `total_channels` and the channels (sound, volumes, end, position, entity and channel, origin, attenuation): what decides `S_StartSound`'s `rand()` draws |
 | `T <hash>` | The console's text: `con_linewidth`, `con_totallines`, `con_current`, `con_x`, `con_times` and the whole `con_text` |

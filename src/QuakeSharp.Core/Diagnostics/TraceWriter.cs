@@ -17,7 +17,7 @@ namespace QuakeSharp.Core.Diagnostics;
 public sealed class TraceWriter
 {
     /// <summary>The trace format's version (the H line).</summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     private const ulong FNV_OFFSET = 0xcbf29ce484222325UL;
     private const ulong FNV_PRIME = 0x100000001b3UL;
@@ -95,6 +95,23 @@ public sealed class TraceWriter
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>The oracle's -traceshot: width, height (32-bit), the palette, the pixels row by row.</summary>
+    public byte[] Shot()
+    {
+        Video.VidDef vid = engine.vid;
+        int width = (int)vid.width, height = (int)vid.height;
+        byte[] shot = new byte[8 + 768 + (width * height)];
+        BinaryPrimitives.WriteInt32LittleEndian(shot, width);
+        BinaryPrimitives.WriteInt32LittleEndian(shot.AsSpan(4), height);
+        engine.vid_curpal.CopyTo(shot, 8);
+        for (int y = 0; y < height; y++)
+        {
+            vid.buffer.AsSpan(vid.bufferoffset + (y * (int)vid.rowbytes), width).CopyTo(shot.AsSpan(8 + 768 + (y * width)));
+        }
+
+        return shot;
     }
 
     private void DumpEntity(StringBuilder sb, string what, int i, Entity e)
@@ -235,7 +252,10 @@ public sealed class TraceWriter
         h.Int(e.dlightframe);
         h.Int(e.dlightbits);
         h.Int(e.trivial_accept);
-        h.Int(e.topnode is MNode node && engine.cl.worldmodel != null ? node.index : -1);
+        // R_SplitEntityOnNode and R_SplitEntityOnNode2 can stop at a leaf: its index in the leafs, 0x10000 on
+        h.Int(e.topnode == null || engine.cl.worldmodel == null ? -1
+            : e.topnode is MLeaf leaf ? 0x10000 + leaf.index
+            : ((MNode)e.topnode).index);
     }
 
     // an entity pointer: which array it is in and where

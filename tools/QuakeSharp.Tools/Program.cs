@@ -12,6 +12,8 @@ try
         ["dump-graphics", var baseDir, var outDir, .. var engineArgs] => Commands.DumpGraphics(baseDir, outDir, engineArgs),
         ["shot2png", var shot, var output] => Commands.ShotToPng(shot, output),
         ["trace", var baseDir, var output, .. var engineArgs] => TraceCommands.Trace(baseDir, output, engineArgs),
+        ["shot-diff", var a, var b] => TraceCommands.ShotDiff(a, b, null),
+        ["shot-diff", var a, var b, var output] => TraceCommands.ShotDiff(a, b, output),
         ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRV"),
         ["trace-compare", var a, var b, var letters] => TraceCommands.Compare(a, b, letters),
         _ => Usage(),
@@ -36,6 +38,9 @@ static int Usage()
                                                             write the palette, colormap, pictures, gfx.wad, map
                                                             textures, model skins and sprite frames as PNG
           quakesharp-tools shot2png <in.shot> <out.png>     a frame the oracle wrote (-traceshot) as PNG
+          quakesharp-tools shot-diff <a.shot> <b.shot> [out.png]
+                                                            where two frames differ (the PNG: a, b, and a with
+                                                            the differing pixels in magenta)
           quakesharp-tools trace <quake-dir> <out.trace> [args]
                                                             QuakeSharp's trace of a run, as the oracle writes
                                                             it (e.g. -tracequitafterdemo +playdemo demo1)

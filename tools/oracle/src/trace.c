@@ -143,7 +143,13 @@ static void H_EntityDrawn (hash_t *h, entity_t *e)
 	H_Int (h, e->dlightframe);
 	H_Int (h, e->dlightbits);
 	H_Int (h, e->trivial_accept);
-	H_Int (h, e->topnode && cl.worldmodel ? (int)(e->topnode - cl.worldmodel->nodes) : -1);
+	// R_SplitEntityOnNode and R_SplitEntityOnNode2 can stop at a leaf: its index in the leafs, 0x10000 on
+	if (!e->topnode || !cl.worldmodel)
+		H_Int (h, -1);
+	else if (e->topnode->contents < 0)
+		H_Int (h, 0x10000 + (int)((mleaf_t *)e->topnode - cl.worldmodel->leafs));
+	else
+		H_Int (h, (int)(e->topnode - cl.worldmodel->nodes));
 }
 
 // an entity pointer: which array it is in and where
@@ -543,7 +549,7 @@ void Trace_Frame (void)
 	if (trace)
 	{
 		if (trace_frame == 1)
-			fprintf (trace, "H 2 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
+			fprintf (trace, "H 3 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
 		fprintf (trace, "F %d %d %016llx %08x %u\n", trace_frame, host_framecount,
 			*(unsigned long long *)&realtime, oracle_rand_seed (), oracle_rand_calls);
 		fprintf (trace, "C %016llx\n", Client ());

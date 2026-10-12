@@ -91,6 +91,11 @@ public static partial class QuakeDef
     public const int HIT_PROXIMITY_GUN_BIT = 16;
     public const int HIT_MJOLNIR_BIT = 7;
     public const int HIT_LASER_CANNON_BIT = 23;
+    public const int HIT_PROXIMITY_GUN = (1 << HIT_PROXIMITY_GUN_BIT);
+    public const int HIT_MJOLNIR = (1 << HIT_MJOLNIR_BIT);
+    public const int HIT_LASER_CANNON = (1 << HIT_LASER_CANNON_BIT);
+    public const int HIT_WETSUIT = (1 << (23 + 2));
+    public const int HIT_EMPATHY_SHIELDS = (1 << (23 + 3));
     public const int MAX_SCOREBOARD = 16;
     public const int MAX_SCOREBOARDNAME = 32;
     public const int SOUND_CHANNELS = 8;

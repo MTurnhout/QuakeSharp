@@ -320,7 +320,7 @@ internal static class Commands
     }
 
     // Extracted game data must never land in the repository.
-    private static void RefuseRepository(string output)
+    internal static void RefuseRepository(string output)
     {
         for (var dir = new DirectoryInfo(Path.GetFullPath(output)); dir != null; dir = dir.Parent)
         {

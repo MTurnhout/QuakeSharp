@@ -6,13 +6,6 @@ using QuakeSharp.Core.Server;
 
 namespace QuakeSharp.Core;
 
-/// <summary>wad.h: qpic_t (draw.c's pictures come with milestone 6)</summary>
-public sealed class QPic
-{
-    public int width, height;
-    public byte[] data = [];
-}
-
 // The state and functions of modules not ported yet, which the ported ones already use. Each moves into its module's
 // file when that module is ported (the milestone in brackets); until then the functions do nothing.
 public sealed partial class QuakeEngine
@@ -38,30 +31,74 @@ public sealed partial class QuakeEngine
     public readonly Cvar sv_accelerate = new("sv_accelerate", "10");
     public readonly Cvar sv_aim = new("sv_aim", "0.93");
 
-    // menu.c: M_Init, M_Menu_Main_f, M_ToggleMenu_f, M_Keydown, M_Draw, M_Menu_Quit_f (milestone 6)
-    public void M_Init()
+    // menu.c: the network menus, which need net_main.c's drivers, addresses and host cache (milestone 7). Without a
+    // network driver they cannot be reached.
+    public void M_Menu_Net_f()
     {
     }
 
-    public void M_Menu_Main_f()
+    public void M_Net_Draw()
     {
     }
 
-    public void M_ToggleMenu_f()
+    public void M_Net_Key(int key)
     {
     }
 
-    public void M_Keydown(int key)
+    public void M_SerialConfig_Draw()
     {
     }
 
-    public void M_Draw()
+    public void M_SerialConfig_Key(int key)
     {
     }
 
-    public void M_Menu_Quit_f()
+    public void M_ModemConfig_Draw()
     {
     }
+
+    public void M_ModemConfig_Key(int key)
+    {
+    }
+
+    public void M_LanConfig_Draw()
+    {
+    }
+
+    public void M_LanConfig_Key(int key)
+    {
+    }
+
+    public void M_GameOptions_Draw()
+    {
+    }
+
+    public void M_GameOptions_Key(int key)
+    {
+    }
+
+    public void M_Search_Draw()
+    {
+    }
+
+    public void M_Search_Key(int key)
+    {
+    }
+
+    public void M_ServerList_Draw()
+    {
+    }
+
+    public void M_ServerList_Key(int key)
+    {
+    }
+
+    // net_main.c: serialAvailable, ipxAvailable, tcpipAvailable (no network driver yet, as the oracle's net_none.c)
+    public bool serialAvailable, ipxAvailable, tcpipAvailable;
+
+    // net_main.c: net_messagetimeout, hostname (NET_Init registers them; the setup menu reads hostname)
+    public readonly Cvar net_messagetimeout = new("net_messagetimeout", "300");
+    public readonly Cvar hostname = new("hostname", "UNNAMED");
 
     // pr_edict.c: PR_Init (milestone 7)
     public void PR_Init()
@@ -72,6 +109,8 @@ public sealed partial class QuakeEngine
     // NET_SendUnreliableMessage, NET_CanSendMessage, NET_Close (milestone 7)
     public void NET_Init()
     {
+        Cvar_RegisterVariable(net_messagetimeout);
+        Cvar_RegisterVariable(hostname);
     }
 
     public void NET_Poll()
@@ -375,65 +414,6 @@ public sealed partial class QuakeEngine
         {
             Con_Printf("%ik surface cache\n", size / 1024);
         }
-    }
-
-    // draw.c: Draw_Init, Draw_Character, Draw_Pic, Draw_TileClear, Draw_FadeScreen, Draw_PicFromWad, Draw_CachePic
-    // (milestone 6)
-    public void Draw_Init()
-    {
-    }
-
-    public void Draw_Character(int x, int y, int num)
-    {
-    }
-
-    public void Draw_Pic(int x, int y, QPic? pic)
-    {
-    }
-
-    public void Draw_TileClear(int x, int y, int w, int h)
-    {
-    }
-
-    public void Draw_FadeScreen()
-    {
-    }
-
-    public QPic? Draw_PicFromWad(string name) => null;
-
-    public QPic Draw_CachePic(string path) => new();
-
-    // console.c: Con_DrawConsole, Con_DrawNotify (milestone 6)
-    public void Con_DrawConsole(int lines, bool drawinput)
-    {
-    }
-
-    public void Con_DrawNotify()
-    {
-    }
-
-    // sbar.c: Sbar_Init, Sbar_Changed, Sbar_Draw, Sbar_IntermissionOverlay, Sbar_FinaleOverlay, sb_lines
-    // (milestone 6)
-    public int sb_lines;
-
-    public void Sbar_Init()
-    {
-    }
-
-    public void Sbar_Changed()
-    {
-    }
-
-    public void Sbar_Draw()
-    {
-    }
-
-    public void Sbar_IntermissionOverlay()
-    {
-    }
-
-    public void Sbar_FinaleOverlay()
-    {
     }
 
     // cd_win.c: CDAudio_Init, CDAudio_Update, CDAudio_Shutdown, CDAudio_Play, CDAudio_Pause, CDAudio_Resume

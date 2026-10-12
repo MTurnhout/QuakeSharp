@@ -5,7 +5,7 @@ using static QuakeSharp.Core.Common.QString;
 
 namespace QuakeSharp.Core;
 
-// console.c: the console's text (its drawing is ported with the renderer)
+// console.c: the console's text and its drawing
 public sealed partial class QuakeEngine
 {
     public const int CON_TEXTSIZE = 16384;
@@ -381,5 +381,162 @@ public sealed partial class QuakeEngine
         scr_disabled_for_loading = true;
         Con_Printf("%s", msg);
         scr_disabled_for_loading = temp;
+    }
+
+    // ==============================================================================
+    // DRAWING
+    // ==============================================================================
+
+    // console.c: Con_DrawInput
+    // The input line scrolls horizontally if typing goes beyond the right edge
+    public void Con_DrawInput()
+    {
+        int i;
+        byte[] text;
+        int start = 0;
+
+        if (key_dest != keydest_t.key_console && !con_forcedup)
+        {
+            return; // don't draw anything
+        }
+
+        text = key_lines[edit_line];
+
+        // add the cursor frame
+        text[key_linepos] = (byte)(10 + ((int)(realtime * con_cursorspeed) & 1));
+
+        // fill out remainder with spaces
+        for (i = key_linepos + 1; i < con_linewidth; i++)
+        {
+            text[i] = (byte)' ';
+        }
+
+        // prestep if horizontally scrolling
+        if (key_linepos >= con_linewidth)
+        {
+            start += 1 + key_linepos - con_linewidth;
+        }
+
+        // draw it
+        for (i = 0; i < con_linewidth; i++)
+        {
+            Draw_Character((i + 1) << 3, con_vislines - 16, (sbyte)text[start + i]);
+        }
+
+        // remove cursor
+        key_lines[edit_line][key_linepos] = 0;
+    }
+
+    // console.c: Con_DrawNotify
+    // Draws the last few lines of output transparently over the game top
+    public void Con_DrawNotify()
+    {
+        int x, v;
+        int text;
+        int i;
+        float time;
+
+        v = 0;
+        for (i = con_current - NUM_CON_TIMES + 1; i <= con_current; i++)
+        {
+            if (i < 0)
+            {
+                continue;
+            }
+
+            time = con_times[i % NUM_CON_TIMES];
+            if (time == 0)
+            {
+                continue;
+            }
+
+            time = (float)(realtime - time);
+            if (time > con_notifytime.value)
+            {
+                continue;
+            }
+
+            text = i % con_totallines * con_linewidth;
+
+            clearnotify = 0;
+            scr_copytop = 1;
+
+            for (x = 0; x < con_linewidth; x++)
+            {
+                Draw_Character((x + 1) << 3, v, (sbyte)con_text[text + x]);
+            }
+
+            v += 8;
+        }
+
+        if (key_dest == keydest_t.key_message)
+        {
+            clearnotify = 0;
+            scr_copytop = 1;
+
+            x = 0;
+
+            Draw_String(8, v, "say:");
+            while (chat_buffer[x] != 0)
+            {
+                Draw_Character((x + 5) << 3, v, (sbyte)chat_buffer[x]);
+                x++;
+            }
+
+            Draw_Character((x + 5) << 3, v, 10 + ((int)(realtime * con_cursorspeed) & 1));
+            v += 8;
+        }
+
+        if (v > con_notifylines)
+        {
+            con_notifylines = v;
+        }
+    }
+
+    // console.c: Con_DrawConsole
+    // Draws the console with the solid background. The typing input line at the bottom should only be drawn if typing
+    // is allowed
+    public void Con_DrawConsole(int lines, bool drawinput)
+    {
+        int i, x, y;
+        int rows;
+        int text;
+        int j;
+
+        if (lines <= 0)
+        {
+            return;
+        }
+
+        // draw the background
+        Draw_ConsoleBackground(lines);
+
+        // draw the text
+        con_vislines = lines;
+
+        rows = (lines - 16) >> 3; // rows of text to draw
+        y = lines - 16 - (rows << 3); // may start slightly negative
+
+        for (i = con_current - rows + 1; i <= con_current; i++, y += 8)
+        {
+            j = i - con_backscroll;
+            if (j < 0)
+            {
+                j = 0;
+            }
+
+            text = j % con_totallines * con_linewidth;
+
+            for (x = 0; x < con_linewidth; x++)
+            {
+                Draw_Character((x + 1) << 3, y, (sbyte)con_text[text + x]);
+            }
+        }
+
+        // draw the input prompt, user text, and cursor if desired
+        if (drawinput)
+        {
+            Con_DrawInput();
+        }
     }
 }

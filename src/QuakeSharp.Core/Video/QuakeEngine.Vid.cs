@@ -10,6 +10,15 @@ namespace QuakeSharp.Core;
 // game shows is kept (design.md §6.4): its cvars and commands, the remapping of the colormap's entries 0, S_Init
 // between the hidden first mode set and the real one, the pixel aspect, the surface cache and the mode's name on the
 // console. Its other modes and their menu come with milestone 6.
+/// <summary>winquake.h: modestate_t</summary>
+public enum modestate_t
+{
+    MS_WINDOWED,
+    MS_FULLSCREEN,
+    MS_FULLDIB,
+    MS_UNINIT,
+}
+
 public sealed partial class QuakeEngine
 {
     // vid.h: VID_CBITS, VID_GRADES
@@ -38,6 +47,14 @@ public sealed partial class QuakeEngine
     public readonly Cvar vid_window_x = new("vid_window_x", "0", true);
     public readonly Cvar vid_window_y = new("vid_window_y", "0", true);
 
+    /// <summary>winquake.h: modestate (the mode is a window, as the oracle's)</summary>
+    public modestate_t modestate = modestate_t.MS_UNINIT;
+
+    /// <summary>vid_win.c: vid_menudrawfn, vid_menukeyfn (menu.c's video menu calls them)</summary>
+    public Action? vid_menudrawfn;
+
+    public Action<int>? vid_menukeyfn;
+
     // vid_win.c: the mode (one, of the size the host asks for) and whether it is hidden (VID_Init's first set)
     private int mode_width = 320, mode_height = 240;
     private bool hide_window;
@@ -47,6 +64,23 @@ public sealed partial class QuakeEngine
 
     // vid_win.c: VID_ShiftPalette
     public void VID_ShiftPalette(ReadOnlySpan<byte> palette) => VID_SetPalette(palette);
+
+    // vid_win.c: VID_MenuDraw: the list of modes (one mode here: nothing to list, as the oracle's)
+    private static void VID_MenuDraw()
+    {
+    }
+
+    // vid_win.c: VID_MenuKey: Escape goes back to the options (the other keys choose among the modes)
+    private void VID_MenuKey(int key)
+    {
+        switch (key)
+        {
+            case UI.Keys.K_ESCAPE:
+                S_LocalSound("misc/menu1.wav");
+                M_Menu_Options_f();
+                break;
+        }
+    }
 
     // vid_win.c's mode commands, which have nothing to do with one mode
     private static void VID_NoMode_f()
@@ -83,6 +117,7 @@ public sealed partial class QuakeEngine
         CDAudio_Pause();
         S_ClearBuffer();
 
+        modestate = modestate_t.MS_WINDOWED;
         vid.numpages = 1;
         vid.maxwarpwidth = WARP_WIDTH;
         vid.maxwarpheight = WARP_HEIGHT;
@@ -210,6 +245,9 @@ public sealed partial class QuakeEngine
         VID_SetMode(0, palette);
 
         VID_SetPalette(palette);
+
+        vid_menudrawfn = VID_MenuDraw;
+        vid_menukeyfn = VID_MenuKey;
     }
 
     // vid_win.c: VID_Shutdown

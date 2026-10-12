@@ -61,12 +61,23 @@ void	VID_ShiftPalette (unsigned char *palette)
 	VID_SetPalette (palette);
 }
 
+// vid_win.c: VID_MenuDraw: the list of modes (one mode here: nothing to list)
 static void VID_MenuDraw (void)
 {
 }
 
+void M_Menu_Options_f (void);
+
+// vid_win.c: VID_MenuKey: Escape goes back to the options (the other keys choose among the modes: one here)
 static void VID_MenuKey (int key)
 {
+	switch (key)
+	{
+	case K_ESCAPE:
+		S_LocalSound ("misc/menu1.wav");
+		M_Menu_Options_f ();
+		break;
+	}
 }
 
 // vid_win.c's mode commands, which have nothing to do here
