@@ -16,9 +16,6 @@ public sealed partial class QuakeEngine
     /// <summary>sv_main.c: svs (milestone 7)</summary>
     public readonly ServerStatic svs = new();
 
-    /// <summary>net_main.c: net_message (milestone 7)</summary>
-    public SizeBuf net_message = new(8192);
-
     // sv_phys.c, sv_user.c, pr_cmds.c: the server's cvars, which SV_Init registers (milestone 7)
     public readonly Cvar sv_friction = new("sv_friction", "4", false, true);
     public readonly Cvar sv_stopspeed = new("sv_stopspeed", "100");
@@ -31,8 +28,8 @@ public sealed partial class QuakeEngine
     public readonly Cvar sv_accelerate = new("sv_accelerate", "10");
     public readonly Cvar sv_aim = new("sv_aim", "0.93");
 
-    // menu.c: the network menus, which need net_main.c's drivers, addresses and host cache (milestone 7). Without a
-    // network driver they cannot be reached.
+    // menu.c: the network menus (milestone 7, design.md §11.1 step 8). The multiplayer menu reaches them now that
+    // TCP/IP is available; until they are ported they do nothing.
     public void M_Menu_Net_f()
     {
     }
@@ -93,50 +90,23 @@ public sealed partial class QuakeEngine
     {
     }
 
-    // net_main.c: serialAvailable, ipxAvailable, tcpipAvailable (no network driver yet, as the oracle's net_none.c)
-    public bool serialAvailable, ipxAvailable, tcpipAvailable;
+    // pr_edict.c: pr_global_struct->deathmatch and a client's edict->v.frags, which net_dgrm.c reads (the VM, milestone
+    // 7)
+    public static float PR_GlobalDeathmatch() => 0;
 
-    // net_main.c: net_messagetimeout, hostname (NET_Init registers them; the setup menu reads hostname)
-    public readonly Cvar net_messagetimeout = new("net_messagetimeout", "300");
-    public readonly Cvar hostname = new("hostname", "UNNAMED");
+    public static float ClientFrags(ServerClient client) => 0;
 
     // pr_edict.c: PR_Init (milestone 7)
     public void PR_Init()
     {
     }
 
-    // net_main.c: NET_Init, NET_Poll, NET_Shutdown, NET_Connect, NET_GetMessage, NET_SendMessage,
-    // NET_SendUnreliableMessage, NET_CanSendMessage, NET_Close (milestone 7)
-    public void NET_Init()
-    {
-        Cvar_RegisterVariable(net_messagetimeout);
-        Cvar_RegisterVariable(hostname);
-    }
-
-    public void NET_Poll()
-    {
-    }
-
-    public void NET_Shutdown()
-    {
-    }
-
-    public object? NET_Connect(string host) => null;
-
-    public int NET_GetMessage(object? sock) => -1;
-
-    public int NET_SendMessage(object? sock, SizeBuf data) => 1;
-
-    public int NET_SendUnreliableMessage(object? sock, SizeBuf data) => 1;
-
-    public bool NET_CanSendMessage(object? sock) => true;
-
-    public void NET_Close(object? sock)
-    {
-    }
-
-    // sv_main.c: SV_BroadcastPrintf; host.c: Host_ServerFrame, Host_ShutdownServer (milestone 7)
+    // sv_main.c: SV_BroadcastPrintf; host.c: SV_ClientPrintf, Host_ServerFrame, Host_ShutdownServer (milestone 7)
     public void SV_BroadcastPrintf(string fmt, params ReadOnlySpan<PrintfArg> args)
+    {
+    }
+
+    public void SV_ClientPrintf(string fmt, params ReadOnlySpan<PrintfArg> args)
     {
     }
 

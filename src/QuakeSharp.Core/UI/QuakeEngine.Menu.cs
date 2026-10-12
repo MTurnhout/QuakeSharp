@@ -33,8 +33,7 @@ public enum m_state_t
 }
 
 // menu.c: the menus. The network menus (net, serial and modem configuration, LAN configuration, game options, the
-// server search and list) come with net_main.c (milestone 7): they cannot be reached without a network driver, and
-// are stand-ins until then (QuakeEngine.Pending.cs).
+// server search and list) are stand-ins until milestone 7's step 8 (QuakeEngine.Pending.cs).
 public sealed partial class QuakeEngine
 {
     public m_state_t m_state;

@@ -6,12 +6,13 @@ namespace QuakeSharp.Fidelity.Tests;
 /// The client and the renderer against the oracle (milestones 5 and 6): demo1-3 at three video modes, the attract
 /// loop and the scripted menus play with the oracle's state and pictures on every frame. Every line of the oracle's trace is compared: F
 /// (time, rand()), C (cls, cl), E (the entities), D (what the renderer writes into them), X (temporary entities,
-/// beams, lights, light styles, particles), S (sound channels), T (console text), R (the view) and V (the frame and
-/// the palette).
+/// beams, lights, light styles, particles), S (sound channels), T (console text), R (the view), V (the frame and
+/// the palette), and the server's lines, G (sv, svs), Q (the QuakeC globals), N (the edicts), W (the area lists) and M
+/// (the messages sent), which these runs leave as without a server.
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
-    private const string Lines = "FCEDXSTRV";
+    private const string Lines = "FCEDXSTRVGQNWM";
 
     private readonly string userdir = Path.Combine(Path.GetTempPath(), "quakesharp-tests", Guid.NewGuid().ToString("N"));
 

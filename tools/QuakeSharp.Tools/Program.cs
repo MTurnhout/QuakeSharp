@@ -14,7 +14,7 @@ try
         ["trace", var baseDir, var output, .. var engineArgs] => TraceCommands.Trace(baseDir, output, engineArgs),
         ["shot-diff", var a, var b] => TraceCommands.ShotDiff(a, b, null),
         ["shot-diff", var a, var b, var output] => TraceCommands.ShotDiff(a, b, output),
-        ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRV"),
+        ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRVGQNWM"),
         ["trace-compare", var a, var b, var letters] => TraceCommands.Compare(a, b, letters),
         _ => Usage(),
     };

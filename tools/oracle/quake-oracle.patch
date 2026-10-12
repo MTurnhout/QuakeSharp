@@ -19,7 +19,7 @@ index e07e6ce..ca085ec 100644
  	if (s-s2 < 2)
  		strcpy (out,"?model?");
 diff --git a/net_main.c b/net_main.c
-index 5f5d2cf..7facb9b 100644
+index 5f5d2cf..5a28664 100644
 --- a/net_main.c
 +++ b/net_main.c
 @@ -20,6 +20,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
@@ -52,6 +52,26 @@ index 5f5d2cf..7facb9b 100644
  
  	if (recording)
  	{
+@@ -729,8 +738,19 @@ int NET_SendToAll(sizebuf_t *data, int blocktime)
+ 
+ 	for (i=0, host_client = svs.clients ; i<svs.maxclients ; i++, host_client++)
+ 	{
++#ifdef ORACLE
++// a slot without a connection: done, as QuakeSharp has it, rather than whatever the stack held (which could keep the
++// loop below waiting for it until blocktime, for ever on the virtual clock)
++		if (!host_client->netconnection)
++		{
++			state1[i] = true;
++			state2[i] = true;
++			continue;
++		}
++#else
+ 		if (!host_client->netconnection)
+ 			continue;
++#endif
+ 		if (host_client->active)
+ 		{
+ 			if (host_client->netconnection->driver == 0)
 diff --git a/quakeasm.h b/quakeasm.h
 index 96b758b..b63f5a1 100644
 --- a/quakeasm.h

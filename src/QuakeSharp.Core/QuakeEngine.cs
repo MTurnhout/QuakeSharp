@@ -71,6 +71,36 @@ public sealed partial class QuakeEngine
             new(true, 1, r_p1, r_p0, null, 1, r_p2, r_p0, null),
             new(false, 1, r_p0, r_p2, null, 1, r_p0, r_p1, null),
         ];
+        // net_win.c's drivers (the datagram driver over the virtual TCP/IP driver, decision 33) and net_main.c's and
+        // net_dgrm.c's poll procedures, which the C initializes statically
+        net_drivers =
+        [
+            new()
+            {
+                name = "Loopback", Init = Loop_Init, Listen = Loop_Listen, SearchForHosts = Loop_SearchForHosts,
+                Connect = Loop_Connect, CheckNewConnections = Loop_CheckNewConnections, QGetMessage = Loop_GetMessage,
+                QSendMessage = Loop_SendMessage, SendUnreliableMessage = Loop_SendUnreliableMessage,
+                CanSendMessage = Loop_CanSendMessage, CanSendUnreliableMessage = Loop_CanSendUnreliableMessage,
+                Close = Loop_Close, Shutdown = Loop_Shutdown,
+            },
+            new()
+            {
+                name = "Datagram", Init = Datagram_Init, Listen = Datagram_Listen, SearchForHosts = Datagram_SearchForHosts,
+                Connect = Datagram_Connect, CheckNewConnections = Datagram_CheckNewConnections,
+                QGetMessage = Datagram_GetMessage, QSendMessage = Datagram_SendMessage,
+                SendUnreliableMessage = Datagram_SendUnreliableMessage, CanSendMessage = Datagram_CanSendMessage,
+                CanSendUnreliableMessage = Datagram_CanSendUnreliableMessage, Close = Datagram_Close,
+                Shutdown = Datagram_Shutdown,
+            },
+        ];
+        net_numdrivers = net_drivers.Length;
+        net_landrivers = [new Net.VirtualLanDriver(this)];
+        net_numlandrivers = net_landrivers.Length;
+        slistSendProcedure = new(Slist_Send);
+        slistPollProcedure = new(Slist_Poll);
+        testPollProcedure = new(Test_Poll);
+        test2PollProcedure = new(Test2_Poll);
+
         fileSystem = new FileSystem(parms.argv, text => Con_Printf("%s", text), text => Sys_Printf("%s", text))
         {
             UserDir = parms.userdir,

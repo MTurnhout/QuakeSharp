@@ -17,7 +17,7 @@ namespace QuakeSharp.Core.Diagnostics;
 public sealed class TraceWriter
 {
     /// <summary>The trace format's version (the H line).</summary>
-    public const int Version = 3;
+    public const int Version = 4;
 
     private const ulong FNV_OFFSET = 0xcbf29ce484222325UL;
     private const ulong FNV_PRIME = 0x100000001b3UL;
@@ -26,10 +26,16 @@ public sealed class TraceWriter
     private readonly int framesPerSecond;
     private int frame;
 
+    // the M line: the messages sent during the frame running, and those of the frame just traced (for Dump)
+    private Hash messageHash = new();
+    private List<(int Sender, bool Reliable, int Result, byte[] Data)> messages = [];
+    private List<(int Sender, bool Reliable, int Result, byte[] Data)> lastMessages = [];
+
     public TraceWriter(QuakeEngine engine, int framesPerSecond)
     {
         this.engine = engine;
         this.framesPerSecond = framesPerSecond;
+        engine.MessageSent = OnMessageSent;
     }
 
     /// <summary>The trace's frames so far.</summary>
@@ -57,6 +63,15 @@ public sealed class TraceWriter
         lines.Add(Invariant($"T {Text():x16}"));
         lines.Add(Invariant($"R {View():x16}"));
         lines.Add(Invariant($"V {Picture():x16} {Palette():x16}"));
+        lines.Add(Invariant($"G {Server():x16}"));
+        lines.Add(Invariant($"Q {Globals():x16}"));
+        ulong n = Edicts(out int edicts);
+        lines.Add(Invariant($"N {n:x16} {edicts}"));
+        lines.Add(Invariant($"W {World():x16}"));
+        lines.Add(Invariant($"M {messageHash.h:x16} {messages.Count}"));
+        messageHash = new Hash();
+        (lastMessages, messages) = (messages, lastMessages);
+        messages.Clear();
         return lines;
     }
 
@@ -94,6 +109,7 @@ public sealed class TraceWriter
             sb.Append(Invariant($"visedict {i} {(n >= 0 ? n : t >= 0 ? 0x20000 + t : st >= 0 ? 0x10000 + st : -1)}\n"));
         }
 
+        DumpServer(sb);
         return sb.ToString();
     }
 
@@ -601,5 +617,207 @@ public sealed class TraceWriter
         var h = new Hash();
         h.Bytes(engine.vid_curpal);
         return h.h;
+    }
+
+    // ===============================================================================
+    // THE SERVER'S LINES
+    //
+    // Without an active server, G hashes the flags and svs, and Q, N and W nothing: what sv points into belongs to a
+    // game that is over.
+    // ===============================================================================
+
+    private static void H_StringPtr(ref Hash h, string? s)
+    {
+        h.Bool(s != null);
+        if (s != null)
+        {
+            h.String(s);
+        }
+    }
+
+    private static void H_Sizebuf(ref Hash h, SizeBuf b)
+    {
+        h.Bool(b.overflowed);
+        h.Int(b.cursize);
+        h.Bytes(b.data.AsSpan(0, b.cursize));
+    }
+
+    // a client's edict's number, -1 without a server (the edicts come with the VM)
+    private static int EdictNumber(Server.ServerClient c) => -1;
+
+    // G: the server (sv, svs and the client slots up to svs.maxclients)
+    private ulong Server()
+    {
+        var h = new Hash();
+        Server.ServerState sv = engine.sv;
+        Server.ServerStatic svs = engine.svs;
+        int i, j;
+
+        h.Bool(sv.active);
+        h.Bool(sv.paused);
+        h.Bool(sv.loadgame);
+        if (sv.active)
+        {
+            h.Double(sv.time);
+            h.Int(sv.lastcheck);
+            h.Double(sv.lastchecktime);
+            h.String(sv.name);
+            h.String(sv.modelname);
+            h.Model(sv.worldmodel);
+            for (i = 0; i < QuakeDef.MAX_MODELS; i++)
+            {
+                H_StringPtr(ref h, sv.model_precache[i]);
+                h.Model(sv.models[i]);
+            }
+
+            for (i = 0; i < QuakeDef.MAX_SOUNDS; i++)
+            {
+                H_StringPtr(ref h, sv.sound_precache[i]);
+            }
+
+            for (i = 0; i < QuakeDef.MAX_LIGHTSTYLES; i++)
+            {
+                H_StringPtr(ref h, sv.lightstyles[i]);
+            }
+
+            h.Int(sv.num_edicts);
+            h.Int(sv.max_edicts);
+            h.Int((int)sv.state);
+            H_Sizebuf(ref h, sv.datagram);
+            H_Sizebuf(ref h, sv.reliable_datagram);
+            H_Sizebuf(ref h, sv.signon);
+        }
+
+        h.Int(svs.maxclients);
+        h.Int(svs.maxclientslimit);
+        h.Int(svs.serverflags);
+        h.Bool(svs.changelevel_issued);
+        for (i = 0; i < svs.maxclients; i++)
+        {
+            Server.ServerClient c = svs.clients[i];
+            h.Bool(c.active);
+            h.Bool(c.spawned);
+            h.Bool(c.dropasap);
+            h.Bool(c.privileged);
+            h.Bool(c.sendsignon);
+            h.Double(c.last_message);
+            h.Bool(c.netconnection != null);
+            h.Vec(c.cmd.viewangles);
+            h.Float(c.cmd.forwardmove);
+            h.Float(c.cmd.sidemove);
+            h.Float(c.cmd.upmove);
+            h.Vec(c.wishdir);
+            H_Sizebuf(ref h, c.message);
+            h.Int(EdictNumber(c));
+            h.String(c.name);
+            h.Int(c.colors);
+            for (j = 0; j < Core.Server.ServerClient.NUM_PING_TIMES; j++)
+            {
+                h.Float(c.ping_times[j]);
+            }
+
+            h.Int(c.num_pings);
+            for (j = 0; j < Core.Server.ServerClient.NUM_SPAWN_PARMS; j++)
+            {
+                h.Float(c.spawn_parms[j]);
+            }
+
+            h.Int(c.old_frags);
+        }
+
+        return h.h;
+    }
+
+    // Q: the QuakeC globals (the VM comes later: without a server, nothing)
+    private ulong Globals() => new Hash().h;
+
+    // N: the edicts up to sv.num_edicts, their header and their fields
+    private ulong Edicts(out int count)
+    {
+        count = 0;
+        return new Hash().h;
+    }
+
+    // W: the area nodes' trigger and solid lists, as edict numbers in their order
+    private ulong World() => new Hash().h;
+
+    // who sent a message: -1 the client, n the server to client n, -2 another socket
+    private int MessageSender(Net.QSocket sock)
+    {
+        if (sock == engine.cls.netcon)
+        {
+            return -1;
+        }
+
+        for (int i = 0; i < engine.svs.maxclients; i++)
+        {
+            if (engine.svs.clients[i].netconnection == sock)
+            {
+                return i;
+            }
+        }
+
+        return -2;
+    }
+
+    // net_main.c (the oracle's Trace_Message): NET_SendMessage and NET_SendUnreliableMessage, after the driver took
+    // the message
+    private void OnMessageSent(Net.QSocket sock, SizeBuf data, bool reliable, int result)
+    {
+        int sender = MessageSender(sock);
+        messageHash.Int(sender);
+        messageHash.Bool(reliable);
+        messageHash.Int(result);
+        messageHash.Int(data.cursize);
+        messageHash.Bytes(data.data.AsSpan(0, data.cursize));
+        messages.Add((sender, reliable, result, data.data.AsSpan(0, data.cursize).ToArray()));
+    }
+
+    // a string in a dump: quoted, with \\, \" and the characters outside 32-126 as \xHH
+    private static void DumpString(StringBuilder sb, string s)
+    {
+        sb.Append('"');
+        foreach (char c in s)
+        {
+            if (c == '\0')
+            {
+                break;
+            }
+
+            if (c is '\\' or '"')
+            {
+                sb.Append('\\').Append(c);
+            }
+            else if (c < 32 || c > 126)
+            {
+                sb.Append(Invariant($"\\x{(int)c:x2}"));
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+
+        sb.Append('"');
+    }
+
+    // -tracedump: the server's state, the globals and the edicts by name, the frame's messages
+    private void DumpServer(StringBuilder sb)
+    {
+        Server.ServerState sv = engine.sv;
+
+        sb.Append(Invariant($"server active {(sv.active ? 1 : 0)} paused {(sv.paused ? 1 : 0)}"));
+        if (sv.active)
+        {
+            sb.Append(Invariant($" time {BitConverter.DoubleToInt64Bits(sv.time):x16} name {sv.name} num_edicts {sv.num_edicts}"));
+        }
+
+        sb.Append('\n');
+        foreach ((int sender, bool reliable, int result, byte[] data) in lastMessages)
+        {
+            sb.Append(Invariant($"message {sender} {(reliable ? 1 : 0)} {result} {data.Length} "));
+            sb.Append(Convert.ToHexStringLower(data));
+            sb.Append('\n');
+        }
     }
 }

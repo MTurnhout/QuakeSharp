@@ -70,7 +70,7 @@ public sealed class ClientStatic
     public int signon;
 
     /// <summary>net.h's qsocket_t (milestone 7, with net_main.c)</summary>
-    public object? netcon;
+    public Net.QSocket? netcon;
 
     /// <summary>writing buffer to send to server (cl_main.c: CL_Init allocates 1024 bytes)</summary>
     public SizeBuf message = new(1024);
