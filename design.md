@@ -1,8 +1,8 @@
 # QuakeSharp: Design
 
-> Status: **v0.2**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
-> (repository skeleton) and 1 (files and data: the file system, pack files, gfx.wad, game data by MD5, the tools'
-> dumps) done.
+> Status: **v0.3**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
+> (repository skeleton), 1 (files and data) and 2 (the oracle and the numerics: WinQuake built headless writes
+> traces of every demo; musl's libm and `rand()` ported and checked against the C) done.
 
 ## 1. Goal
 
@@ -266,16 +266,21 @@ file, as the C's `FILE *` does.
 frame, renders and mixes sound. The original reads the wall clock (`Sys_FloatTime`) and the frame rate decides how
 often `Host_Frame` runs; even `rand()` is drawn per call. For reproducibility, **time comes from an `IClock`**:
 the executable's is real time, the tests' and the oracle's a **virtual clock** that advances a fixed step per frame
-(e.g. 1/72 s, `Host_FilterTime`'s cap), and every `Sys_FloatTime` call in the engine reads it (the host, `net_*`,
-the signon keepalives in `cl_parse.c`, `Host_Spawn`'s connect time). The executable renders and presents once per
+(1/64 s by default: a binary fraction, exact in the `float` `Host_Frame` takes, and above `Host_FilterTime`'s 1/72 s
+cap so every call runs a frame), and every `Sys_FloatTime` call in the engine reads it (the host, `net_*`, the
+signon keepalives in `cl_parse.c`, `Host_Spawn`'s connect time). The executable renders and presents once per
 `Host_Frame`, as the original.
 
 ### 6.4 Video modes and presentation
 
 The software renderer draws into an 8-bit buffer of the current video mode's size; WinQuake supports any size up to
-`MAXWIDTH`×`MAXHEIGHT` (1280×1024), with the pixel aspect in `vid.aspect`. QuakeSharp offers the original modes
-(DOS's 320×200 mode 0, and the VGA/VESA list from 320×240 up to 1280×1024) through `vid_mode` and the Video Options
-menu; each is pixel-exact against the oracle at that size.
+`MAXWIDTH`×`MAXHEIGHT` (1280×1024), with the pixel aspect in `vid.aspect` (`vid_win.c`: height over width times
+320/240). QuakeSharp offers the original modes (WinQuake's 320×240 window by default, DOS's 320×200 mode 0, and the
+list up to 1280×1024) through `vid_mode` and the Video Options menu; each is pixel-exact against the oracle at that
+size. What `vid_win.c` does that shows is kept: it remaps the colormap's entries 0 to the palette's closest other
+black (GDI cannot remap palette index 0), which changes the frames' pixel values but not their colours; `S_Init` runs
+between its hidden first mode set and the real one; the mode set prints the surface cache size and the mode name; and
+its cvars go into `config.cfg`. The console shows Winquake.exe 1.09's build stamp, `Exe: 09:30:49 Mar 21 1997`.
 
 `Render.Vulkan` presents the frame: the 8-bit buffer and the 256-colour palette (the one `V_UpdatePalette` computes,
 gamma and shifts included) are uploaded each frame, a fragment shader looks up the palette, and the picture is
@@ -305,6 +310,11 @@ mixer with `snd_scaletable`) and `snd_mem.c` (loading WAVs, `ResampleSfx`) are p
 contract covers them. `shm` becomes an `IAudioOut` with a ring buffer the mixer paints ahead of the device's
 position, as the DMA buffer of the original; the device's rate is the mix rate (11025 Hz as the original's default,
 `-sndspeed` for others), and SDL3 converts to the device.
+
+The sound device is part of the game: `S_StartSound` draws from `rand()` when an identical sound started and has not
+been painted yet, and how far the mixer has painted depends on the device's play position. With a real device that
+is real time, as in the original; the oracle and the tests use a **virtual device** (`snd_oracle.c`, 64 KB of 16-bit
+stereo at 11025 Hz as WinQuake's DirectSound buffer) whose position follows the virtual clock.
 
 ### 7.2 Music
 
@@ -345,13 +355,20 @@ Faithfulness is measured, not assumed.
 Fidelity tests find game data through `QUAKESHARP_QUAKE_DIR` (a folder with `id1/`, matched by MD5) and traces
 through `QUAKESHARP_TRACE_DIR`; they skip without them.
 
-**The oracle** (`tools/oracle`): WinQuake 1.09's C sources from `reference/Quake`, built locally (clang-cl, x86,
-SSE2, `id386` 0) as a headless program: the null video driver's memory framebuffer (at any mode size), null input
-and CD, a trace sound device painting into memory, `net_loop` (plus UDP for net tests), a `sys` layer with the
-virtual clock, and a trace patch writing the lines above (`-trace`, `-tracedetail` for field-level output,
-`-traceevents` for scripted input). It changes the game's behaviour only where §6.2 rule 11 needs a shared
-substitute for undefined memory. A `trace-compare` tool names the first differing frame; detail around it shows the
-first differing field or draw call. Traces are derived from game data and stay outside the repository.
+**The oracle** (`tools/oracle`, its README has the details and the trace format): WinQuake 1.09's C sources,
+copied from `reference/Quake` and patched only so `id386` is 0 (`quake-oracle.patch`), built locally with clang-cl
+for 32-bit x86 with SSE2 arithmetic and musl's libm, as a headless program. Its own platform layer replaces the Windows
+drivers: `vid_win.c`'s behaviour in one windowed mode rendered in memory, the virtual sound device, no input or CD,
+the loopback network driver, and a system driver with the virtual clock. It writes per-frame trace lines (time and
+`rand()` state, client state, entities, effects, view, frame and palette), plays scripted input (`-traceevents`)
+and dumps frames (`-traceshot`). Runs are deterministic: the same command line gives the same trace. It changes the
+game's behaviour only where §6.2 rule 11 needs a shared substitute for undefined memory. A `trace-compare` tool will
+name the first differing frame; detail around it shows the first differing field or draw call. Traces are derived
+from game data and stay outside the repository.
+
+Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 frames at 64 per second) at 320×240,
+320×200 and 640×480, and the attract loop, in about 36 seconds for all ten traces. musl's libm and the C runtime's
+`rand()` match the C# ports on every one of 1.8 million values.
 
 ## 11. Milestones
 
@@ -359,9 +376,9 @@ first differing field or draw call. Traces are derived from game data and stay o
 |---|---|---|
 | 0 ✅ | Repo skeleton | Solution, projects, build & one test green, license, README, .gitignore (`*.pak`), reference submodule, CI |
 | 1 ✅ | Files & data | PAKs identified by MD5; search paths and `-game`; `gfx.wad` (WAD2), palette, colormap, pics, BSP textures, MDL skins dump to PNG through the tools |
-| 2 | Oracle & numerics | The headless oracle builds and writes traces of demo1-3; `mathlib`, the libm decision, `rand()`, printf/`Q_atof`, `anorms` etc. generated and tested |
+| 2 ✅ | Oracle & numerics | The headless oracle builds and writes traces of demo1-3; the libm and `rand()` ported and tested. *Traces of the three demos at three sizes and of the attract loop; musl's six functions and `rand()` bit-exact against the C. `mathlib.c`, printf formatting and `Q_atof` move to milestone 4, the tables of the client and renderer to 5 and 6, with the code that uses them* |
 | 3 | Platform & presentation | SDL3 window, Vulkan presents an 8-bit frame with the palette at 4:3 (e.g. `gfx/conback.lmp`); input events; audio device open |
-| 4 | Host & common | `Host_Frame` with the virtual clock, command buffer, cvars, console text, `MSG_*`, `net_loop`, `quake.rc`/`default.cfg` executed |
+| 4 | Host & common | `Host_Frame` with the virtual clock, command buffer, cvars, console text, `MSG_*`, `net_loop`, `quake.rc`/`default.cfg` executed; `mathlib.c`, printf formatting (`%f`, `%5.1f`...) and `Q_atof` checked against the C |
 | 5 | Client & demos | `cl_*` parse and interpolate; **demo1-3 play with the client state in sync on every frame** (no rendering yet) |
 | 6 | Software renderer & 2D | `r_*`/`d_*`, `draw`, `screen`, `console`, `sbar`; **every frame of demo1-3 pixel-exact** at 320×200 and a larger mode; menus |
 | 7 | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable |
@@ -385,6 +402,11 @@ first differing field or draw call. Traces are derived from game data and stay o
 | 8 | Hosting | Private GitHub repository `MTurnhout/QuakeSharp`, pushed after each commit | 2026-10-12 |
 | 9 | Strings | C strings become .NET strings with one byte per character (Latin-1), keeping the high-bit characters and `strcmp` order (§6.2 rule 8) | 2026-10-12 |
 | 10 | File system | Search path, pack files, registered check and `com_modified` as common.c; managed buffers for every `COM_LoadFile` variant, no `-cachedir`, file names on disk matched in any case (§6.1) | 2026-10-12 |
+| 11 | musl | musl 1.2.5 as a read-only submodule (`reference/musl`, MIT): its six functions ported to C# with their constants generated, and the same C linked into the oracle under `musl_*` names; checked on 18 sets of 100,000 inputs (§3.1) | 2026-10-12 |
+| 12 | Virtual time | The oracle and the tests run `Host_Frame` in steps of 1/64 s of a virtual clock that every `Sys_FloatTime` reads (§6.3) | 2026-10-12 |
+| 13 | Virtual sound device | The oracle and the tests mix into a virtual DirectSound-like buffer whose play position follows the virtual clock, because `S_StartSound`'s `rand()` draw depends on what the mixer has painted (§7.1) | 2026-10-12 |
+| 14 | WinQuake's video driver | What `vid_win.c` does that shows is part of the target: the colormap remapping of index 0, `S_Init` between the mode sets, its console messages and cvars, the "(WinQuake) 1.09" console stamp and Winquake.exe's build stamp (§6.4) | 2026-10-12 |
+| 15 | Oracle build | WinQuake's sources are copied and patched in the oracle's work folder (`quake-oracle.patch`: only `id386` off so far), never in `reference/Quake`; its platform layer lives in `tools/oracle/src` (§10) | 2026-10-12 |
 
 ## 13. Open decisions
 
@@ -395,5 +417,5 @@ To confirm with the user before the milestones they affect; the proposals are th
 | D4 | Fidelity target version | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`; the DOS 1.08 executable's differences (DJGPP's `rand()`, x87) documented, emulated later only if wanted |
 | D5 | Server verification | Scripted input in the oracle and QuakeSharp (per-frame key events and console commands on the virtual clock), compared per frame; plus demos the oracle records |
 | D6 | Music | Play the CD tracks from user-supplied audio files (the rerelease's `id1/music/*.ogg`), through a small Ogg Vorbis decoder (NuGet, e.g. NVorbis, MIT) |
-| D7 | Default video mode | 320×200 shown at 4:3, as DOS Quake's mode 0; higher modes from the menu |
+| D7 | Default video mode | 320×240 in a window scaled to the screen, as WinQuake's default mode (the fidelity target is WinQuake: decision 14); DOS's 320×200 and larger modes from the menu |
 | D8 | Scope of v1 | Quake and both mission packs on the WinQuake engine; GLQuake and QuakeWorld after v1 |

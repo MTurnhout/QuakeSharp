@@ -14,10 +14,15 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
 - Fidelity tests need `QUAKESHARP_QUAKE_DIR` (a folder with the original `id1/pak0.pak`, `id1/pak1.pak`) and
   `QUAKESHARP_TRACE_DIR` (traces from the oracle in `tools/oracle`); otherwise they skip. When one fails, find the
   first differing frame with `quakesharp-tools trace-compare`, then compare detail around it.
+- The oracle (WinQuake 1.09's C, headless; see `tools/oracle/README.md`): `tools/oracle/Build-Oracle.ps1 -WorkDir
+  <dir outside the repo>`, then `tools/oracle/Trace-Demos.ps1`. If its sources, `src/` or the patch change, rebuild
+  and regenerate the traces. `-traceshot <frame>` and `quakesharp-tools shot2png` show a frame.
+- `LibmTests` and `RandTests` keep hashes printed by the oracle's `numerics.exe`; if the input sets change, change
+  `numerics.c` alike and take the new hashes from it.
 
 ## Rules
 
-- `reference/Quake` is a read-only submodule. Never edit it.
+- `reference/Quake` and `reference/musl` are read-only submodules. Never edit them; the oracle patches a copy.
 - Translate, don't redesign: keep the original control flow and function boundaries; annotate ported methods with
   their origin, e.g. `// sv_phys.c: SV_Physics_Toss`.
 - Enum members, constants and table data ported from C keep their original names (`svc_temp_entity`,

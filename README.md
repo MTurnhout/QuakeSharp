@@ -9,8 +9,9 @@ A faithful C# port of id Software's Quake, translated from the original source r
 
 See [design.md](design.md) for the full design and milestones.
 
-> **Status:** milestone 1 (files and data): the Quake file system, pack files and gfx.wad are ported, and game
-> data is identified by MD5. Nothing is playable yet.
+> **Status:** milestone 2: the Quake file system, pack files and gfx.wad are ported, game data is identified by MD5,
+> the C library's maths functions (from musl) and `rand()` are ported bit for bit, and the reference oracle (WinQuake
+> 1.09's own C, built headless) traces every demo frame by frame. Nothing is playable yet.
 
 ## Game data
 
@@ -47,6 +48,11 @@ sees them (engine switches such as `-game <dir>`, `-rogue` or `-hipnotic` may fo
 <out>` copies one file out; `dump-graphics` writes the palette, colormap, pictures, gfx.wad, map textures, model skins
 and sprite frames as PNG. Write the output outside the repository (the tools refuse to write inside it): extracted
 game data must never be committed.
+
+## The reference oracle
+
+QuakeSharp is checked against WinQuake 1.09's C code built as a headless program that writes a trace of every frame;
+see [tools/oracle](tools/oracle/README.md). It needs LLVM's clang-cl and Visual Studio's C++ tools.
 
 ## Testing
 

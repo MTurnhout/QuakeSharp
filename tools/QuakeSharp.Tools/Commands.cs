@@ -120,6 +120,18 @@ internal static class Commands
         return 0;
     }
 
+    // tools/oracle/src/trace.c: Shot (width, height, the palette, the pixels)
+    public static int ShotToPng(string shot, string output)
+    {
+        RefuseRepository(output);
+        byte[] data = File.ReadAllBytes(shot);
+        int width = I32(data, 0);
+        int height = I32(data, 4);
+        PngWriter.WriteIndexed(output, width, height, data.AsSpan(8 + 768, width * height), data.AsSpan(8, 768));
+        Console.WriteLine($"wrote {output} ({width}x{height})");
+        return 0;
+    }
+
     // bspfile.h: the textures lump (dmiptexlump_t) and its miptex_t; mip level 0 of each, once per name
     private static int DumpTextures(byte[] bsp, string dir, byte[] palette, HashSet<string> done)
     {

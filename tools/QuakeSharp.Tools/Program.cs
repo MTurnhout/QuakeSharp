@@ -10,6 +10,7 @@ try
         ["files", var baseDir, .. var engineArgs] => Commands.Files(baseDir, engineArgs),
         ["extract", var baseDir, var file, var output, .. var engineArgs] => Commands.Extract(baseDir, file, output, engineArgs),
         ["dump-graphics", var baseDir, var outDir, .. var engineArgs] => Commands.DumpGraphics(baseDir, outDir, engineArgs),
+        ["shot2png", var shot, var output] => Commands.ShotToPng(shot, output),
         _ => Usage(),
     };
 }
@@ -31,6 +32,7 @@ static int Usage()
           quakesharp-tools dump-graphics <quake-dir> <out-dir> [engine args]
                                                             write the palette, colormap, pictures, gfx.wad, map
                                                             textures, model skins and sprite frames as PNG
+          quakesharp-tools shot2png <in.shot> <out.png>     a frame the oracle wrote (-traceshot) as PNG
 
         Game data and everything extracted from it must stay outside the repository; the tools refuse to write
         inside it.
