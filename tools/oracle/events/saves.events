@@ -1,0 +1,539 @@
+3 save nogame
+5 map e1m1
+65 god
+75 impulse 9
+85 impulse 2
+105 +attack
+105 +left
+195 -left
+205 +forward
+295 -forward
+305 -attack
+335 save e1m1
+345 +back
+385 -back
+405 changelevel e1m2
+465 god
+475 impulse 9
+485 impulse 3
+505 +attack
+505 +right
+595 -right
+605 +forward
+695 -forward
+705 -attack
+735 save e1m2
+745 +back
+785 -back
+805 changelevel e1m3
+865 god
+875 impulse 9
+885 impulse 4
+905 +attack
+905 +left
+995 -left
+1005 +forward
+1095 -forward
+1105 -attack
+1135 save e1m3
+1145 +back
+1185 -back
+1205 changelevel e1m4
+1265 god
+1275 impulse 9
+1285 impulse 5
+1305 +attack
+1305 +right
+1395 -right
+1405 +forward
+1495 -forward
+1505 -attack
+1535 save e1m4
+1545 +back
+1585 -back
+1605 changelevel e1m5
+1665 god
+1675 impulse 9
+1685 impulse 6
+1705 +attack
+1705 +left
+1795 -left
+1805 +forward
+1895 -forward
+1905 -attack
+1935 save e1m5
+1945 +back
+1985 -back
+2005 changelevel e1m6
+2065 god
+2075 impulse 9
+2085 impulse 7
+2105 +attack
+2105 +right
+2195 -right
+2205 +forward
+2295 -forward
+2305 -attack
+2335 save e1m6
+2345 +back
+2385 -back
+2405 changelevel e1m7
+2465 god
+2475 impulse 9
+2485 impulse 8
+2505 +attack
+2505 +left
+2595 -left
+2605 +forward
+2695 -forward
+2705 -attack
+2735 save e1m7
+2745 +back
+2785 -back
+2805 changelevel e1m8
+2865 god
+2875 impulse 9
+2885 impulse 2
+2905 +attack
+2905 +right
+2995 -right
+3005 +forward
+3095 -forward
+3105 -attack
+3135 save e1m8
+3145 +back
+3185 -back
+3205 changelevel e2m1
+3265 god
+3275 impulse 9
+3285 impulse 3
+3305 +attack
+3305 +left
+3395 -left
+3405 +forward
+3495 -forward
+3505 -attack
+3535 save e2m1
+3545 +back
+3585 -back
+3605 changelevel e2m2
+3665 god
+3675 impulse 9
+3685 impulse 4
+3705 +attack
+3705 +right
+3795 -right
+3805 +forward
+3895 -forward
+3905 -attack
+3935 save e2m2
+3945 +back
+3985 -back
+4005 changelevel e2m3
+4065 god
+4075 impulse 9
+4085 impulse 5
+4105 +attack
+4105 +left
+4195 -left
+4205 +forward
+4295 -forward
+4305 -attack
+4335 save e2m3
+4345 +back
+4385 -back
+4405 changelevel e2m4
+4465 god
+4475 impulse 9
+4485 impulse 6
+4505 +attack
+4505 +right
+4595 -right
+4605 +forward
+4695 -forward
+4705 -attack
+4735 save e2m4
+4745 +back
+4785 -back
+4805 changelevel e2m5
+4865 god
+4875 impulse 9
+4885 impulse 7
+4905 +attack
+4905 +left
+4995 -left
+5005 +forward
+5095 -forward
+5105 -attack
+5135 save e2m5
+5145 +back
+5185 -back
+5205 changelevel e2m6
+5265 god
+5275 impulse 9
+5285 impulse 8
+5305 +attack
+5305 +right
+5395 -right
+5405 +forward
+5495 -forward
+5505 -attack
+5535 save e2m6
+5545 +back
+5585 -back
+5605 changelevel e2m7
+5665 god
+5675 impulse 9
+5685 impulse 2
+5705 +attack
+5705 +left
+5795 -left
+5805 +forward
+5895 -forward
+5905 -attack
+5935 save e2m7
+5945 +back
+5985 -back
+6005 changelevel e3m1
+6065 god
+6075 impulse 9
+6085 impulse 3
+6105 +attack
+6105 +right
+6195 -right
+6205 +forward
+6295 -forward
+6305 -attack
+6335 save e3m1
+6345 +back
+6385 -back
+6405 changelevel e3m2
+6465 god
+6475 impulse 9
+6485 impulse 4
+6505 +attack
+6505 +left
+6595 -left
+6605 +forward
+6695 -forward
+6705 -attack
+6735 save e3m2
+6745 +back
+6785 -back
+6805 changelevel e3m3
+6865 god
+6875 impulse 9
+6885 impulse 5
+6905 +attack
+6905 +right
+6995 -right
+7005 +forward
+7095 -forward
+7105 -attack
+7135 save e3m3
+7145 +back
+7185 -back
+7205 changelevel e3m4
+7265 god
+7275 impulse 9
+7285 impulse 6
+7305 +attack
+7305 +left
+7395 -left
+7405 +forward
+7495 -forward
+7505 -attack
+7535 save e3m4
+7545 +back
+7585 -back
+7605 changelevel e3m5
+7665 god
+7675 impulse 9
+7685 impulse 7
+7705 +attack
+7705 +right
+7795 -right
+7805 +forward
+7895 -forward
+7905 -attack
+7935 save e3m5
+7945 +back
+7985 -back
+8005 changelevel e3m6
+8065 god
+8075 impulse 9
+8085 impulse 8
+8105 +attack
+8105 +left
+8195 -left
+8205 +forward
+8295 -forward
+8305 -attack
+8335 save e3m6
+8345 +back
+8385 -back
+8405 changelevel e3m7
+8465 god
+8475 impulse 9
+8485 impulse 2
+8505 +attack
+8505 +right
+8595 -right
+8605 +forward
+8695 -forward
+8705 -attack
+8735 save e3m7
+8745 +back
+8785 -back
+8805 changelevel e4m1
+8865 god
+8875 impulse 9
+8885 impulse 3
+8905 +attack
+8905 +left
+8995 -left
+9005 +forward
+9095 -forward
+9105 -attack
+9135 save e4m1
+9145 +back
+9185 -back
+9205 changelevel e4m2
+9265 god
+9275 impulse 9
+9285 impulse 4
+9305 +attack
+9305 +right
+9395 -right
+9405 +forward
+9495 -forward
+9505 -attack
+9535 save e4m2
+9545 +back
+9585 -back
+9605 changelevel e4m3
+9665 god
+9675 impulse 9
+9685 impulse 5
+9705 +attack
+9705 +left
+9795 -left
+9805 +forward
+9895 -forward
+9905 -attack
+9935 save e4m3
+9945 +back
+9985 -back
+10005 changelevel e4m4
+10065 god
+10075 impulse 9
+10085 impulse 6
+10105 +attack
+10105 +right
+10195 -right
+10205 +forward
+10295 -forward
+10305 -attack
+10335 save e4m4
+10345 +back
+10385 -back
+10405 changelevel e4m5
+10465 god
+10475 impulse 9
+10485 impulse 7
+10505 +attack
+10505 +left
+10595 -left
+10605 +forward
+10695 -forward
+10705 -attack
+10735 save e4m5
+10745 +back
+10785 -back
+10805 changelevel e4m6
+10865 god
+10875 impulse 9
+10885 impulse 8
+10905 +attack
+10905 +right
+10995 -right
+11005 +forward
+11095 -forward
+11105 -attack
+11135 save e4m6
+11145 +back
+11185 -back
+11205 changelevel e4m7
+11265 god
+11275 impulse 9
+11285 impulse 2
+11305 +attack
+11305 +left
+11395 -left
+11405 +forward
+11495 -forward
+11505 -attack
+11535 save e4m7
+11545 +back
+11585 -back
+11605 changelevel e4m8
+11665 god
+11675 impulse 9
+11685 impulse 3
+11705 +attack
+11705 +right
+11795 -right
+11805 +forward
+11895 -forward
+11905 -attack
+11935 save e4m8
+11945 +back
+11985 -back
+12005 changelevel end
+12065 god
+12075 impulse 9
+12085 impulse 4
+12105 +attack
+12105 +left
+12195 -left
+12205 +forward
+12295 -forward
+12305 -attack
+12335 save end
+12345 +back
+12385 -back
+12405 changelevel dm1
+12465 god
+12475 impulse 9
+12485 impulse 5
+12505 +attack
+12505 +right
+12595 -right
+12605 +forward
+12695 -forward
+12705 -attack
+12735 save dm1
+12745 +back
+12785 -back
+12805 changelevel dm2
+12865 god
+12875 impulse 9
+12885 impulse 6
+12905 +attack
+12905 +left
+12995 -left
+13005 +forward
+13095 -forward
+13105 -attack
+13135 save dm2
+13145 +back
+13185 -back
+13205 changelevel dm3
+13265 god
+13275 impulse 9
+13285 impulse 7
+13305 +attack
+13305 +right
+13395 -right
+13405 +forward
+13495 -forward
+13505 -attack
+13535 save dm3
+13545 +back
+13585 -back
+13605 changelevel dm4
+13665 god
+13675 impulse 9
+13685 impulse 8
+13705 +attack
+13705 +left
+13795 -left
+13805 +forward
+13895 -forward
+13905 -attack
+13935 save dm4
+13945 +back
+13985 -back
+14005 changelevel dm5
+14065 god
+14075 impulse 9
+14085 impulse 2
+14105 +attack
+14105 +right
+14195 -right
+14205 +forward
+14295 -forward
+14305 -attack
+14335 save dm5
+14345 +back
+14385 -back
+14405 changelevel dm6
+14465 god
+14475 impulse 9
+14485 impulse 3
+14505 +attack
+14505 +left
+14595 -left
+14605 +forward
+14695 -forward
+14705 -attack
+14735 save dm6
+14745 +back
+14785 -back
+14805 changelevel e1m3
+14865 god
+14875 impulse 9
+14885 impulse 4
+14905 menu_save
+14925 @key 13 1
+14926 @key 13 0
+14945 +attack
+14945 +forward
+15035 -forward
+15045 -attack
+15055 menu_save
+15075 @key 129 1
+15076 @key 129 0
+15085 @key 13 1
+15086 @key 13 0
+15105 +right
+15145 -right
+15155 menu_save
+15175 @key 129 1
+15176 @key 129 0
+15195 @key 13 1
+15196 @key 13 0
+15225 menu_load
+15245 @key 128 1
+15246 @key 128 0
+15255 @key 13 1
+15256 @key 13 0
+15405 +forward
+15505 -forward
+15605 save ../up
+15615 save sub/../up
+15625 give h 0
+15635 save dead
+15645 give h 100
+15805 map e1m1
+15950 noclip
+15960 +forward
+16247 -forward
+16250 +moveright
+16417 -moveright
+16420 +movedown
+16512 -movedown
+16655 save inter
+16800 +jump
+16810 -jump
+17100 +jump
+17110 -jump
+17305 disconnect
+17315 maxplayers 2
+17325 map e1m1
+17405 save mp
+17505 disconnect
+17515 maxplayers 1
+17525 deathmatch 0
+17535 map e1m2
+17605 save last

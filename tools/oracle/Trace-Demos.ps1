@@ -20,7 +20,8 @@ when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.fi
                         and recorded with -recordevents, e1m1 into e1m2; sound: the sound and CD commands and
                         cvars, the menu's volume sliders, a game's pause and level changes), at
                         320x240; commands.640x480.trace the same at 640x480, sound.nosound.trace the sound game with
-                        -nosound -nocdaudio
+                        -nosound -nocdaudio; saves: a save on every map, the save and load menus, the refusals
+  loads.trace           every save saves.trace's run wrote, loaded in turn and played on
 
 .PARAMETER Oracle
 quake-oracle.exe, as Build-Oracle.ps1 builds it.
@@ -44,6 +45,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# -Only a,b from powershell -File arrives as one string
+$Only = @($Only | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
@@ -104,7 +107,7 @@ Trace 'menus.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-o
 Trace 'attract.config' @('-oracleframes', '600') @('menus/config.cfg')
 
 # the scripted games (design.md §11.1): the frames each runs for are in GameTests too
-$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500 }
+$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500; 'saves' = 17705 }
 foreach ($game in $games.Keys) {
     $events = Join-Path $PSScriptRoot "events\$game.events"
     Trace $game @('-traceevents', $events, '-oracleframes', "$($games[$game])")
@@ -114,3 +117,9 @@ Trace 'commands.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, 
 # the sound game without a sound device or a CD (WinQuake's -nosound and -nocdaudio)
 $events = Join-Path $PSScriptRoot 'events\sound.events'
 Trace 'sound.nosound' @('-nosound', '-nocdaudio', '-traceevents', $events, '-oracleframes', '3500')
+# the savegames the saves game wrote, each loaded in a fresh run and played on (design.md §11.3)
+$events = Join-Path $PSScriptRoot 'events\loads.events'
+if (-not $Only -or $Only -contains 'loads') {
+    $saves = @(Get-ChildItem (Join-Path $OutDir 'saves.files') -Filter '*.sav' | ForEach-Object { "saves/$($_.Name)" })
+    Trace 'loads' @('-traceevents', $events, '-oracleframes', '12905') $saves
+}

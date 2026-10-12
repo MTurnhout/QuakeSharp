@@ -102,6 +102,7 @@ public sealed class DemoTests : IDisposable
     [InlineData("tour", 22200, 320, 240, "tour.trace")]
     [InlineData("e1", 24500, 320, 240, "e1.trace")]
     [InlineData("sound", 3500, 320, 240, "sound.trace")]
+    [InlineData("saves", 17705, 320, 240, "saves.trace")]
     public void GamePlaysInSyncWithTheOracle(string game, int frames, int width, int height, string trace)
     {
         string baseDir = GameDataLocator.RequireBaseDir();
@@ -111,6 +112,21 @@ public sealed class DemoTests : IDisposable
         var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", frames.ToString(CultureInfo.InvariantCulture)], width, height);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: frames));
         RunFiles.AssertSame(trace, userdir);
+    }
+
+    // Every savegame the saves game wrote (design.md §11.3), the oracle's files, loaded in a fresh run and played on
+    [Fact]
+    public void SavesLoadInSyncWithTheOracle()
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile("loads.trace");
+        string saves = TraceLocator.RequireDirectory("saves.files");
+        RunFiles.CopyInputs(userdir, [.. Directory.EnumerateFiles(saves, "*.sav").Select(f => "saves/" + Path.GetFileName(f))]);
+        string events = Path.Combine(RepositoryRoot(), "tools", "oracle", "events", "loads.events");
+
+        var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", "12905"]);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 12905));
+        RunFiles.AssertSame("loads.trace", userdir);
     }
 
     // The sound game without a sound device or a CD (WinQuake's -nosound and -nocdaudio)

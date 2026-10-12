@@ -1,0 +1,305 @@
+5 load e1m1
+65 +attack
+65 +left
+125 -left
+135 +forward
+235 -forward
+245 -attack
+305 load e1m2
+365 +attack
+365 +right
+425 -right
+435 +forward
+535 -forward
+545 -attack
+605 load e1m3
+665 +attack
+665 +left
+725 -left
+735 +forward
+835 -forward
+845 -attack
+905 load e1m4
+965 +attack
+965 +right
+1025 -right
+1035 +forward
+1135 -forward
+1145 -attack
+1205 load e1m5
+1265 +attack
+1265 +left
+1325 -left
+1335 +forward
+1435 -forward
+1445 -attack
+1505 load e1m6
+1565 +attack
+1565 +right
+1625 -right
+1635 +forward
+1735 -forward
+1745 -attack
+1805 load e1m7
+1865 +attack
+1865 +left
+1925 -left
+1935 +forward
+2035 -forward
+2045 -attack
+2105 load e1m8
+2165 +attack
+2165 +right
+2225 -right
+2235 +forward
+2335 -forward
+2345 -attack
+2405 load e2m1
+2465 +attack
+2465 +left
+2525 -left
+2535 +forward
+2635 -forward
+2645 -attack
+2705 load e2m2
+2765 +attack
+2765 +right
+2825 -right
+2835 +forward
+2935 -forward
+2945 -attack
+3005 load e2m3
+3065 +attack
+3065 +left
+3125 -left
+3135 +forward
+3235 -forward
+3245 -attack
+3305 load e2m4
+3365 +attack
+3365 +right
+3425 -right
+3435 +forward
+3535 -forward
+3545 -attack
+3605 load e2m5
+3665 +attack
+3665 +left
+3725 -left
+3735 +forward
+3835 -forward
+3845 -attack
+3905 load e2m6
+3965 +attack
+3965 +right
+4025 -right
+4035 +forward
+4135 -forward
+4145 -attack
+4205 load e2m7
+4265 +attack
+4265 +left
+4325 -left
+4335 +forward
+4435 -forward
+4445 -attack
+4505 load e3m1
+4565 +attack
+4565 +right
+4625 -right
+4635 +forward
+4735 -forward
+4745 -attack
+4805 load e3m2
+4865 +attack
+4865 +left
+4925 -left
+4935 +forward
+5035 -forward
+5045 -attack
+5105 load e3m3
+5165 +attack
+5165 +right
+5225 -right
+5235 +forward
+5335 -forward
+5345 -attack
+5405 load e3m4
+5465 +attack
+5465 +left
+5525 -left
+5535 +forward
+5635 -forward
+5645 -attack
+5705 load e3m5
+5765 +attack
+5765 +right
+5825 -right
+5835 +forward
+5935 -forward
+5945 -attack
+6005 load e3m6
+6065 +attack
+6065 +left
+6125 -left
+6135 +forward
+6235 -forward
+6245 -attack
+6305 load e3m7
+6365 +attack
+6365 +right
+6425 -right
+6435 +forward
+6535 -forward
+6545 -attack
+6605 load e4m1
+6665 +attack
+6665 +left
+6725 -left
+6735 +forward
+6835 -forward
+6845 -attack
+6905 load e4m2
+6965 +attack
+6965 +right
+7025 -right
+7035 +forward
+7135 -forward
+7145 -attack
+7205 load e4m3
+7265 +attack
+7265 +left
+7325 -left
+7335 +forward
+7435 -forward
+7445 -attack
+7505 load e4m4
+7565 +attack
+7565 +right
+7625 -right
+7635 +forward
+7735 -forward
+7745 -attack
+7805 load e4m5
+7865 +attack
+7865 +left
+7925 -left
+7935 +forward
+8035 -forward
+8045 -attack
+8105 load e4m6
+8165 +attack
+8165 +right
+8225 -right
+8235 +forward
+8335 -forward
+8345 -attack
+8405 load e4m7
+8465 +attack
+8465 +left
+8525 -left
+8535 +forward
+8635 -forward
+8645 -attack
+8705 load e4m8
+8765 +attack
+8765 +right
+8825 -right
+8835 +forward
+8935 -forward
+8945 -attack
+9005 load end
+9065 +attack
+9065 +left
+9125 -left
+9135 +forward
+9235 -forward
+9245 -attack
+9305 load dm1
+9365 +attack
+9365 +right
+9425 -right
+9435 +forward
+9535 -forward
+9545 -attack
+9605 load dm2
+9665 +attack
+9665 +left
+9725 -left
+9735 +forward
+9835 -forward
+9845 -attack
+9905 load dm3
+9965 +attack
+9965 +right
+10025 -right
+10035 +forward
+10135 -forward
+10145 -attack
+10205 load dm4
+10265 +attack
+10265 +left
+10325 -left
+10335 +forward
+10435 -forward
+10445 -attack
+10505 load dm5
+10565 +attack
+10565 +right
+10625 -right
+10635 +forward
+10735 -forward
+10745 -attack
+10805 load dm6
+10865 +attack
+10865 +left
+10925 -left
+10935 +forward
+11035 -forward
+11045 -attack
+11105 load s0
+11165 +attack
+11165 +right
+11225 -right
+11235 +forward
+11335 -forward
+11345 -attack
+11405 load s1
+11465 +attack
+11465 +left
+11525 -left
+11535 +forward
+11635 -forward
+11645 -attack
+11705 load s2
+11765 +attack
+11765 +right
+11825 -right
+11835 +forward
+11935 -forward
+11945 -attack
+12005 load last
+12065 +attack
+12065 +left
+12125 -left
+12135 +forward
+12235 -forward
+12245 -attack
+12305 load nofile
+12365 +attack
+12365 +right
+12425 -right
+12435 +forward
+12535 -forward
+12545 -attack
+12605 menu_load
+12625 @key 129 1
+12626 @key 129 0
+12635 @key 129 1
+12636 @key 129 0
+12645 @key 13 1
+12646 @key 13 0
+12705 +attack
+12705 +forward
+12805 -forward
+12815 -attack
