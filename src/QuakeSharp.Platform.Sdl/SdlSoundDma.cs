@@ -10,7 +10,9 @@ namespace QuakeSharp.Platform.Sdl;
 /// <summary>
 /// The sound device, standing in for snd_win.c's DirectSound buffer: 64 KB of 16-bit stereo at 11025 Hz that an SDL3
 /// audio stream plays round and round (SDL converts it to the device), the mixer painting ahead of its position
-/// (design.md §7.1).
+/// (design.md §7.1). With a clock (the executable's -recordevents), the position is the clock's instead, as the
+/// oracle's virtual device has it (snd_oracle.c), so the mix is the one a trace of the recorded game has; the device
+/// plays the buffer from that position.
 /// </summary>
 public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
 {
@@ -18,6 +20,7 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
     private const int SecondaryBufferSize = 0x10000;
 
     private readonly int speed;
+    private readonly Func<double>? clock;
     private SDL_AudioStream* stream;
     private GCHandle self;
     private Dma? shm;
@@ -26,10 +29,15 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
     private int playPosition;
 
     /// <param name="speed">The mix rate (11025 Hz, as snd_win.c).</param>
-    public SdlSoundDma(int speed = 11025)
+    /// <param name="clock">A clock in seconds the play position follows (null: the device's own progress).</param>
+    public SdlSoundDma(int speed = 11025, Func<double>? clock = null)
     {
         this.speed = speed;
+        this.clock = clock;
     }
+
+    // snd_oracle.c: SNDDMA_GetDMAPos's position in bytes: one sample frame per 1/speed s of the clock
+    private int ClockPosition() => ((int)(clock!() * shm!.speed) * shm.channels * (shm.samplebits / 8)) & (shm.buffer.Length - 1);
 
     // snd_win.c: SNDDMA_Init
     public Dma? Init()
@@ -75,7 +83,7 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
             return 0;
         }
 
-        int s = Volatile.Read(ref playPosition) / (shm.samplebits / 8);
+        int s = (clock != null ? ClockPosition() : Volatile.Read(ref playPosition)) / (shm.samplebits / 8);
         return s & (shm.samples - 1);
     }
 
@@ -110,7 +118,7 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
             return;
         }
 
-        int position = device.playPosition;
+        int position = device.clock != null ? device.ClockPosition() : device.playPosition;
         int remaining = additionalAmount - (additionalAmount % 4);
         fixed (byte* buffer = shm.buffer)
         {
