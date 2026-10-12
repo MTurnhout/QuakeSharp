@@ -2,7 +2,8 @@
  * snd_oracle.c: the oracle's sound device, standing in for snd_win.c's DirectSound buffer (16-bit stereo at 11025 Hz,
  * 64 KB). Its play position follows the virtual clock, so the mixer paints the same samples at the same frames in
  * every run: which matters to the game, because S_StartSound draws from rand() when an identical sound has not yet
- * been painted (design.md §7.1).
+ * been painted (design.md §7.1). It prints what snd_win.c's DirectSound path prints the first time, as Winquake.exe
+ * 1.09 does on today's Windows (decision 38).
  */
 #include "quakedef.h"
 #include "winquake.h"
@@ -19,6 +20,8 @@ DWORD gSndBufSize;
 
 static byte	dma_buffer[SECONDARY_BUFFER_SIZE];
 
+static qboolean	snd_firsttime = true;
+
 qboolean SNDDMA_Init (void)
 {
 	shm = &sn;
@@ -33,6 +36,19 @@ qboolean SNDDMA_Init (void)
 	shm->submission_chunk = 1;
 	shm->buffer = dma_buffer;
 	memset (dma_buffer, 0, sizeof(dma_buffer));
+
+	// snd_win.c: SNDDMA_InitDirect's messages, then SNDDMA_Init's
+	if (snd_firsttime)
+	{
+		Con_SafePrintf ("Set primary sound buffer format: yes\n");
+		Con_SafePrintf ("Using secondary sound buffer\n");
+		Con_SafePrintf ("   %d channel(s)\n"
+		                "   %d bits/sample\n"
+		                "   %d bytes/sec\n",
+		                shm->channels, shm->samplebits, shm->speed);
+		Con_SafePrintf ("DirectSound initialized\n");
+	}
+	snd_firsttime = false;
 	return true;
 }
 

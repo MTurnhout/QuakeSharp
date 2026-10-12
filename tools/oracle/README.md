@@ -53,9 +53,9 @@ hand in QuakeSharp and recorded with `-recordevents`, from the menu through e1m1
   (its menus, its console stamp "(WinQuake) 1.09", S_Init from the video driver).
 - **Its other changes** (`quake-oracle.patch`, each under `ORACLE`): fixed substitutes for memory the C reads without
   owning it (design.md §3.3: `R_AliasDrawModel`'s `finalverts` start zeroed; `COM_FileBase` stops at the start of a
-  name without `/`, where it read the memory before it), and two hooks for the traces that change nothing:
-  `NET_SendMessage` and `NET_SendUnreliableMessage` pass every message to `Trace_Message`, and world.c's
-  `Oracle_AreaLinks` lists the area nodes' edicts.
+  name without `/`, where it read the memory before it), and three hooks for the traces that change nothing:
+  `NET_SendMessage` and `NET_SendUnreliableMessage` pass every message to `Trace_Message`, world.c's
+  `Oracle_AreaLinks` lists the area nodes' edicts, and cd_win.c's `Oracle_CDState` gives its static state.
 - **Floating point** as design.md §3.1: SSE2, every float operation rounded to single precision.
 - **musl's libm**: `sin`, `cos`, `tan`, `atan`, `atan2` and `pow` are musl 1.2.5's (`reference/musl`), renamed
   `musl_*` in musl's sources and Quake's alike (`musl/musl_names.h`, force-included).
@@ -79,8 +79,13 @@ hand in QuakeSharp and recorded with `-recordevents`, from the menu through e1m1
   the console. The loading disc is never in the frame (WinQuake draws it on the screen and restores it).
 - `snd_oracle.c`: a 64 KB, 16-bit stereo, 11025 Hz buffer standing in for DirectSound's, whose play position follows
   the virtual clock. The mixer then paints the same samples at the same frames in every run, which the game depends on:
-  `S_StartSound` draws from `rand()` when an identical sound has not been painted yet.
-- `in_oracle.c`, with `in_null.c` and `cd_null.c` from WinQuake: no mouse, no CD.
+  `S_StartSound` draws from `rand()` when an identical sound has not been painted yet. It prints what snd_win.c's
+  DirectSound path prints the first time (`Set primary sound buffer format: yes`, `Using secondary sound buffer`, the
+  format, `DirectSound initialized`), as Winquake.exe 1.09 does on today's Windows.
+- `cd_oracle.c`: the MCI commands of WinQuake's `cd_win.c` (compiled unchanged) go to a virtual drive holding Quake's
+  disc, track 1 data and tracks 2-11 audio, instead of winmm (design.md decision 37). With no window procedure no MCI
+  notification arrives, so no track ends. The console says "CD Audio Initialized" and the `cd` command works.
+- `in_oracle.c`, with `in_null.c` from WinQuake: no mouse.
 - `net_oracle.c`: WinQuake's network drivers (`net_win.c`'s list: loopback, then datagram, `net_dgrm.c`) over a
   virtual LAN driver, net_wins.c without sockets (design.md decision 33): TCP/IP is available (the menus offer it and
   a game started from them runs over loopback), the address is 127.0.0.1 once listening, the console says "Winsock
@@ -95,7 +100,7 @@ hand in QuakeSharp and recorded with `-recordevents`, from the menu through e1m1
 | `-tracequitafterdemo` | Quit when the demo playing ends |
 | `-oracleframes <n>` | Quit after n frames |
 | `-traceshot <frame>` | Also write that frame (any number of times) as `<trace>.<frame>.shot`: width, height (32-bit), the palette, the pixels; `quakesharp-tools shot2png` makes a PNG of it |
-| `-tracedump <frame>` | Also write that frame's state (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits: the client's entities, then the server (`server` line), the QuakeC globals and every edict's header and fields by name (`global`, `edict` lines, strings quoted with `\xHH` escapes), and the messages sent during the frame in hexadecimal (`message <sender> <reliable> <result> <size> <bytes>`); `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing line |
+| `-tracedump <frame>` | Also write that frame's state (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits: the client's entities, then the server (`server` line), the QuakeC globals and every edict's header and fields by name (`global`, `edict` lines, strings quoted with `\xHH` escapes), the messages sent during the frame in hexadecimal (`message <sender> <reliable> <result> <size> <bytes>`), the sound (`sound`: the mixer's times, `channel` lines, `painted <from> <to> <bytes>`: the samples painted during the frame from the device's buffer, in hexadecimal) and the CD (`cd`: cd_win.c's state, `cdvolume` as its bits, the remap table, the drive's); `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing line |
 | `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), or `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it) |
 | `-oraclevid <w> <h>` | The video mode (320x200 to 1280x1024) |
 | `-oraclestep <n>` | Frames of 1/n s |
@@ -103,7 +108,7 @@ hand in QuakeSharp and recorded with `-recordevents`, from the menu through e1m1
 
 ## The trace format
 
-One line `H 4 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
+One line `H 5 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
 
 | Line | Fields |
 |---|---|
@@ -121,11 +126,13 @@ One line `H 4 <width> <height> <frames per second>`, then for every frame, after
 | `N <hash> <edicts>` | The edicts up to `sv.num_edicts`: `free`, `num_leafs` and the leaf numbers, the baseline, `freetime`, and the slots the field definitions cover, strings by content |
 | `W <hash>` | The area nodes' trigger and solid lists, as edict numbers in their order (-1 after each list) |
 | `M <hash> <messages>` | The messages sent during the frame through `NET_SendMessage` and `NET_SendUnreliableMessage`: the sender (-1 the client, n the server to client n), reliable or not, the driver's result, the size and the bytes |
+| `P <hash>` | The sound device's buffer, all of it (`shm->buffer`, 64 KB): the samples painted, `S_ClearBuffer`'s clears and what stays from the laps before; nothing without a started sound system |
+| `A <hash>` | The CD: cd_win.c's `initialized`, `enabled`, `cdValid`, `playing`, `wasPlaying`, `playLooping`, `cdvolume`, `playTrack`, `maxTrack` and `remap`, then the virtual drive's state (open, door open, stopped, playing or paused, track) |
 | `Err <text>` | `Sys_Error`'s message, last |
 
 The client's lines (`F`, `C`, `E`, `X`, `S`, `T`, `R` and the palette) do not depend on the renderer; `D` and the frame
 are the renderer's; `G`, `Q`, `N` and `W` the server's (without an active server `G` hashes the flags and `svs`, the
-others nothing), `M` both. `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
+others nothing), `M` both; `P` the mixer's and `A` the CD's (trace format 5, milestone 8). `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
 console shows `./id1/pak0.pak`), as QuakeSharp's traces run wherever the game data is.
 
 Hashes are 64-bit FNV-1a over the fields' bytes: `int` and `float` as 4 little-endian bytes, `double` 8, vectors three

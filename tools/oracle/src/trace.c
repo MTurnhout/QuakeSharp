@@ -18,6 +18,7 @@ extern channel_t channels[MAX_CHANNELS];
 extern int total_channels;
 extern int paintedtime;
 extern int soundtime;
+extern int sound_started;
 extern int con_linewidth, con_current, con_x;
 extern char *con_text;
 #define NUM_CON_TIMES 4
@@ -25,6 +26,8 @@ extern char *con_text;
 extern float con_times[NUM_CON_TIMES];
 char *va (char *format, ...);
 int Oracle_AreaLinks (int *out, int max);	// world.c, as quake-oracle.patch adds it
+int Oracle_CDState (int *out);				// cd_win.c, as quake-oracle.patch adds it
+int Oracle_CDDrive (int *out);				// cd_oracle.c
 
 static FILE *trace;
 static char trace_name[MAX_OSPATH];
@@ -49,6 +52,9 @@ static unsigned long long message_hash;
 static int message_count;
 static char *message_log;
 static int message_log_length, message_log_size;
+
+// paintedtime when the frame began: -tracedump writes the samples painted since
+static int frame_paintedtime;
 
 /*
 ===============================================================================
@@ -379,6 +385,39 @@ static hash_t Sound (void)
 		H_Float (&h, ch->dist_mult);
 		H_Int (&h, ch->master_vol);
 	}
+	return h;
+}
+
+// P: the sound device's buffer, all of it: what the device plays (the samples painted, S_ClearBuffer's clears, what
+// stays from the laps before). Without a started sound system, nothing
+static hash_t Paint (void)
+{
+	hash_t h = FNV_OFFSET;
+
+	if (sound_started && shm && shm->buffer)
+		H_Bytes (&h, shm->buffer, shm->samples * (shm->samplebits / 8));
+	return h;
+}
+
+// cd_win.c's state, then the virtual drive's (cd_oracle.c); returns how many ints
+static int CDState (int *out)
+{
+	int n;
+
+	n = Oracle_CDState (out);
+	n += Oracle_CDDrive (out + n);
+	return n;
+}
+
+// A: the CD
+static hash_t CD (void)
+{
+	hash_t h = FNV_OFFSET;
+	int state[128], n, i;
+
+	n = CDState (state);
+	for (i = 0; i < n; i++)
+		H_Int (&h, state[i]);
 	return h;
 }
 
@@ -849,6 +888,50 @@ static void DumpServer (FILE *f)
 		fwrite (message_log, 1, message_log_length, f);
 }
 
+// -tracedump: the sound channels, the samples painted during the frame (in the device's buffer, from paintedtime at the
+// frame's start to its end) and the CD's state
+static void DumpSound (FILE *f)
+{
+	static const char *cd_names[] = {
+		"initialized", "enabled", "cdValid", "playing", "wasPlaying", "playLooping", "cdvolume", "playTrack", "maxTrack"
+	};
+	channel_t *ch;
+	int state[128], i, t, frames, size, offset;
+
+	fprintf (f, "sound paintedtime %d soundtime %d total_channels %d\n", paintedtime, soundtime, total_channels);
+	for (i = 0, ch = channels; i < total_channels; i++, ch++)
+	{
+		fprintf (f, "channel %d sfx ", i);
+		DumpString (f, ch->sfx ? ch->sfx->name : "");
+		fprintf (f, " leftvol %d rightvol %d end %d pos %d looping %d entnum %d entchannel %d", ch->leftvol, ch->rightvol,
+			ch->end, ch->pos, ch->looping, ch->entnum, ch->entchannel);
+		DumpVec (f, "origin", ch->origin);
+		fprintf (f, " dist_mult %08x master_vol %d\n", *(unsigned *)&ch->dist_mult, ch->master_vol);
+	}
+	if (sound_started && shm && shm->buffer)
+	{
+		frames = shm->samples / shm->channels;
+		size = shm->channels * (shm->samplebits / 8);
+		fprintf (f, "painted %d %d ", frame_paintedtime, paintedtime);
+		for (t = frame_paintedtime; t < paintedtime && t - frame_paintedtime < frames; t++)
+		{
+			offset = (t & (frames - 1)) * size;
+			for (i = 0; i < size; i++)
+				fprintf (f, "%02x", shm->buffer[offset + i]);
+		}
+		fprintf (f, "\n");
+	}
+
+	CDState (state);
+	fprintf (f, "cd");
+	for (i = 0; i < 9; i++)
+		fprintf (f, i == 6 ? " %s %08x" : " %s %d", cd_names[i], state[i]);	// cdvolume, a float, as its bits
+	fprintf (f, " remap");
+	for (i = 9; i < 109; i++)
+		fprintf (f, " %d", state[i]);
+	fprintf (f, " drive open %d door %d mode %d track %d\n", state[109], state[110], state[111], state[112]);
+}
+
 // -tracedump: the entities, field by field
 static void Dump (void)
 {
@@ -871,6 +954,7 @@ static void Dump (void)
 			? 0x20000 + (int)(cl_visedicts[i] - cl_temp_entities) : IsStatic (cl_visedicts[i])
 			? 0x10000 + (int)(cl_visedicts[i] - cl_static_entities) : -1);
 	DumpServer (f);
+	DumpSound (f);
 	fclose (f);
 }
 
@@ -893,7 +977,7 @@ void Trace_Frame (void)
 	if (trace)
 	{
 		if (trace_frame == 1)
-			fprintf (trace, "H 4 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
+			fprintf (trace, "H 5 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
 		fprintf (trace, "F %d %d %016llx %08x %u\n", trace_frame, host_framecount,
 			*(unsigned long long *)&realtime, oracle_rand_seed (), oracle_rand_calls);
 		fprintf (trace, "C %016llx\n", Client ());
@@ -916,6 +1000,8 @@ void Trace_Frame (void)
 		}
 		fprintf (trace, "W %016llx\n", World ());
 		fprintf (trace, "M %016llx %d\n", message_hash, message_count);
+		fprintf (trace, "P %016llx\n", Paint ());
+		fprintf (trace, "A %016llx\n", CD ());
 	}
 
 	for (i = 0; i < num_shots; i++)
@@ -926,6 +1012,7 @@ void Trace_Frame (void)
 	message_hash = FNV_OFFSET;
 	message_count = 0;
 	message_log_length = 0;
+	frame_paintedtime = paintedtime;
 
 	if (cls.demoplayback)
 		was_playing = 1;

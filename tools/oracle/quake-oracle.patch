@@ -1,3 +1,40 @@
+diff --git a/cd_win.c b/cd_win.c
+index 8672556..957f6b0 100644
+--- a/cd_win.c
++++ b/cd_win.c
+@@ -475,3 +475,32 @@ void CDAudio_Shutdown(void)
+ 	if (mciSendCommand(wDeviceID, MCI_CLOSE, MCI_WAIT, (DWORD)NULL))
+ 		Con_DPrintf("CDAudio_Shutdown: MCI_CLOSE failed\n");
+ }
++
++#ifdef ORACLE
++/*
++===============
++Oracle_CDState
++
++The trace's A line (trace.c): this file's state as ints, in this order: initialized, enabled, cdValid, playing,
++wasPlaying, playLooping, cdvolume (its bits), playTrack, maxTrack, then remap[0..99]. Returns how many it wrote.
++===============
++*/
++int Oracle_CDState (int *out)
++{
++	int		i, n;
++
++	n = 0;
++	out[n++] = initialized;
++	out[n++] = enabled;
++	out[n++] = cdValid;
++	out[n++] = playing;
++	out[n++] = wasPlaying;
++	out[n++] = playLooping;
++	out[n++] = *(int *)&cdvolume;
++	out[n++] = playTrack;
++	out[n++] = maxTrack;
++	for (i = 0; i < 100; i++)
++		out[n++] = remap[i];
++	return n;
++}
++#endif
 diff --git a/common.c b/common.c
 index e07e6ce..ca085ec 100644
 --- a/common.c

@@ -51,7 +51,8 @@ function Compile([string] $source, [string] $objDir, [string[]] $extra = @()) {
 }
 
 function Link([string] $exe, [string[]] $objects) {
-    & $clang --target=i686-pc-windows-msvc -fuse-ld=lld -MT @objects "-Fe$exe" -nologo
+    # 4217: cd_win.c imports mciSendCommandA from winmm, and src/cd_oracle.c defines it instead, as intended
+    & $clang --target=i686-pc-windows-msvc -fuse-ld=lld -MT @objects "-Fe$exe" -nologo /link /ignore:4217
     if ($LASTEXITCODE -ne 0) { throw "linking $exe failed" }
     Write-Host "built $exe"
 }
@@ -73,7 +74,8 @@ Link (Join-Path $WorkDir 'numerics.exe') (@($numerics) + $muslObjects)
 # quake-oracle.exe: WinQuake 1.09's C with the oracle's platform layer (src/) instead of the Windows drivers. The
 # sources are copied into the work folder and quake-oracle.patch applied: with ORACLE defined, quakedef.h and
 # quakeasm.h leave __i386__ undefined, so id386 is 0 (the C code, never the assembly). The network drivers are
-# src/net_oracle.c's (loopback and datagram over a virtual LAN driver) instead of net_win.c's.
+# src/net_oracle.c's (loopback and datagram over a virtual LAN driver) instead of net_win.c's; cd_win.c's MCI commands
+# go to src/cd_oracle.c's virtual drive instead of winmm.
 $quake = Join-Path $WorkDir 'quake-src'
 if (Test-Path $quake) { Remove-Item -Recurse -Force $quake }
 Copy-Item -Recurse (Join-Path $repo 'reference\Quake\WinQuake') $quake
@@ -92,7 +94,7 @@ $quakeSources = @(
     'pr_edict.c', 'pr_exec.c', 'r_aclip.c', 'r_alias.c', 'r_bsp.c', 'r_light.c', 'r_draw.c', 'r_efrag.c', 'r_edge.c',
     'r_misc.c', 'r_main.c', 'r_sky.c', 'r_sprite.c', 'r_surf.c', 'r_part.c', 'r_vars.c', 'screen.c', 'sbar.c',
     'sv_main.c', 'sv_phys.c', 'sv_move.c', 'sv_user.c', 'zone.c', 'view.c', 'wad.c', 'world.c',
-    'snd_dma.c', 'snd_mem.c', 'snd_mix.c', 'in_null.c', 'cd_null.c'
+    'snd_dma.c', 'snd_mem.c', 'snd_mix.c', 'in_null.c', 'cd_win.c'
 )
 $quakeObjects = foreach ($s in $quakeSources) {
     Compile (Join-Path $quake $s) (Join-Path $WorkDir 'obj\quake') $quakeFlags
