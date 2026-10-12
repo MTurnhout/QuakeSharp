@@ -53,7 +53,10 @@ foreach ($pak in 'pak0.pak', 'pak1.pak') {
 function Trace([string] $name, [string[]] $arguments) {
     Remove-Item (Join-Path $id1 'config.cfg') -ErrorAction SilentlyContinue
     $trace = Join-Path $OutDir "$name.trace"
-    & $Oracle -basedir $base -trace $trace @arguments | Out-Null
+    # from the Quake folder with WinQuake's base directory ".": the console shows "./id1/pak0.pak", as QuakeSharp's
+    # traces do wherever the game data is
+    Push-Location $base
+    try { & $Oracle -trace $trace @arguments | Out-Null } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "the oracle failed on $name" }
     $frames = (Select-String -Path $trace -Pattern '^F ' | Measure-Object).Count
     Write-Host "$name.trace: $frames frames"

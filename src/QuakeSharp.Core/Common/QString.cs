@@ -71,6 +71,44 @@ public static class QString
         }
     }
 
+    // The C runtime's atoi (some of Quake's code calls it rather than Q_atoi): white space, a sign, decimal digits; the
+    // Microsoft C runtime gives INT_MAX or INT_MIN when the number is out of range.
+    public static int atoi(string str)
+    {
+        int p = 0;
+        long val = 0;
+        bool negative = false;
+
+        while (Ch(str, p) is ' ' or '\t' or '\n' or '\v' or '\f' or '\r')
+        {
+            p++;
+        }
+
+        if (Ch(str, p) is '-' or '+')
+        {
+            negative = Ch(str, p) == '-';
+            p++;
+        }
+
+        while (Ch(str, p) is >= '0' and <= '9')
+        {
+            val = (val * 10) + (Ch(str, p) - '0');
+            if (val > 1L << 32)
+            {
+                val = 1L << 32; // out of range either way
+            }
+
+            p++;
+        }
+
+        if (negative)
+        {
+            val = -val;
+        }
+
+        return val > int.MaxValue ? int.MaxValue : val < int.MinValue ? int.MinValue : (int)val;
+    }
+
     // common.c: Q_atof
     public static float Q_atof(string str)
     {

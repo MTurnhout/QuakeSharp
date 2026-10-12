@@ -14,7 +14,7 @@ public static class SpriteGen
 }
 
 /// <summary>spritegn.h: spriteframetype_t</summary>
-public enum SpriteFrameType
+public enum spriteframetype_t
 {
     SPR_SINGLE = 0,
     SPR_GROUP,

@@ -74,6 +74,7 @@ the executable) and removes `config.cfg` before every run, since the oracle writ
 | `-tracequitafterdemo` | Quit when the demo playing ends |
 | `-oracleframes <n>` | Quit after n frames |
 | `-traceshot <frame>` | Also write that frame (any number of times) as `<trace>.<frame>.shot`: width, height (32-bit), the palette, the pixels; `quakesharp-tools shot2png` makes a PNG of it |
+| `-tracedump <frame>` | Also write that frame's entities (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits; `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing `E` line |
 | `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (keys are console commands: `+forward`, `-forward`, `impulse 8`...) |
 | `-oraclevid <w> <h>` | The video mode (320x200 to 1280x1024) |
 | `-oraclestep <n>` | Frames of 1/n s |
@@ -81,17 +82,24 @@ the executable) and removes `config.cfg` before every run, since the oracle writ
 
 ## The trace format
 
-One line `H 1 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
+One line `H 2 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
 
 | Line | Fields |
 |---|---|
 | `F <frame> <host_framecount> <realtime> <seed> <calls>` | The frame number (from 1), `host_framecount`, `realtime` as the hexadecimal bits of the double, the `rand()` state (`holdrand`) and the number of `rand()` calls so far |
 | `C <hash>` | The client state: `cls` and `cl` (see `Client` in `src/trace.c` for the fields and their order) |
-| `E <hash>` | The entities: `cl_entities` up to `cl.num_entities`, the static entities, the view model, the visible list |
+| `E <hash>` | The entities as the client keeps them: `cl_entities` up to `cl.num_entities`, the static entities, the view model, the visible list without the static entities |
+| `D <hash>` | What the renderer writes into the entities (`visframe`, `dlightframe`, `dlightbits`, `trivial_accept`, `topnode`) of `cl_entities`, the statics, the view model and the temp entities, and the whole visible list (`R_StoreEfrags` adds the static entities to it while drawing) |
 | `X <hash> <particles>` | The effects: temp entities, beams, dynamic lights, light styles and `d_lightstylevalue`, the active particles (and their number) |
+| `S <hash>` | The sound: `paintedtime`, `soundtime`, `total_channels` and the channels (sound, volumes, end, position, entity and channel, origin, attenuation): what decides `S_StartSound`'s `rand()` draws |
+| `T <hash>` | The console's text: `con_linewidth`, `con_totallines`, `con_current`, `con_x`, `con_times` and the whole `con_text` |
 | `R <hash>` | The view: `r_refdef`'s rectangle, origin, angles and field of view |
 | `V <frame> <palette>` | The frame (the 8-bit buffer, row by row) and the palette last passed to `VID_SetPalette` |
 | `Err <text>` | `Sys_Error`'s message, last |
+
+The client's lines (`F`, `C`, `E`, `X`, `S`, `T`, `R` and the palette) do not depend on the renderer; `D` and the frame
+are the renderer's. `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
+console shows `./id1/pak0.pak`), as QuakeSharp's traces run wherever the game data is.
 
 Hashes are 64-bit FNV-1a over the fields' bytes: `int` and `float` as 4 little-endian bytes, `double` 8, vectors three
 floats, strings their bytes and then 4 zero bytes, a model its name, a colormap 0 (the normal one), 1 + n (player n's

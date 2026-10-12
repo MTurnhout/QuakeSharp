@@ -287,6 +287,18 @@ public sealed partial class QuakeEngine
         }
     }
 
+    // host.c: Host_ClearMemory (the hunk is managed memory: nothing to free)
+    public void Host_ClearMemory()
+    {
+        Con_DPrintf("Clearing memory\n");
+        D_FlushCaches();
+        Mod_ClearAll();
+
+        cls.signon = 0;
+        sv = new ServerState();
+        cl = new ClientState();
+    }
+
     // host.c: Host_FilterTime
     // Returns false if the time is too short to run a frame
     public bool Host_FilterTime(float time)

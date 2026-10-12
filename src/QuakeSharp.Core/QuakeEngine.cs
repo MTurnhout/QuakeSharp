@@ -1,5 +1,6 @@
 using QuakeSharp.Core.Common;
 using QuakeSharp.Core.Platform;
+using QuakeSharp.Core.Sound;
 
 namespace QuakeSharp.Core;
 
@@ -26,6 +27,14 @@ public sealed class QuakeParms
     /// </summary>
     public string? userdir { get; init; }
 
+    /// <summary>The folder relative paths (basedir ".") start from; null: the process's current folder.</summary>
+    public string? workdir { get; init; }
+
+    /// <summary>The video mode's size (WinQuake's default window is 320x240; vid_win.c's modes, milestone 6).</summary>
+    public int vidwidth { get; init; } = 320;
+
+    public int vidheight { get; init; } = 240;
+
     /// <summary>WinQuake takes 16 MB on any machine with 32 MB or more (sys_win.c: MAXIMUM_WIN_MEMORY).</summary>
     public int memsize { get; set; } = 0x1000000;
 }
@@ -38,15 +47,19 @@ public sealed class QuakeParms
 /// </summary>
 public sealed partial class QuakeEngine
 {
-    public QuakeEngine(QuakeParms parms, ISystem system, IInputEvents? input = null)
+    public QuakeEngine(QuakeParms parms, ISystem system, IInputEvents? input = null, ISoundDma? sound = null,
+        IVideoOutput? video = null)
     {
         host_parms = parms;
         this.system = system;
         this.input = input;
+        sounddma = sound;
+        this.video = video;
         com_argv = parms.argv;
         fileSystem = new FileSystem(parms.argv, text => Con_Printf("%s", text), text => Sys_Printf("%s", text))
         {
             UserDir = parms.userdir,
+            WorkDir = parms.workdir,
         };
     }
 
@@ -58,6 +71,8 @@ public sealed partial class QuakeEngine
 
     private readonly ISystem system;
     private readonly IInputEvents? input;
+    private readonly ISoundDma? sounddma;
+    private readonly IVideoOutput? video;
     private readonly Numerics.CRand crand = new();
     private readonly FileSystem fileSystem;
 
@@ -86,6 +101,9 @@ public sealed partial class QuakeEngine
 
     // The C runtime's rand and srand: one generator for the whole engine (design.md §3.1)
     public int rand() => crand.rand();
+
+    /// <summary>The number of rand calls so far, for the traces.</summary>
+    public uint RandCalls => crand.Calls;
 
     public void srand(uint seed) => crand.srand(seed);
 

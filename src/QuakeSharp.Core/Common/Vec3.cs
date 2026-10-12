@@ -39,3 +39,31 @@ public struct Mat3x4
 {
     private Vec4 row0;
 }
+
+/// <summary>float[2][4], rows of four, indexed m[i][j] as in C.</summary>
+[InlineArray(2)]
+public struct Mat2x4
+{
+    private Vec4 row0;
+}
+
+/// <summary>vec3_t[2] (the last two of something, 0 the newest), indexed v[i][j] as in C.</summary>
+[InlineArray(2)]
+public struct Vec3x2
+{
+    private Vec3 element0;
+}
+
+/// <summary>int[3]</summary>
+[InlineArray(3)]
+public struct Int3
+{
+    private int element0;
+}
+
+/// <summary>byte[3]</summary>
+[InlineArray(3)]
+public struct Byte3
+{
+    private byte element0;
+}

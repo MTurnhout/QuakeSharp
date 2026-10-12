@@ -9,7 +9,8 @@ using QuakeSharp.Render.Vulkan;
 
 // sys_win.c: WinMain. The engine runs Host_Init and then Host_Frame on the real clock. Until the renderer is ported
 // (milestone 6) the window shows gfx/conback.lmp and the console's text goes to stdout; keys reach the engine (type
-// "echo hello" and Enter). Closing the window quits. -window opens a window, -noaspect shows square pixels,
+// "echo hello" and Enter) and the sound plays (quake.rc starts the demo loop: the demos are heard, not yet seen).
+// Closing the window quits. -window opens a window, -noaspect shows square pixels,
 // -vkvalidation turns on the Vulkan validation layer, -quitafter <seconds> quits by itself.
 var commandLine = new CommandLine(["quakesharp", .. args]);
 try
@@ -37,7 +38,8 @@ static int Run(CommandLine commandLine)
     // what the game writes goes to the user's folder (design.md §9)
     string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
     var system = new RealSystem();
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window);
+    using var sound = new SdlSoundDma();
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound);
 
     int quitAfter = commandLine.CheckParm("-quitafter");
     double quitTime = quitAfter != 0 && quitAfter < commandLine.Argc - 1

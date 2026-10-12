@@ -15,8 +15,10 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
 - Try the executable from a Quake folder (it looks for `id1/` in the current directory) with `-window`,
   `-vkvalidation` and `-quitafter <seconds>`.
 - Fidelity tests need `QUAKESHARP_QUAKE_DIR` (a folder with the original `id1/pak0.pak`, `id1/pak1.pak`) and
-  `QUAKESHARP_TRACE_DIR` (traces from the oracle in `tools/oracle`); otherwise they skip. When one fails, find the
-  first differing frame with `quakesharp-tools trace-compare`, then compare detail around it.
+  `QUAKESHARP_TRACE_DIR` (traces from the oracle in `tools/oracle`); otherwise they skip. When one fails, write
+  QuakeSharp's trace of the same command line with `quakesharp-tools trace <quake-dir> <out> <oracle's args>`, find
+  the first differing frame with `quakesharp-tools trace-compare`, then compare detail around it: `-tracedump <frame>`
+  on both sides writes the entities field by field. Run the oracle from its own Quake folder (base directory ".").
 - The oracle (WinQuake 1.09's C, headless; see `tools/oracle/README.md`): `tools/oracle/Build-Oracle.ps1 -WorkDir
   <dir outside the repo>`, then `tools/oracle/Trace-Demos.ps1`. If its sources, `src/` or the patch change, rebuild
   and regenerate the traces. `-traceshot <frame>` and `quakesharp-tools shot2png` show a frame.

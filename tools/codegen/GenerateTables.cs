@@ -25,6 +25,8 @@ Write("UI/Keys.g.cs", GenerateKeys());
 Write("UI/QuakeEngine.Keys.g.cs", GenerateKeyNames());
 Write("Protocol.g.cs", GenerateProtocol());
 Write("QuakeDef.g.cs", GenerateQuakeDef());
+Write("Model/BspFile.g.cs", GenerateBspFile());
+Write("Render/Anorms.g.cs", GenerateAnorms());
 WriteTo("QuakeSharp.Platform.Sdl", "ScanToKey.g.cs", GenerateScanToKey());
 return 0;
 
@@ -85,6 +87,51 @@ string GenerateQuakeDef()
         sb.AppendLine($"    public const int {name} = {value};");
     }
 
+    sb.AppendLine("}");
+    return sb.ToString();
+}
+
+// bspfile.h: the numeric #defines (limits, lumps, plane types, contents, ambient sounds...)
+string GenerateBspFile()
+{
+    var sb = Header("bspfile.h", "QuakeSharp.Core.Model");
+    sb.AppendLine("public static partial class BspFile");
+    sb.AppendLine("{");
+    foreach (Match m in Regex.Matches(Source("bspfile.h"), @"^\s*#define\s+(\w+)\s+(-?\d+|0x[0-9a-fA-F]+)\s*$", RegexOptions.Multiline))
+    {
+        sb.AppendLine($"    public const int {m.Groups[1].Value} = {m.Groups[2].Value};");
+    }
+
+    sb.AppendLine("}");
+    return sb.ToString();
+}
+
+// anorms.h (included by r_alias.c): r_avertexnormals, the 162 vertex normals of the alias models. The C's double
+// literals initialize floats, so each is rounded from its double, as the compiler does.
+string GenerateAnorms()
+{
+    string c = Source("anorms.h");
+    var numbers = Regex.Matches(c, @"-?\d+\.\d+").Select(m => m.Value).ToList();
+    if (numbers.Count != 162 * 3)
+    {
+        throw new InvalidOperationException($"anorms.h: {numbers.Count} numbers, not {162 * 3}");
+    }
+
+    var sb = Header("anorms.h", "QuakeSharp.Core");
+    sb.AppendLine("public sealed partial class QuakeEngine");
+    sb.AppendLine("{");
+    sb.AppendLine("    // r_alias.c: NUMVERTEXNORMALS");
+    sb.AppendLine("    public const int NUMVERTEXNORMALS = 162;");
+    sb.AppendLine();
+    sb.AppendLine("    /// <summary>r_alias.c: r_avertexnormals[NUMVERTEXNORMALS][3], row by row.</summary>");
+    sb.AppendLine("    public static readonly float[] r_avertexnormals =");
+    sb.AppendLine("    [");
+    foreach (string[] row in numbers.Chunk(3))
+    {
+        sb.AppendLine("        " + string.Join(" ", row.Select(v => $"(float){v},")));
+    }
+
+    sb.AppendLine("    ];");
     sb.AppendLine("}");
     return sb.ToString();
 }

@@ -1,11 +1,12 @@
 # QuakeSharp: Design
 
-> Status: **v0.5**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
+> Status: **v0.6**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
 > (repository skeleton), 1 (files and data), 2 (the oracle and the numerics: WinQuake built headless writes traces of
 > every demo; musl's libm and `rand()` ported and checked against the C), 3 (the platform: an SDL3 window showing
-> 8-bit frames through Vulkan, keys as WinQuake reads them, the sound device) and 4 (the host and the common code:
-> the frame loop, commands, cvars, console text, keys, `mathlib.c`, printf, all checked against WinQuake's own C)
-> done.
+> 8-bit frames through Vulkan, keys as WinQuake reads them, the sound device), 4 (the host and the common code:
+> the frame loop, commands, cvars, console text, keys, `mathlib.c`, printf, all checked against WinQuake's own C) and
+> 5 (the client: demo1-3 and the attract loop play with the client state, the sound channels, the console text and
+> the view the oracle's on every frame) done.
 
 ## 1. Goal
 
@@ -131,6 +132,16 @@ What the C leaves to the compiler is part of the target, as the oracle's build (
 The DOS/Windows x87 differences are then documented, not emulated, like DoomSharp's table of DOS differences: they
 show up only in the last bits of positions and angles.
 
+### 3.3 Undefined behaviour
+
+Where the C reads memory it does not own, QuakeSharp has a fixed substitute (§6.2 rule 11); the oracle is patched to
+share it only where a trace shows the difference.
+
+| Where | The C | QuakeSharp |
+|---|---|---|
+| `cl_tent.c`: `CL_UpdateTEnts` | The loop that adds a beam's lightning entities reuses the beam loop's `i`, while `b` moves on separately: after a beam that made entities, `i` starts again from 4 and `b` goes on past `cl_beams[MAX_BEAMS]` when a beam at index 4 or more was active, reading the memory that follows | The loop keeps both (it ends early as the C's does); beams past the array count as unused. demo1-3 never reach it |
+| `cl_demo.c`: `CL_PlayDemo_f` | Reading the CD track line, `getc` gives EOF for ever at the end of a file without a newline: the loop does not end | The loop ends at the end of the file |
+
 ## 4. Technology
 
 | Concern | Choice | Notes |
@@ -225,7 +236,9 @@ Each C module becomes a C# class (or a few) in a namespace that mirrors it, so a
 | `draw.c`, `screen.c`, `console.c`, `menu.c`, `sbar.c`, `keys.c` | `Core/UI` | |
 | `snd_dma.c`, `snd_mix.c`, `snd_mem.c` | `Core/Sound` | Produces PCM; the device is `IAudioOut` |
 | `net_main.c`, `net_dgrm.c`, `net_loop.c`, `net_udp.c`/`net_wins.c` | `Core/Net` | .NET sockets |
+| `vid_win.c` (what the game sees of it) | `Core/Video` | The mode's `vid` fields, the colormap remapping, `S_Init` between the mode sets, the palette (§6.4); the frame is shown through `IVideoOutput` |
 | `vid_*.c`, `in_*.c`, `snd_win.c`…, `cd_*.c`, `sys_win.c` | `Platform.Sdl`, `Render.Vulkan`, exe | Rewritten against SDL3 and Vulkan |
+| `tools/oracle/src/trace.c` | `Core/Diagnostics` | The oracle's trace lines from QuakeSharp's state, and a run as the oracle's (`TraceRun`: virtual clock and sound device, base directory "."), for the tests and `quakesharp-tools trace` |
 | `gl_*.c` (GLQuake) | not ported in v1 | An enhanced renderer may borrow from it later (§6.6) |
 
 **The file system** (`FileSystem`, common.c's second half) keeps the search path exactly: `id1`, then `-rogue` /
@@ -351,7 +364,9 @@ position, as the DMA buffer of the original; the device's rate is the mix rate (
 The sound device is part of the game: `S_StartSound` draws from `rand()` when an identical sound started and has not
 been painted yet, and how far the mixer has painted depends on the device's play position. With a real device that
 is real time, as in the original; the oracle and the tests use a **virtual device** (`snd_oracle.c`, 64 KB of 16-bit
-stereo at 11025 Hz as WinQuake's DirectSound buffer) whose position follows the virtual clock.
+stereo at 11025 Hz as WinQuake's DirectSound buffer; `VirtualSoundDma` in Core) whose position follows the virtual
+clock. So the three files came with the client (milestone 5): the traces' `S` line checks the channels every frame;
+the painted samples are checked with milestone 8.
 
 ### 7.2 Music
 
@@ -411,14 +426,22 @@ for 32-bit x86 with SSE2 arithmetic and musl's libm, as a headless program. Its 
 drivers: `vid_win.c`'s behaviour in one windowed mode rendered in memory, the virtual sound device, no input or CD,
 the loopback network driver, and a system driver with the virtual clock. It writes per-frame trace lines (time and
 `rand()` state, client state, entities, effects, view, frame and palette), plays scripted input (`-traceevents`)
-and dumps frames (`-traceshot`). Runs are deterministic: the same command line gives the same trace. It changes the
-game's behaviour only where §6.2 rule 11 needs a shared substitute for undefined memory. A `trace-compare` tool will
-name the first differing frame; detail around it shows the first differing field or draw call. Traces are derived
-from game data and stay outside the repository.
+and dumps frames (`-traceshot`) and entities (`-tracedump`). Runs are deterministic: the same command line gives the
+same trace. It changes the game's behaviour only where §6.2 rule 11 needs a shared substitute for undefined memory.
+`quakesharp-tools trace` writes QuakeSharp's trace of the same command line (and its dumps), `trace-compare` names
+the first differing frame of each kind of line; the dumps show the first differing field. Traces are derived from
+game data and stay outside the repository.
+
+The trace's lines are split by who writes what they hash, so each milestone is checked on its own: the client's
+(`F`, `C`, `E`, `X`, `S` for the sound channels, `T` for the console text, `R` and the palette) from milestone 5, the
+renderer's (`D`: what it writes into the entities and the static entities it adds to the visible list; the frame)
+from milestone 6.
 
 Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 frames at 64 per second) at 320×240,
 320×200 and 640×480, and the attract loop, in about 36 seconds for all ten traces. musl's libm and the C runtime's
-`rand()` match the C# ports on every one of 1.8 million values.
+`rand()` match the C# ports on every one of 1.8 million values. QuakeSharp's client matches the oracle's lines `F`,
+`C`, `E`, `X`, `S`, `T`, `R` and the palette on every frame of the nine demo traces and the 20,000 frames of the attract
+loop (`DemoTests`, a minute in a Debug build).
 
 ## 11. Milestones
 
@@ -429,10 +452,10 @@ Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 f
 | 2 ✅ | Oracle & numerics | The headless oracle builds and writes traces of demo1-3; the libm and `rand()` ported and tested. *Traces of the three demos at three sizes and of the attract loop; musl's six functions and `rand()` bit-exact against the C. `mathlib.c`, printf formatting and `Q_atof` move to milestone 4, the tables of the client and renderer to 5 and 6, with the code that uses them* |
 | 3 ✅ | Platform & presentation | SDL3 window, Vulkan presents an 8-bit frame with the palette at 4:3 (e.g. `gfx/conback.lmp`); input events; audio device open. *The executable shows `gfx/conback.lmp` at 4:3 in a window or over a 4K screen, clean under the validation layer; keys come as WinQuake's key numbers; the sound device plays a 16-bit stereo 11025 Hz buffer through SDL3; CI builds the shaders with a pinned Slang* |
 | 4 ✅ | Host & common | `Host_Frame` with the virtual clock, command buffer, cvars, console text, `MSG_*`, `quake.rc`/`default.cfg` executed; `mathlib.c`, printf formatting (`%f`, `%5.1f`...) and `Q_atof` checked against the C. *`mathlib.c`, `Q_atoi`, `Q_atof` and printf match WinQuake's C on 18 sets of 20,000 inputs; commands, cvars, console text and keys match on two scenarios; the host runs `Host_Init` and `Host_Frame` (the modules to come are stand-ins), executes `quake.rc` and `default.cfg`, and writes WinQuake's bindings to `config.cfg`. net_main.c and net_loop.c move to milestone 7, where the server uses them; host_cmd.c's commands to 5 and 7* |
-| 5 | Client & demos | `cl_*` parse and interpolate; **demo1-3 play with the client state in sync on every frame** (no rendering yet). *Plan: some of what the oracle's `C`/`E`/`X` lines hash is written by the renderer (particles moved by `R_DrawParticles`, entities' `visframe`, `dlightframe`, `dlightbits`, `trivial_accept`, `topnode`), so split those into lines of their own in `trace.c` first, and check the client's lines before the renderer exists. Also needed: model.c's loading (precached models' names), view.c (`r_refdef`, `V_UpdatePalette`), chase.c, cl_tent.c, host_cmd.c's client commands (`playdemo`, `startdemos`...), and the virtual sound device's `S_StartSound` order (it draws `rand()`)* |
-| 6 | Software renderer & 2D | `r_*`/`d_*`, `draw`, `screen`, `console`, `sbar`; **every frame of demo1-3 pixel-exact** at 320×200 and a larger mode; menus |
+| 5 ✅ | Client & demos | `cl_*` parse and interpolate; **demo1-3 play with the client state in sync on every frame** (no rendering yet). *demo1-3 at 320×240, 320×200 and 640×480 and 20,000 frames of the attract loop match the oracle's client lines on every frame: `rand()`'s state and calls, `cls`/`cl`, the entities, temp entities, beams, lights, light styles and particles, the sound channels, the console text, `r_refdef` and the palette. Ported: cl_main, cl_parse, cl_demo, cl_input, cl_tent, view, chase, r_part (`R_DrawParticles` moves them, `D_DrawParticle` waits), model.c, snd_dma/snd_mix/snd_mem (`S_StartSound` draws `rand()`), screen.c's control flow and r_main/r_misc/r_light's view setup (`R_SetupFrame`'s view leaf gives the contents' colour shift), vid_win.c's mode in Core, host_cmd.c's client commands, sv_main.c's `SV_Init`; drawing, menus, the status bar, efrags, net and the server are stand-ins. The executable plays the demo loop's sound* |
+| 6 | Software renderer & 2D | `r_*`/`d_*`, `draw`, `screen`, `console`, `sbar`; **every frame of demo1-3 pixel-exact** at 320×200 and a larger mode; menus. *Checks the traces' `D` line too. Note: `R_AddEfrags` can set an entity's `topnode` to a leaf, which `trace.c` hashes as a pointer difference from the nodes* |
 | 7 | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable |
-| 8 | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files |
+| 8 | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files. *The mixer is ported (milestone 5); what remains is a trace line of the painted buffer, the output and the CD* |
 | 9 | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync |
 | 10 | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios |
 | 11 | Networking | UDP play with other NetQuake engines; net game tests |
@@ -466,6 +489,10 @@ Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 f
 | 17 | Presentation | Two passes, integer nearest-neighbour then linear to the 4:3 rectangle, letterboxed; a UNORM swapchain so the palette's colours pass unchanged; borderless fullscreen by default, `-window`, `-noaspect` (§6.4) | 2026-10-12 |
 | 18 | Keyboard | Keys as `vid_win.c`'s `MapKey` reads them: PC scan codes through `scantokey`, without the extended prefix (so by position, the grey keys as the keypad's, NumLock as Pause) (§8) | 2026-10-12 |
 | 19 | Sound device | An SDL3 audio stream of 16-bit stereo at 11025 Hz playing a 64 KB ring buffer round and round, as `snd_win.c`'s DirectSound buffer; its position is how far SDL has taken (§7.1) | 2026-10-12 |
+| 25 | Trace lines by writer | Trace format 2: `E` hashes what the client keeps, `D` what the renderer writes into the entities (and the static entities it adds to the visible list), `S` the sound channels, `T` the console text; the client is checked before the renderer exists (§10) | 2026-10-12 |
+| 26 | What the client needs, ported with it | The client's state depends on code beyond `cl_*`: `S_StartSound` draws `rand()` depending on what the mixer has painted, `R_DrawParticles` frees particles the client's effects then reuse, `R_SetupFrame`'s view leaf sets the contents' colour shift, `SCR_UpdateScreen` decides whether the view runs. So snd_dma/snd_mix/snd_mem, r_part and the control flow of screen.c and r_main/r_misc are ported whole now, their drawing calls stand-ins until milestone 6 | 2026-10-12 |
+| 27 | The video driver in Core | vid_win.c's part that the game sees (one mode of the size `QuakeParms` asks for, its cvars and commands, the colormap remapping, `S_Init` between the mode sets, the palette, the surface cache message) is ported in Core as the oracle has it; the platform only shows `vid.buffer` through `IVideoOutput`. Its other modes come with milestone 6 (§6.4) | 2026-10-12 |
+| 28 | Base directory "." | The oracle's traces and QuakeSharp's run with WinQuake's base directory "." (the console shows `./id1/pak0.pak` wherever the data is); `QuakeParms.workdir` is the folder "." means, the process's current folder by default | 2026-10-12 |
 
 ## 13. Open decisions
 

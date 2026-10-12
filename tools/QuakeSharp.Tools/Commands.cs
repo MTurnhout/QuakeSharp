@@ -184,9 +184,9 @@ internal static class Commands
         int written = 0;
         for (int i = 0; i < numskins; i++)
         {
-            var type = (AliasSkinType)I32(mdl, p);
+            var type = (aliasskintype_t)I32(mdl, p);
             p += 4;
-            if (type == AliasSkinType.ALIAS_SKIN_SINGLE)
+            if (type == aliasskintype_t.ALIAS_SKIN_SINGLE)
             {
                 PngWriter.WriteIndexed(Path.Combine(dir, $"{FileName(model)}_{i}.png"), width, height, mdl.AsSpan(p, size), palette);
                 p += size;
@@ -222,11 +222,11 @@ internal static class Commands
         int written = 0;
         for (int i = 0; i < numframes; i++)
         {
-            var type = (SpriteFrameType)I32(spr, p);
+            var type = (spriteframetype_t)I32(spr, p);
             p += 4;
             int count = 1;
             string suffix = $"{i}";
-            if (type != SpriteFrameType.SPR_SINGLE)
+            if (type != spriteframetype_t.SPR_SINGLE)
             {
                 count = I32(spr, p);
                 p += 4 + (4 * count); // dspritegroup_t, then the intervals
@@ -237,7 +237,7 @@ internal static class Commands
                 int width = I32(spr, p + 8);
                 int height = I32(spr, p + 12);
                 p += SpriteGen.DspriteframeSize;
-                string name = type == SpriteFrameType.SPR_SINGLE ? suffix : $"{suffix}_{j}";
+                string name = type == spriteframetype_t.SPR_SINGLE ? suffix : $"{suffix}_{j}";
                 WriteTransparent(Path.Combine(dir, $"{FileName(sprite)}_{name}.png"), width, height, spr.AsSpan(p, width * height), palette, 255);
                 p += width * height;
                 written++;

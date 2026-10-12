@@ -20,6 +20,12 @@ public sealed partial class QuakeEngine
 
     public byte[]? COM_LoadTempFile(string path) => fileSystem.LoadFile(path);
 
+    public byte[]? COM_LoadStackFile(string path) => fileSystem.LoadFile(path);
+
+    // common.c: COM_FOpenFile (the file's length, or -1 and null; a file in a pack is read through a stream on the
+    // pack, positioned at the file)
+    public int COM_FOpenFile(string filename, out Stream? file) => fileSystem.FindFile(filename, out file);
+
     // common.c: COM_WriteFile
     public void COM_WriteFile(string filename, ReadOnlySpan<byte> data) => fileSystem.WriteFile(filename, data);
 }

@@ -6,6 +6,9 @@ public sealed class VidDef
     /// <summary>invisible buffer</summary>
     public byte[] buffer = [];
 
+    /// <summary>where C's vid.buffer points in <see cref="buffer"/> (view.c's lcd_x moves it)</summary>
+    public int bufferoffset;
+
     /// <summary>256 * VID_GRADES size</summary>
     public byte[] colormap = [];
 

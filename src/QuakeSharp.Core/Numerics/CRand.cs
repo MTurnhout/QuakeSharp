@@ -14,9 +14,13 @@ public sealed class CRand
     /// <summary>The generator's state, for the traces.</summary>
     public uint Seed => holdrand;
 
+    /// <summary>The number of calls so far, for the traces.</summary>
+    public uint Calls { get; private set; }
+
     // rand: the next number, 0 to RAND_MAX (0x7fff)
     public int rand()
     {
+        Calls++;
         holdrand = (holdrand * 214013) + 2531011;
         return (int)((holdrand >> 16) & 0x7fff);
     }

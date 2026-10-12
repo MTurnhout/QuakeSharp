@@ -59,6 +59,15 @@ public sealed partial class FileSystem
     /// </summary>
     public string? UserDir { get; init; }
 
+    /// <summary>
+    /// The folder the game's relative paths start from, as the process's current folder does for WinQuake (null:
+    /// the process's own), so a game in another folder can be run with the base directory "." as WinQuake is.
+    /// </summary>
+    public string? WorkDir { get; init; }
+
+    // A path the game names, on the host
+    private string OnHost(string path) => WorkDir == null || Path.IsPathRooted(path) ? path : Path.Combine(WorkDir, path);
+
     /// <summary>Where a file the game writes into com_gamedir goes: the game directory's folder under
     /// <see cref="UserDir"/>, or com_gamedir itself.</summary>
     public string WritePath(string filename)
@@ -67,10 +76,10 @@ public sealed partial class FileSystem
         string path = $"{dir}/{filename}";
         if (UserDir != null)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(OnHost(path)))!);
         }
 
-        return HostPath.ResolveForWrite(path);
+        return HostPath.ResolveForWrite(OnHost(path));
     }
 
     // A game directory's namesake under UserDir
@@ -201,7 +210,7 @@ public sealed partial class FileSystem
     // Takes an explicit (not game tree related) path to a pak file. Loads the header and directory.
     private Pack? LoadPackFile(string packfile)
     {
-        string? path = HostPath.Resolve(packfile);
+        string? path = HostPath.Resolve(OnHost(packfile));
         if (path == null || !File.Exists(path))
         {
             return null;
@@ -317,7 +326,7 @@ public sealed partial class FileSystem
                 string? path = UserDirFor(search.FileName) is string user ? HostPath.Resolve($"{user}/{filename}") : null;
                 if (path == null || !File.Exists(path))
                 {
-                    path = HostPath.Resolve(netpath);
+                    path = HostPath.Resolve(OnHost(netpath));
                 }
 
                 if (path == null || !File.Exists(path))
@@ -457,7 +466,7 @@ public sealed partial class FileSystem
         {
             IEnumerable<string> names = s.Pack != null
                 ? s.Pack.Files.Select(f => f.Name)
-                : HostPath.Resolve(s.FileName) is string dir && Directory.Exists(dir)
+                : HostPath.Resolve(OnHost(s.FileName)) is string dir && Directory.Exists(dir)
                     ? Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
                         .Select(f => Path.GetRelativePath(dir, f).Replace('\\', '/'))
                     : [];

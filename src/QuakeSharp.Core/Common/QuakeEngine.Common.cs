@@ -12,6 +12,9 @@ public sealed partial class QuakeEngine
     /// <summary>common.c: com_token, the token COM_Parse found last</summary>
     public string com_token = "";
 
+    /// <summary>common.c: msg_suppress_1</summary>
+    public bool msg_suppress_1;
+
     /// <summary>common.c: msg_readcount</summary>
     public int msg_readcount;
 

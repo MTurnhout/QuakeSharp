@@ -11,6 +11,9 @@ try
         ["extract", var baseDir, var file, var output, .. var engineArgs] => Commands.Extract(baseDir, file, output, engineArgs),
         ["dump-graphics", var baseDir, var outDir, .. var engineArgs] => Commands.DumpGraphics(baseDir, outDir, engineArgs),
         ["shot2png", var shot, var output] => Commands.ShotToPng(shot, output),
+        ["trace", var baseDir, var output, .. var engineArgs] => TraceCommands.Trace(baseDir, output, engineArgs),
+        ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRV"),
+        ["trace-compare", var a, var b, var letters] => TraceCommands.Compare(a, b, letters),
         _ => Usage(),
     };
 }
@@ -33,6 +36,12 @@ static int Usage()
                                                             write the palette, colormap, pictures, gfx.wad, map
                                                             textures, model skins and sprite frames as PNG
           quakesharp-tools shot2png <in.shot> <out.png>     a frame the oracle wrote (-traceshot) as PNG
+          quakesharp-tools trace <quake-dir> <out.trace> [args]
+                                                            QuakeSharp's trace of a run, as the oracle writes
+                                                            it (e.g. -tracequitafterdemo +playdemo demo1)
+          quakesharp-tools trace-compare <a.trace> <b.trace> [letters]
+                                                            the first frame at which each kind of line differs
+                                                            (letters: which, e.g. FCEXSTR; all by default)
 
         Game data and everything extracted from it must stay outside the repository; the tools refuse to write
         inside it.

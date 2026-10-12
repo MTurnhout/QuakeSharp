@@ -14,6 +14,15 @@ extern unsigned int oracle_rand_calls;
 unsigned int oracle_rand_seed (void);
 extern byte vid_curpal[256*3];
 extern particle_t *active_particles;
+extern channel_t channels[MAX_CHANNELS];
+extern int total_channels;
+extern int paintedtime;
+extern int soundtime;
+extern int con_linewidth, con_current, con_x;
+extern char *con_text;
+#define NUM_CON_TIMES 4
+#define CON_TEXTSIZE 16384
+extern float con_times[NUM_CON_TIMES];
 char *va (char *format, ...);
 
 static FILE *trace;
@@ -23,6 +32,9 @@ static int trace_frame;
 // -traceshot <frame>: the frames written as <trace>.<frame>.shot (width, height, palette, pixels)
 #define MAX_SHOTS 64
 static int shots[MAX_SHOTS], num_shots;
+
+// -tracedump <frame>: that frame's entities field by field as <trace>.<frame>.dump (floats as their bits)
+static int dumps[MAX_SHOTS], num_dumps;
 static int quit_after_demo, was_playing, frame_limit;
 static unsigned long long palette_hash;
 
@@ -122,6 +134,11 @@ static void H_Entity (hash_t *h, entity_t *e)
 	H_Colormap (h, e->colormap);
 	H_Int (h, e->effects);
 	H_Int (h, e->skinnum);
+}
+
+// what the renderer writes into an entity (the D line), apart from what the client keeps in it
+static void H_EntityDrawn (hash_t *h, entity_t *e)
+{
 	H_Int (h, e->visframe);
 	H_Int (h, e->dlightframe);
 	H_Int (h, e->dlightbits);
@@ -229,17 +246,48 @@ static hash_t Client (void)
 	return h;
 }
 
+static int IsStatic (entity_t *e)
+{
+	return e >= cl_static_entities && e < cl_static_entities + MAX_STATIC_ENTITIES;
+}
+
 // E: the entities (cl_entities up to cl.num_entities, the statics, the view model, the visible list)
 static hash_t Entities (void)
 {
 	hash_t h = FNV_OFFSET;
-	int i;
+	int i, n;
 
 	for (i = 0; i < cl.num_entities; i++)
 		H_Entity (&h, &cl_entities[i]);
 	for (i = 0; i < cl.num_statics; i++)
 		H_Entity (&h, &cl_static_entities[i]);
 	H_Entity (&h, &cl.viewent);
+	// the visible entities the client listed (the renderer adds the static ones as it finds them: the D line)
+	for (i = 0, n = 0; i < cl_numvisedicts; i++)
+		if (!IsStatic (cl_visedicts[i]))
+			n++;
+	H_Int (&h, n);
+	for (i = 0; i < cl_numvisedicts; i++)
+		if (!IsStatic (cl_visedicts[i]))
+			H_EntityRef (&h, cl_visedicts[i]);
+	return h;
+}
+
+// D: what the renderer writes into the entities (cl_entities, the statics, the view model, the temp entities) and
+// the visible list it completes
+static hash_t Drawn (void)
+{
+	hash_t h = FNV_OFFSET;
+	int i;
+
+	for (i = 0; i < cl.num_entities; i++)
+		H_EntityDrawn (&h, &cl_entities[i]);
+	for (i = 0; i < cl.num_statics; i++)
+		H_EntityDrawn (&h, &cl_static_entities[i]);
+	H_EntityDrawn (&h, &cl.viewent);
+	for (i = 0; i < MAX_TEMP_ENTITIES; i++)
+		H_EntityDrawn (&h, &cl_temp_entities[i]);
+	// the visible list, with the static entities R_StoreEfrags added
 	H_Int (&h, cl_numvisedicts);
 	for (i = 0; i < cl_numvisedicts; i++)
 		H_EntityRef (&h, cl_visedicts[i]);
@@ -294,6 +342,50 @@ static hash_t Effects (int *particles)
 	return h;
 }
 
+// S: the sound channels (snd_dma.c), which decide S_StartSound's rand() draws, and the mixer's times
+static hash_t Sound (void)
+{
+	hash_t h = FNV_OFFSET;
+	channel_t *ch;
+	int i;
+
+	H_Int (&h, paintedtime);
+	H_Int (&h, soundtime);
+	H_Int (&h, total_channels);
+	for (i = 0, ch = channels; i < total_channels; i++, ch++)
+	{
+		H_String (&h, ch->sfx ? ch->sfx->name : "");
+		H_Int (&h, ch->leftvol);
+		H_Int (&h, ch->rightvol);
+		H_Int (&h, ch->end);
+		H_Int (&h, ch->pos);
+		H_Int (&h, ch->looping);
+		H_Int (&h, ch->entnum);
+		H_Int (&h, ch->entchannel);
+		H_Vec (&h, ch->origin);
+		H_Float (&h, ch->dist_mult);
+		H_Int (&h, ch->master_vol);
+	}
+	return h;
+}
+
+// T: the console's text (console.c)
+static hash_t Text (void)
+{
+	hash_t h = FNV_OFFSET;
+	int i;
+
+	H_Int (&h, con_linewidth);
+	H_Int (&h, con_totallines);
+	H_Int (&h, con_current);
+	H_Int (&h, con_x);
+	for (i = 0; i < NUM_CON_TIMES; i++)
+		H_Float (&h, con_times[i]);
+	if (con_text)
+		H_Bytes (&h, con_text, CON_TEXTSIZE);
+	return h;
+}
+
 // R: the view (r_refdef)
 static hash_t View (void)
 {
@@ -343,8 +435,12 @@ void Trace_Init (void)
 	}
 
 	for (t = 1; t < com_argc - 1; t++)
+	{
 		if (!Q_strcmp (com_argv[t], "-traceshot") && num_shots < MAX_SHOTS)
 			shots[num_shots++] = Q_atoi (com_argv[t + 1]);
+		if (!Q_strcmp (com_argv[t], "-tracedump") && num_dumps < MAX_SHOTS)
+			dumps[num_dumps++] = Q_atoi (com_argv[t + 1]);
+	}
 
 	t = COM_CheckParm ("-traceevents");
 	if (t && t < com_argc - 1)
@@ -378,6 +474,66 @@ static void Shot (void)
 	fclose (f);
 }
 
+// a colormap's number, as H_Colormap hashes it
+static int ColormapNumber (byte *colormap)
+{
+	int i;
+
+	if (colormap == vid.colormap)
+		return 0;
+	for (i = 0; i < cl.maxclients && cl.scores; i++)
+		if (colormap == cl.scores[i].translations)
+			return 1 + i;
+	return -1;
+}
+
+static void DumpVec (FILE *f, const char *name, const float *v)
+{
+	fprintf (f, " %s %08x %08x %08x", name, *(unsigned *)&v[0], *(unsigned *)&v[1], *(unsigned *)&v[2]);
+}
+
+static void DumpEntity (FILE *f, const char *what, int i, entity_t *e)
+{
+	fprintf (f, "%s %d forcelink %d update_type %d", what, i, e->forcelink, e->update_type);
+	DumpVec (f, "baseline.origin", e->baseline.origin);
+	DumpVec (f, "baseline.angles", e->baseline.angles);
+	fprintf (f, " modelindex %d frame %d colormap %d skin %d effects %d", e->baseline.modelindex, e->baseline.frame,
+		e->baseline.colormap, e->baseline.skin, e->baseline.effects);
+	fprintf (f, " msgtime %016llx", *(unsigned long long *)&e->msgtime);
+	DumpVec (f, "msg_origins0", e->msg_origins[0]);
+	DumpVec (f, "msg_origins1", e->msg_origins[1]);
+	DumpVec (f, "origin", e->origin);
+	DumpVec (f, "msg_angles0", e->msg_angles[0]);
+	DumpVec (f, "msg_angles1", e->msg_angles[1]);
+	DumpVec (f, "angles", e->angles);
+	fprintf (f, " model %s frame %d syncbase %08x colormap %d effects %d skinnum %d\n", e->model ? e->model->name : "",
+		e->frame, *(unsigned *)&e->syncbase, ColormapNumber (e->colormap), e->effects, e->skinnum);
+}
+
+// -tracedump: the entities, field by field
+static void Dump (void)
+{
+	FILE *f;
+	int i;
+
+	f = fopen (va ("%s.%d.dump", trace_name, trace_frame), "w");
+	if (!f)
+		return;
+	for (i = 0; i < cl.num_entities; i++)
+		DumpEntity (f, "entity", i, &cl_entities[i]);
+	for (i = 0; i < cl.num_statics; i++)
+		DumpEntity (f, "static", i, &cl_static_entities[i]);
+	DumpEntity (f, "viewent", 0, &cl.viewent);
+	for (i = 0; i < MAX_TEMP_ENTITIES; i++)
+		DumpEntity (f, "temp", i, &cl_temp_entities[i]);
+	for (i = 0; i < cl_numvisedicts; i++)
+		fprintf (f, "visedict %d %d\n", i, cl_visedicts[i] >= cl_entities && cl_visedicts[i] < cl_entities + MAX_EDICTS
+			? (int)(cl_visedicts[i] - cl_entities) : cl_visedicts[i] >= cl_temp_entities && cl_visedicts[i] < cl_temp_entities + MAX_TEMP_ENTITIES
+			? 0x20000 + (int)(cl_visedicts[i] - cl_temp_entities) : IsStatic (cl_visedicts[i])
+			? 0x10000 + (int)(cl_visedicts[i] - cl_static_entities) : -1);
+	fclose (f);
+}
+
 void Trace_Frame (void)
 {
 	int particles, i;
@@ -387,15 +543,18 @@ void Trace_Frame (void)
 	if (trace)
 	{
 		if (trace_frame == 1)
-			fprintf (trace, "H 1 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
+			fprintf (trace, "H 2 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
 		fprintf (trace, "F %d %d %016llx %08x %u\n", trace_frame, host_framecount,
 			*(unsigned long long *)&realtime, oracle_rand_seed (), oracle_rand_calls);
 		fprintf (trace, "C %016llx\n", Client ());
 		fprintf (trace, "E %016llx\n", Entities ());
+		fprintf (trace, "D %016llx\n", Drawn ());
 		{
 			hash_t x = Effects (&particles);
 			fprintf (trace, "X %016llx %d\n", x, particles);
 		}
+		fprintf (trace, "S %016llx\n", Sound ());
+		fprintf (trace, "T %016llx\n", Text ());
 		fprintf (trace, "R %016llx\n", View ());
 		fprintf (trace, "V %016llx %016llx\n", Frame (), palette_hash);
 	}
@@ -403,6 +562,9 @@ void Trace_Frame (void)
 	for (i = 0; i < num_shots; i++)
 		if (shots[i] == trace_frame)
 			Shot ();
+	for (i = 0; i < num_dumps; i++)
+		if (dumps[i] == trace_frame)
+			Dump ();
 
 	if (cls.demoplayback)
 		was_playing = 1;

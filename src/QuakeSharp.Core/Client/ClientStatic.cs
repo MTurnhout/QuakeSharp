@@ -52,6 +52,9 @@ public sealed class ClientStatic
     /// <summary>-1 = use normal cd track</summary>
     public int forcetrack;
 
+    /// <summary>the demo being played or recorded (a demo in a pack is read through a stream on the pack)</summary>
+    public Stream? demofile;
+
     /// <summary>to meter out one message a frame</summary>
     public int td_lastframe;
 
@@ -65,6 +68,9 @@ public sealed class ClientStatic
 
     /// <summary>0 to SIGNONS</summary>
     public int signon;
+
+    /// <summary>net.h's qsocket_t (milestone 7, with net_main.c)</summary>
+    public object? netcon;
 
     /// <summary>writing buffer to send to server (cl_main.c: CL_Init allocates 1024 bytes)</summary>
     public SizeBuf message = new(1024);
