@@ -156,6 +156,40 @@ share it only where a trace shows the difference.
 | `snd_dma.c`: `S_SoundInfo_f` | `soundinfo` prints the DMA buffer's address (`0x%x dma buffer`): DirectSound's in WinQuake, a static array's in the oracle, moving with every build | 0; the oracle is patched to print 0 too |
 | `d_edge.c`: `D_DrawSurfaces` with `r_drawflat` | A surface's flat colour is the low byte of its `msurface_t`'s address | The surface's index in the frame's surface list |
 
+### 3.4 The executables
+
+The oracle is the C; what the original executables do besides was audited (decision 42, milestone 10). Winquake.exe
+1.09 (Steam's, `Exe: 09:30:49 Mar 21 1997`) was run from a scratch copy on Windows 11 with `-condebug` and scripted
+`autoexec.cfg`s, and its console log, config.cfg and screenshots compared with QuakeSharp's runs of the same scripts
+(QuakeSharp matching the oracle on every traced frame, its files stand for the oracle's):
+
+| What | Winquake.exe | The oracle and QuakeSharp |
+|---|---|---|
+| IPX at start-up | `WIPX_Init: Unable to open control socket` after `Winsock TCP/IP Initialized`: net_wipx.c starts, and today's Windows has no IPX | No IPX driver, no line. **Emulated** (milestone 10, step 3): an IPX LAN driver whose start fails as Windows' does |
+| The joystick at start-up | `joystick detected` on this machine (a device answers `joyGetPosEx`); without one, `joystick not found -- no valid joysticks (a7)` (`JOYERR_UNPLUGGED`) | in_null.c: no line. **Emulated** (step 3): in_win.c over a virtual winmm without a joystick, so `(a7)` |
+| The CD at start-up | `CDAudio_Init: MCI_OPEN failed (266)`: this machine has no drive | The virtual disc, `CD Audio Initialized`. Documented: the machine's drive (decision 37) |
+| config.cfg | With the same switches, one line more: in_win.c's archived `joystick "0"`, after the bindings | **Emulated** (step 3, with in_win.c's cvars) |
+| The modes | Seven (`vid_describemodes`): windowed 320×240, 640×480 and 800×600; full screen through DirectDraw (`DDRAW8.DRV`) 320×240, 640×480, 800×600 and 1024×768. It starts full screen, in mode 3 (`_vid_default_mode_win` at the first frame); the Video menu lists them | One windowed mode, an empty Video menu. **Emulated** (step 4): the same seven modes on a virtual display |
+| Menus, status bar, console | The Options and Multiplayer menus, the status bar and the console's text pixel for pixel the same, but for the menus' blinking and spinning cursors (real time) and the Options' Use Mouse, shown only in a window (Winquake.exe was full screen) | The same |
+| The 3D view | `timedemo demo1` with `host_framerate 0.015625` (the oracle's 1/64 s), `-nosound -nocdaudio`, screenshots at ten frames from 60 to 900: both play the same 969 frames, the status bar and the notify lines the same; 3-19% of the frame's pixels differ, for two reasons. `rand()`: `_Host_Frame` draws one at every call, also the calls `Host_FilterTime` turns away to keep under 72 frames a second, so Winquake.exe's `rand()` follows real time ("keep the random time dependent"): particles and the muzzle flash's light radius (`200 + (rand()&31)`) differ. Rounding: single texels along surfaces differ (3-5% of the view where nothing random is in sight), the x87's precision and the `id386` assembly's span drawing | Documented (§3.1): the C, in single precision with SSE, every frame's `rand()` calls the virtual clock's |
+| The mouse | From the source (vid_win.c's `VID_Update` and `VID_SetMode`, in_win.c): in a window the mouse is inactive, its moves and buttons ignored, until `_windowed_mouse` is 1 (the Options' Use Mouse); the full-screen modes activate it; `-dinput` takes DirectInput; while active, in_win.c sets the system's mouse acceleration and speed (`-noforcemparms`, `-noforcemaccel`, `-noforcemspd`) | QuakeSharp's mouse buttons always reach `Key_Event`. **Emulated** (step 3), but for the system's settings (SDL3's relative motion instead) and DirectInput (not ported) |
+
+quake.exe is DOS Quake 1.08 (`Exe: 18:28:16 Mar 11 1997`, built with DJGPP). It was not run (decision 47); its
+differences, from the source's DOS drivers (Chocolate Quake's notes add nothing per version), are documented, not
+emulated (D4):
+
+| What | quake.exe |
+|---|---|
+| The code | 1.08's: the source is 1.09's, and what 1.09 changed in the shared code is not documented |
+| Arithmetic | The x87 and the `id386` assembly, as Winquake.exe (DJGPP's code generation instead of MSVC's) |
+| `rand()` | DJGPP's C library's, not the Microsoft runtime's: every random draw differs |
+| The palette | VGA sets all 256 colours: no remapping of the colormap's entries 0 (vid_win.c's, decision 14), so the frames' pixel values differ where they are 0, not their colours |
+| Video | vid_dos.c: VGA's 320×200 (mode 0, the default), the Mode X modes and the VESA modes (vid_vga.c, vid_ext.c; `-stdvid`), and its own Video menu |
+| Input | in_dos.c: the mouse through the DOS driver, the joystick through the game port, `-control` (an external driver) |
+| Sound | snd_dos.c and snd_gus.c: Sound Blaster and Gravis Ultrasound DMA at `-sspeed` (11025 by default), with their own start-up text |
+| CD | cd_audio.c over MSCDEX |
+| Network | net_ser.c (serial and modem: the menus' entries are live), net_ipx.c, net_bw.c (Beame & Whiteside TCP/IP), net_mp.c (MPATH) |
+
 ## 4. Technology
 
 | Concern | Choice | Notes |
@@ -744,13 +778,16 @@ frame), and `<frame> @buttons <state>`, a mouse button message with the buttons'
 (`GetCursorPos`, `SetCursorPos`, `ClipCursor`, `ShowCursor`, `SystemParametersInfo`; winmm's joystick functions
 answering as the audit shows Windows does without a joystick; DirectInput only with `-dinput`, not used); vid_win.c's
 mode list, its commands and the Video menu in `vid_oracle.c` over a virtual display with the audit's modes (decision
-44); trace format 6 and the scripted mouse in `trace.c`; and `Trace-Demos.ps1` copying `hipnotic/pak0.pak` and
+44); an IPX LAN driver in `net_oracle.c` whose start fails as on today's Windows (§3.4); trace format 6 and the scripted mouse in `trace.c`; and `Trace-Demos.ps1` copying `hipnotic/pak0.pak` and
 `rogue/pak0.pak` (never the packs' loose `config.cfg`, as id1 holds only its PAKs) and tracing them.
 
 **Porting order.** Each step builds with the tests green and is committed; at steps 3-5 the oracle's traces change
 first and QuakeSharp follows them.
 
-1. **The audit**, above. §3.4 records it; D4 is settled with it.
+1. **The audit**, above. §3.4 records it; D4 is settled with it. *Done: the IPX and joystick lines, in_win.c's
+   `joystick` cvar and the seven modes are emulated in steps 3 and 4; the menus, status bar and console text were
+   already the same pixel for pixel; the 3D view differs by `rand()` (Winquake.exe's follows real time) and by the
+   x87's and the assembly's rounding, documented; quake.exe is 1.08, documented from the source.*
 2. **What the traces reach.** A coverage run of the fidelity tests over Core (decision 46) lists, module by module, the ported
    functions and branches no trace reaches. That list is the work of step 6, and the measure of its end. Without a
    coverage tool, the list comes from reading each C module against the scenarios.
@@ -845,6 +882,7 @@ plays with the mouse, in every mode, and both mission packs.
 | 46 | Coverage (was D9) | `coverlet.MTP` (MIT) in `QuakeSharp.Fidelity.Tests` only, switched on by a flag for local runs with the game data, so normal runs and CI stay as fast; the report stays outside the repository. It lists what no trace reaches (milestone 10, step 2); Microsoft's `Microsoft.Testing.Extensions.CodeCoverage` is the fallback if it misbehaves | 2026-10-12 |
 | 47 | quake.exe not run (was D10) | The DOS executable's differences are documented from the source's DOS drivers and Chocolate Quake's notes, not measured: nothing of DOS is emulated (D4), and DOSBox's emulated x87 and timing would measure DOSBox. Revisited only if the audit raises a question only quake.exe answers | 2026-10-12 |
 | 48 | Shareware in CI (was D11) | CI downloads `quake106.zip` from a fixed mirror (chosen with the user before it is committed), checks its MD5, extracts `pak0.pak` (the registered one, same MD5) and caches it, never committed; the test keeps only the last trace lines of demo1-3 (milestone 10, step 7) | 2026-10-12 |
+| 49 | Fidelity target version (was D4) | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`. Audited (§3.4): Winquake.exe's start-up lines (IPX, the joystick), its `joystick` cvar and its seven modes are emulated; its real-time `rand()` and its x87 and assembly rounding are documented; DOS quake.exe 1.08's differences (DJGPP's `rand()`, VGA's palette, its drivers) are documented, not emulated | 2026-10-12 |
 
 ## 13. Open decisions
 
@@ -852,6 +890,5 @@ To confirm with the user before the milestones they affect; the proposals are th
 
 | # | Question | Proposal |
 |---|---|---|
-| D4 | Fidelity target version | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`; the DOS 1.08 executable's differences (DJGPP's `rand()`, x87) documented, emulated later only if wanted |
 | D7 | Default video mode | 320×240 in a window scaled to the screen, as WinQuake's default mode (the fidelity target is WinQuake: decision 14); DOS's 320×200 and larger modes from the menu |
 | D8 | Scope of v1 | Quake and both mission packs on the WinQuake engine; GLQuake and QuakeWorld after v1 |
