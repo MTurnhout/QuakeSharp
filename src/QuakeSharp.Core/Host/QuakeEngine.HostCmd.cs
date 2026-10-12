@@ -679,32 +679,32 @@ public sealed partial class QuakeEngine
 
         var f = new CStdioReader(data);
 
-        version = f.ScanInt() ?? 0;
-        f.SkipSpace();
+        // a value the file lacks keeps what the variable held: for the C's uninitialised locals, 0 or empty (design.md
+        // §3.3); line is the C's str while it is read with fscanf
+        version = 0;
+        string line = "";
+        mapname = "";
+        time = tfloat = 0;
+        f.Scanf(ref version);
         if (version != SAVEGAME_VERSION)
         {
             Con_Printf("Savegame is version %i, not %i\n", version, SAVEGAME_VERSION);
             return;
         }
 
-        f.ScanString();
-        f.SkipSpace();
+        f.Scanf(ref line);
         for (i = 0; i < NUM_SPAWN_PARMS; i++)
         {
-            spawn_parms[i] = f.ScanFloat() ?? 0;
-            f.SkipSpace();
+            f.Scanf(ref spawn_parms[i]);
         }
 
         // this silliness is so we can load 1.06 save files, which have float skill values
-        tfloat = f.ScanFloat() ?? 0;
-        f.SkipSpace();
+        f.Scanf(ref tfloat);
         current_skill = X86.FtoI(tfloat + 0.1);
         Cvar_SetValue("skill", current_skill);
 
-        mapname = f.ScanString() ?? "";
-        f.SkipSpace();
-        time = f.ScanFloat() ?? 0;
-        f.SkipSpace();
+        f.Scanf(ref mapname);
+        f.Scanf(ref time);
 
         CL_Disconnect_f();
 
@@ -721,8 +721,8 @@ public sealed partial class QuakeEngine
         // load the light styles
         for (i = 0; i < MAX_LIGHTSTYLES; i++)
         {
-            sv.lightstyles[i] = f.ScanString() ?? "";
-            f.SkipSpace();
+            f.Scanf(ref line);
+            sv.lightstyles[i] = line;
         }
 
         // load the edicts out of the savegame file

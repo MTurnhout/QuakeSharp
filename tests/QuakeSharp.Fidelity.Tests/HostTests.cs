@@ -22,7 +22,7 @@ public sealed class HostTests : IDisposable
     public void QuakeRcRunsAndTheBindingsAreWinQuakes()
     {
         string baseDir = GameDataLocator.RequireBaseDir();
-        string reference = TraceLocator.RequireFile("attract.config.cfg");
+        string reference = TraceLocator.RequireFile("attract.files/config.cfg");
 
         var console = new StringBuilder();
         var system = new VirtualSystem(t => console.Append(t));
@@ -43,13 +43,9 @@ public sealed class HostTests : IDisposable
         Assert.Contains("execing default.cfg\n", text, StringComparison.Ordinal);
         Assert.Contains("Playing registered version.\n", text, StringComparison.Ordinal);
 
-        // config.cfg: WinQuake's text mode lines; the bindings default.cfg made are the oracle's, line for line (its
-        // archived cvars come from modules not all ported yet)
-        string[] ours = File.ReadAllText(Path.Combine(userdir, "id1", "config.cfg"), Encoding.Latin1).Split("\r\n");
-        string[] theirs = File.ReadAllText(reference, Encoding.Latin1).Split("\r\n");
-        string[] binds = [.. theirs.Where(l => l.StartsWith("bind ", StringComparison.Ordinal))];
-        Assert.NotEmpty(binds);
-        Assert.Equal(binds, ours.Where(l => l.StartsWith("bind ", StringComparison.Ordinal)));
-        Assert.All(ours.Where(l => l.Length > 0), l => Assert.Contains(l, theirs));
+        // config.cfg: the bindings default.cfg made and the archived cvars, in text mode, byte for byte as the oracle
+        // wrote it when it quit the attract loop
+        Assert.Null(Core.Diagnostics.FileCompare.Files("config.cfg", File.ReadAllBytes(reference),
+            File.ReadAllBytes(Path.Combine(userdir, "id1", "config.cfg"))));
     }
 }

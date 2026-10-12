@@ -393,7 +393,7 @@ public static class QString
 
     // a hexadecimal floating point number's digits, point and "p" exponent (the mantissa's first 60 bits are kept, the
     // rest only as a sticky bit: rounded once, to nearest even, by the conversion to double)
-    private static double HexFloat(string str, int p)
+    internal static double HexFloat(string str, int p)
     {
         ulong mantissa = 0;
         int exponent = 0;

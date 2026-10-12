@@ -451,11 +451,16 @@ public sealed partial class QuakeEngine
                 continue;
             }
 
-            // fscanf (f, "%i\n", &version); fscanf (f, "%79s\n", name);
-            string text = Encoding.Latin1.GetString(f);
-            int p = 0;
-            ScanToken(text, ref p, int.MaxValue);
-            name = ScanToken(text, ref p, 79);
+            // fscanf (f, "%i\n", &version); fscanf (f, "%79s\n", name): name still holds the file's name if no
+            // string is read; strncpy stops at a 0
+            var file = new CStdioReader(f);
+            if (file.ScanInt() != null)
+            {
+                file.SkipSpace();
+            }
+
+            name = file.ScanString(79) ?? CFormat.Sprintf("%s/s%i.sav", com_gamedir, i);
+            name = name[..QString.Q_strlen(name)];
             var comment = new StringBuilder(name.Length > SAVEGAME_COMMENT_LENGTH ? name[..SAVEGAME_COMMENT_LENGTH] : name);
 
             // change _ back to space
@@ -469,23 +474,6 @@ public sealed partial class QuakeEngine
 
             m_filenames[i] = comment.ToString();
             loadable[i] = true;
-        }
-
-        // fscanf's %s: white space skipped, then up to width characters that are not white space
-        static string ScanToken(string text, ref int p, int width)
-        {
-            while (p < text.Length && text[p] is ' ' or '\t' or '\n' or '\r' or '\v' or '\f')
-            {
-                p++;
-            }
-
-            int start = p;
-            while (p < text.Length && p - start < width && text[p] is not (' ' or '\t' or '\n' or '\r' or '\v' or '\f'))
-            {
-                p++;
-            }
-
-            return text[start..p];
         }
     }
 

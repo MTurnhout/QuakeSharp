@@ -5,6 +5,8 @@
  * first n inputs and results of a set instead.
  */
 #include "quakedef.h"
+#include <io.h>
+#include <fcntl.h>
 
 // mathlib.c defines it, but no header declares it (only GLQuake calls it): without this prototype the float argument
 // would be passed as a double
@@ -323,6 +325,187 @@ static void Set_BoxOnPlaneSide (void)
 	R_Int (BoxOnPlaneSide (mins, maxs, &p));
 }
 
+// A number as a savegame or an entity's string holds it, or something like one, sometimes followed by more characters
+static void SomeNumber (char *s)
+{
+	static const char digits[] = "0123456789";
+	unsigned int bits;
+	float f, g;
+	int i, n;
+
+	switch (Below (5))
+	{
+	case 0: // what Host_Savegame_f and ED_Write print
+		sprintf (s, "%f", SomeFloat (100000));
+		break;
+	case 1: // the midpoint of two neighbouring floats, every digit, sometimes a little above it
+		f = (float)Uniform (-10000, 10000);
+		memcpy (&bits, &f, 4);
+		bits++;
+		memcpy (&g, &bits, 4);
+		sprintf (s, Below (2) ? "%.30f" : "%.30f1", ((double)f + (double)g) / 2);
+		break;
+	case 2: // a sign, digits, a point, digits, an exponent
+		s[0] = 0;
+		if (Below (3) == 0)
+			strcat (s, Below (2) ? "-" : "+");
+		for (i = 0, n = Below (9); i < n; i++)
+			strncat (s, &digits[Below (10)], 1);
+		if (Below (2))
+			strcat (s, ".");
+		for (i = 0, n = Below (9); i < n; i++)
+			strncat (s, &digits[Below (10)], 1);
+		if (Below (4) == 0)
+		{
+			strcat (s, Below (2) ? "e" : "E");
+			if (Below (2))
+				strcat (s, Below (2) ? "-" : "+");
+			for (i = 0, n = Below (4); i < n; i++)
+				strncat (s, &digits[Below (10)], 1);
+		}
+		break;
+	case 3:
+		SomeString (s);
+		break;
+	default: // whole numbers, some with white space and zeros in front
+		sprintf (s, Below (2) ? "%d" : " %07d", Below (2000001) - 1000000);
+		break;
+	}
+	if (Below (4) == 0)
+		SomeString (s + strlen (s));
+	switch (Below (8))
+	{
+	case 0: // a line's end, as fopen's text mode reads it
+		strcat (s, "\r\n1");
+		break;
+	case 1: // Ctrl-Z, which ends the file in text mode
+		strcat (s, "\x1a" "1");
+		break;
+	}
+}
+
+static void R_Double (double v)
+{
+	H_Bytes (&v, 8);
+	Detail (va ("double %016llx", *(u64 *)&v));
+}
+
+// The C runtime's atof, as ED_ParseEpair and PF_stof call it (and convert the double to a float)
+static void Set_crt_atof (void)
+{
+	char s[128];
+	double d;
+
+	SomeNumber (s);
+	d = atof (s);
+	R_Double (d);
+	R_Float ((float)d);
+}
+
+// A file holding s, read as Host_Loadgame_f and M_ScanSaves read a savegame (fopen's text mode). One file serves all
+// the inputs: written in binary mode, then switched to text mode for reading (the same results as a file written and
+// opened with "r" for each input, a hundred times faster)
+static FILE *unitfile;
+
+static FILE *TextFile (const char *s)
+{
+	int fd;
+
+	if (!unitfile)
+		unitfile = fopen ("units.tmp", "w+b");
+	fd = _fileno (unitfile);
+	_setmode (fd, _O_BINARY);
+	rewind (unitfile);
+	fwrite (s, 1, strlen (s), unitfile);
+	fflush (unitfile);
+	_chsize (fd, (long)strlen (s));
+	rewind (unitfile);
+	_setmode (fd, _O_TEXT);
+	return unitfile;
+}
+
+// An input in hexadecimal, for -oracleunits <set> <n>
+static const char *Hex (const char *s)
+{
+	static char h[300];
+	int i;
+
+	for (i = 0; s[i]; i++)
+		sprintf (h + 2 * i, "%02x", (unsigned char)s[i]);
+	h[2 * i] = 0;
+	return h;
+}
+
+// What fgetc reads from the file after a conversion, up to the end
+static void R_Rest (FILE *f)
+{
+	char rest[128];
+	int c, i = 0;
+
+	while ((c = fgetc (f)) != EOF && i < sizeof(rest) - 1)
+		rest[i++] = c;
+	rest[i] = 0;
+	R_String (rest);
+}
+
+// fscanf's "%f\n" into a float, "%i\n" and "%s\n", as Host_Loadgame_f and M_ScanSaves read a savegame: whether a
+// value was assigned, the value, and what is left in the file
+static void Set_scanf_float (void)
+{
+	char s[128];
+	float f = 0;
+	FILE *file;
+
+	SomeNumber (s);
+	Detail (va ("input %s", Hex (s)));
+	file = TextFile (s);
+	if (fscanf (file, "%f\n", &f) == 1)
+	{
+		R_Int (1);
+		R_Float (f);
+	}
+	else
+		R_Int (0);
+	R_Rest (file);
+}
+
+static void Set_scanf_int (void)
+{
+	char s[128];
+	int v = 0;
+	FILE *file;
+
+	SomeNumber (s);
+	Detail (va ("input %s", Hex (s)));
+	file = TextFile (s);
+	if (fscanf (file, "%i\n", &v) == 1)
+	{
+		R_Int (1);
+		R_Int (v);
+	}
+	else
+		R_Int (0);
+	R_Rest (file);
+}
+
+static void Set_scanf_string (void)
+{
+	char s[128], v[128];
+	FILE *file;
+
+	SomeNumber (s);
+	Detail (va ("input %s", Hex (s)));
+	file = TextFile (s);
+	if (fscanf (file, "%s\n", v) == 1)
+	{
+		R_Int (1);
+		R_String (v);
+	}
+	else
+		R_Int (0);
+	R_Rest (file);
+}
+
 typedef struct
 {
 	const char *name;
@@ -349,6 +532,10 @@ static const set_t sets[] =
 	{"Q_log2", Set_log2},
 	{"RotatePointAroundVector", Set_RotatePointAroundVector},
 	{"BoxOnPlaneSide", Set_BoxOnPlaneSide},
+	{"crt_atof", Set_crt_atof},
+	{"scanf.float", Set_scanf_float},
+	{"scanf.int", Set_scanf_int},
+	{"scanf.string", Set_scanf_string},
 };
 
 void Oracle_Units (int argc, char **argv)
@@ -373,4 +560,7 @@ void Oracle_Units (int argc, char **argv)
 		if (detail < 0)
 			printf ("%s %d %016llx\n", sets[i].name, COUNT, hash);
 	}
+	if (unitfile)
+		fclose (unitfile);
+	remove ("units.tmp");
 }

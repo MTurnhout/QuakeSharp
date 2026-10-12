@@ -62,15 +62,22 @@ public sealed class TraceRun
     /// <summary>
     /// Host_Init, then frames until the engine quits, <paramref name="maxFrames"/> have run (-oracleframes) or, with
     /// <paramref name="quitAfterDemo"/>, the demo that was playing has ended (-tracequitafterdemo); the trace's
-    /// lines of each frame.
+    /// lines of each frame. The last two end with Sys_Quit, as the oracle's run does (Host_Shutdown writes
+    /// config.cfg).
     /// </summary>
     public IEnumerable<IReadOnlyList<string>> Frames(bool quitAfterDemo, int maxFrames = int.MaxValue)
     {
         bool wasPlaying = false;
 
         Engine.Host_Init();
-        while (writer.Frame < maxFrames)
+        while (true)
         {
+            if (writer.Frame >= maxFrames)
+            {
+                _ = Engine.Sys_Quit();
+                yield break;
+            }
+
             system.Time += step;
             try
             {

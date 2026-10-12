@@ -16,6 +16,7 @@ try
         ["shot-diff", var a, var b, var output] => TraceCommands.ShotDiff(a, b, output),
         ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRVGQNWMPA"),
         ["trace-compare", var a, var b, var letters] => TraceCommands.Compare(a, b, letters),
+        ["file-compare", var a, var b] => TraceCommands.FileCompare(a, b),
         _ => Usage(),
     };
 }
@@ -43,10 +44,15 @@ static int Usage()
                                                             the differing pixels in magenta)
           quakesharp-tools trace <quake-dir> <out.trace> [args]
                                                             QuakeSharp's trace of a run, as the oracle writes
-                                                            it (e.g. -tracequitafterdemo +playdemo demo1)
+                                                            it (e.g. -tracequitafterdemo +playdemo demo1);
+                                                            its files in <out>.files; -traceinput <file> puts
+                                                            a file into its id1 first
           quakesharp-tools trace-compare <a.trace> <b.trace> [letters]
                                                             the first frame at which each kind of line differs
                                                             (letters: which, e.g. FCEXSTR; all by default)
+          quakesharp-tools file-compare <a> <b>             where two files, or two folders' files (a run's
+                                                            .files: the oracle's first), differ: a text file's
+                                                            line, a demo's message block
 
         Game data and everything extracted from it must stay outside the repository; the tools refuse to write
         inside it.

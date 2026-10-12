@@ -9,9 +9,27 @@ internal static class TraceCommands
 {
     // trace <quake-dir> <out.trace> [args]: QuakeSharp's trace of a run, the oracle's switches read as it reads them
     // (-tracequitafterdemo, -oracleframes <n>, -oraclevid <w> <h>, -oraclestep <n>, -tracedump <frame>,
-    // -traceshot <frame>)
+    // -traceshot <frame>); -traceinput <file> (any number of times, not passed on) puts a file into the user folder's
+    // id1 before the run, as Trace-Demos.ps1 puts an earlier run's files into the oracle's. What the run leaves in
+    // the user folder's id1 is kept in <out>.files, as the oracle's run's
     public static int Trace(string baseDir, string output, string[] args)
     {
+        Commands.RefuseRepository(output);
+        var inputs = new List<string>();
+        var rest = new List<string>();
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "-traceinput" && i + 1 < args.Length)
+            {
+                inputs.Add(args[++i]);
+            }
+            else
+            {
+                rest.Add(args[i]);
+            }
+        }
+
+        args = [.. rest];
         var commandLine = new CommandLine(["quake", .. args]);
         int frames = Option(commandLine, "-oracleframes", int.MaxValue);
         int fps = Option(commandLine, "-oraclestep", 64);
@@ -36,8 +54,15 @@ internal static class TraceCommands
         }
 
         string userDir = Path.Combine(Path.GetTempPath(), "quakesharp-trace", Guid.NewGuid().ToString("N"));
+        string id1 = Path.Combine(userDir, "id1");
         try
         {
+            Directory.CreateDirectory(id1);
+            foreach (string input in inputs)
+            {
+                File.Copy(input, Path.Combine(id1, Path.GetFileName(input)));
+            }
+
             var run = new TraceRun(baseDir, userDir, args, width, height, fps);
             using var writer = new StreamWriter(output);
             writer.NewLine = "\n";
@@ -70,6 +95,20 @@ internal static class TraceCommands
             }
 
             Console.WriteLine($"{output}: {count} frames");
+
+            string files = Path.ChangeExtension(output, ".files");
+            if (Directory.Exists(files))
+            {
+                Directory.Delete(files, recursive: true);
+            }
+
+            Directory.CreateDirectory(files);
+            foreach (string file in Directory.EnumerateFiles(id1, "*", SearchOption.AllDirectories))
+            {
+                string target = Path.Combine(files, Path.GetRelativePath(id1, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(file, target);
+            }
         }
         finally
         {
@@ -124,6 +163,23 @@ internal static class TraceCommands
         }
 
         return same ? 0 : 1;
+    }
+
+    // file-compare <a> <b>: two files, or two folders' files (a run's .files), the oracle's first: where they differ
+    public static int FileCompare(string a, string b)
+    {
+        IReadOnlyList<string> differences = Directory.Exists(a)
+            ? Core.Diagnostics.FileCompare.Folders(a, b)
+            : Core.Diagnostics.FileCompare.Files(Path.GetFileName(a), File.ReadAllBytes(a), File.ReadAllBytes(b)) is string d
+                ? [d]
+                : [];
+        foreach (string difference in differences)
+        {
+            Console.WriteLine(difference);
+        }
+
+        Console.WriteLine(differences.Count == 0 ? "the same" : $"{differences.Count} differences");
+        return differences.Count == 0 ? 0 : 1;
     }
 
     // shot-diff <a.shot> <b.shot> [out.png]: where two frames (-traceshot) differ; the PNG shows a, b and a with the

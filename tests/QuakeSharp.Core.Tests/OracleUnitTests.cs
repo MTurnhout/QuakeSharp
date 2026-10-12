@@ -35,6 +35,10 @@ public class OracleUnitTests
         ("Q_log2", "972d9e14ed4332bf", u => u.Int(MathLib.Q_log2(u.Below(2) != 0 ? (int)(u.Next() >> 33) : u.Below(5000)))),
         ("RotatePointAroundVector", "d13df261af18b47c", RotatePointAroundVector),
         ("BoxOnPlaneSide", "f9ab88f7f2b15944", BoxOnPlaneSide),
+        ("crt_atof", "4b410ca668a6bba2", CrtAtof),
+        ("scanf.float", "648c59f6317aa2b0", ScanfFloat),
+        ("scanf.int", "42a25adaaddfc029", ScanfInt),
+        ("scanf.string", "5310f81c32f1225f", ScanfString),
     ];
 
     private static readonly string[] FloatFormats = ["%f", "%5.1f", "%4.2f", "%4.1f", "%2.2f", "%3.1f", "%.0f", "%10.4f"];
@@ -238,6 +242,71 @@ public class OracleUnitTests
         u.Int(MathLib.BoxOnPlaneSide(mins, maxs, p));
     }
 
+    // units.c: Set_crt_atof
+    private static void CrtAtof(Units u)
+    {
+        double d = QString.atof(u.SomeNumber());
+        u.Double(d);
+        u.Float((float)d);
+    }
+
+    // units.c: Set_scanf_float (fscanf "%f\n" on a file in text mode, then what is left; the "\n" only after a value)
+    private static void ScanfFloat(Units u)
+    {
+        var f = new CStdioReader(Encoding.Latin1.GetBytes(u.SomeNumber()));
+        float? v = f.ScanFloat();
+        u.Int(v.HasValue ? 1 : 0);
+        if (v.HasValue)
+        {
+            f.SkipSpace();
+            u.Float(v.Value);
+        }
+
+        u.String(Rest(f));
+    }
+
+    // units.c: Set_scanf_int (fscanf "%i\n")
+    private static void ScanfInt(Units u)
+    {
+        var f = new CStdioReader(Encoding.Latin1.GetBytes(u.SomeNumber()));
+        int? v = f.ScanInt();
+        u.Int(v.HasValue ? 1 : 0);
+        if (v.HasValue)
+        {
+            f.SkipSpace();
+            u.Int(v.Value);
+        }
+
+        u.String(Rest(f));
+    }
+
+    // units.c: Set_scanf_string (fscanf "%s\n")
+    private static void ScanfString(Units u)
+    {
+        var f = new CStdioReader(Encoding.Latin1.GetBytes(u.SomeNumber()));
+        string? v = f.ScanString();
+        u.Int(v != null ? 1 : 0);
+        if (v != null)
+        {
+            f.SkipSpace();
+            u.String(v);
+        }
+
+        u.String(Rest(f));
+    }
+
+    private static string Rest(CStdioReader f)
+    {
+        var sb = new StringBuilder();
+        int c;
+        while ((c = f.Getc()) >= 0)
+        {
+            sb.Append((char)c);
+        }
+
+        return sb.ToString();
+    }
+
     // units.c: the inputs and the hash
     private sealed class Units(ulong state)
     {
@@ -300,7 +369,86 @@ public class OracleUnitTests
             return sb.ToString();
         }
 
+        // units.c: SomeNumber (MSVC's order: a call's arguments from the last to the first)
+        public string SomeNumber()
+        {
+            var s = new StringBuilder();
+            switch (Below(5))
+            {
+                case 0:
+                    s.Append(CFormat.Sprintf("%f", SomeFloat(100000)));
+                    break;
+                case 1:
+                    float f = (float)Uniform(-10000, 10000);
+                    float g = BitConverter.UInt32BitsToSingle(BitConverter.SingleToUInt32Bits(f) + 1);
+                    s.Append(CFormat.Sprintf(Below(2) != 0 ? "%.30f" : "%.30f1", ((double)f + (double)g) / 2));
+                    break;
+                case 2:
+                    if (Below(3) == 0)
+                    {
+                        s.Append(Below(2) != 0 ? "-" : "+");
+                    }
+
+                    for (int i = 0, n = Below(9); i < n; i++)
+                    {
+                        s.Append((char)('0' + Below(10)));
+                    }
+
+                    if (Below(2) != 0)
+                    {
+                        s.Append('.');
+                    }
+
+                    for (int i = 0, n = Below(9); i < n; i++)
+                    {
+                        s.Append((char)('0' + Below(10)));
+                    }
+
+                    if (Below(4) == 0)
+                    {
+                        s.Append(Below(2) != 0 ? "e" : "E");
+                        if (Below(2) != 0)
+                        {
+                            s.Append(Below(2) != 0 ? "-" : "+");
+                        }
+
+                        for (int i = 0, n = Below(4); i < n; i++)
+                        {
+                            s.Append((char)('0' + Below(10)));
+                        }
+                    }
+
+                    break;
+                case 3:
+                    s.Append(SomeString());
+                    break;
+                default:
+                    int v = Below(2000001) - 1000000;
+                    s.Append(CFormat.Sprintf(Below(2) != 0 ? "%d" : " %07d", v));
+                    break;
+            }
+
+            if (Below(4) == 0)
+            {
+                s.Append(SomeString());
+            }
+
+            switch (Below(8))
+            {
+                case 0:
+                    s.Append("\r\n1");
+                    break;
+                case 1:
+                    s.Append("\u001a1");
+                    break;
+            }
+
+            return s.ToString();
+        }
+
         public void Int(int v) => Bytes(BitConverter.GetBytes(v));
+
+        public void Double(double v) => Bytes(BitConverter.GetBytes(v));
 
         public void Float(float v) => Bytes(BitConverter.GetBytes(v));
 

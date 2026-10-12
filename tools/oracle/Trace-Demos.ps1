@@ -3,24 +3,24 @@
 Writes the reference traces of the demos in the game data (design.md §10, tools/oracle/README.md).
 
 .DESCRIPTION
-Each trace starts from a clean game folder: the oracle's Quake folder holds only the two PAKs (copied from
--QuakeDir), and config.cfg, which the oracle writes when it quits, is removed before every run.
+Each trace starts from a clean game folder: the oracle's id1 holds only the two PAKs (copied from -QuakeDir), and
+sometimes files an earlier run wrote. What a run leaves in id1 besides the PAKs (config.cfg, which the oracle writes
+when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.files beside its trace.
 
   <demo>.trace          demo1-3 played with +playdemo, at 320x240 (WinQuake's default windowed mode)
   <demo>.320x200.trace  the same at 320x200 (DOS Quake's mode 0)
   <demo>.640x480.trace  the same at 640x480
   attract.trace         the attract loop (no command line), for -AttractFrames frames
-  attract.config.cfg    the config.cfg the oracle writes when it quits after the attract loop
   menus.trace           the attract loop with the scripted input of events/menus.events (menus, console, scores,
                         renderer cvars), at 320x240; menus.640x480.trace the same at 640x480
+  attract.config.trace  600 frames of the attract loop with the config.cfg menus.trace's run wrote
   <game>.trace          the scripted games of events/<game>.events (start, commands, intermission, finale, netmenus:
                         a new game from the menu, the server's commands and fights, the end of a level and of an
                         episode, the network menus starting a deathmatch; tour: every map in turn, fighting; e1: a game played by hand
                         and recorded with -recordevents, e1m1 into e1m2; sound: the sound and CD commands and
                         cvars, the menu's volume sliders, a game's pause and level changes), at
                         320x240; commands.640x480.trace the same at 640x480, sound.nosound.trace the sound game with
-                        -nosound -nocdaudio. Savegames the games write are removed
-                        before each run, as config.cfg is
+                        -nosound -nocdaudio
 
 .PARAMETER Oracle
 quake-oracle.exe, as Build-Oracle.ps1 builds it.
@@ -30,12 +30,17 @@ A Quake folder with the original id1/pak0.pak and id1/pak1.pak.
 
 .PARAMETER OutDir
 The folder for the traces, outside the repository.
+
+.PARAMETER Only
+Writes only the traces of these names (e.g. menus, commands.640x480); a run that reads the files of an earlier one
+needs that one's files in -OutDir.
 #>
 param(
     [Parameter(Mandatory = $true)] [string] $Oracle,
     [Parameter(Mandatory = $true)] [string] $QuakeDir,
     [Parameter(Mandatory = $true)] [string] $OutDir,
-    [int] $AttractFrames = 20000
+    [int] $AttractFrames = 20000,
+    [string[]] $Only = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,9 +65,14 @@ foreach ($pak in 'pak0.pak', 'pak1.pak') {
     }
 }
 
-function Trace([string] $name, [string[]] $arguments) {
-    Remove-Item (Join-Path $id1 'config.cfg') -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $id1 '*.sav') -ErrorAction SilentlyContinue
+# A run of the oracle: from an id1 holding only the PAKs (and the files of earlier runs named in $inputs, as
+# "<run>/<file>"), writing <name>.trace; what id1 holds afterwards, but the PAKs, is kept in <name>.files
+function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @()) {
+    if ($Only -and $Only -notcontains $name) { return }
+    Get-ChildItem $id1 | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' } | Remove-Item -Recurse
+    foreach ($earlier in $inputs) {
+        Copy-Item (Join-Path $OutDir ($earlier -replace '^([^/]+)/', '$1.files/')) $id1
+    }
     $trace = Join-Path $OutDir "$name.trace"
     # from the Quake folder with WinQuake's base directory ".": the console shows "./id1/pak0.pak", as QuakeSharp's
     # traces do wherever the game data is
@@ -70,7 +80,13 @@ function Trace([string] $name, [string[]] $arguments) {
     try { & $Oracle -trace $trace @arguments | Out-Null } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "the oracle failed on $name" }
     $frames = (Select-String -Path $trace -Pattern '^F ' | Measure-Object).Count
-    Write-Host "$name.trace: $frames frames"
+
+    $files = Join-Path $OutDir "$name.files"
+    if (Test-Path $files) { Remove-Item $files -Recurse }
+    New-Item -ItemType Directory $files | Out-Null
+    $written = @(Get-ChildItem $id1 | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' })
+    $written | Copy-Item -Destination $files -Recurse
+    Write-Host "$name.trace: $frames frames; files: $(($written | ForEach-Object Name) -join ', ')"
 }
 
 foreach ($demo in 'demo1', 'demo2', 'demo3') {
@@ -80,14 +96,12 @@ foreach ($demo in 'demo1', 'demo2', 'demo3') {
 }
 Trace 'attract' @('-oracleframes', "$AttractFrames")
 
-# the config.cfg the oracle wrote when it quit the attract loop: the bindings and archived cvars after quake.rc
-Copy-Item (Join-Path $id1 'config.cfg') (Join-Path $OutDir 'attract.config.cfg')
-Write-Host 'attract.config.cfg'
-
 # the menus, the console and the renderer's cvars, played over the attract loop
 $events = Join-Path $PSScriptRoot 'events\menus.events'
 Trace 'menus' @('-traceevents', $events, '-oracleframes', '3700')
 Trace 'menus.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-oracleframes', '3700')
+# the config.cfg the menus wrote (other bindings and cvars), read back by quake.rc over the attract loop
+Trace 'attract.config' @('-oracleframes', '600') @('menus/config.cfg')
 
 # the scripted games (design.md §11.1): the frames each runs for are in GameTests too
 $games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500 }

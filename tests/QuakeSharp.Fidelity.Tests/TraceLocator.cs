@@ -14,4 +14,13 @@ internal static class TraceLocator
             $"Set QUAKESHARP_TRACE_DIR to the oracle's traces (tools/oracle/Trace-Demos.ps1 writes {name}).");
         return path!;
     }
+
+    public static string RequireDirectory(string name)
+    {
+        string? dir = Environment.GetEnvironmentVariable("QUAKESHARP_TRACE_DIR");
+        string? path = string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, name);
+        Assert.SkipUnless(path != null && Directory.Exists(path),
+            $"Set QUAKESHARP_TRACE_DIR to the oracle's traces (tools/oracle/Trace-Demos.ps1 writes {name}).");
+        return path!;
+    }
 }

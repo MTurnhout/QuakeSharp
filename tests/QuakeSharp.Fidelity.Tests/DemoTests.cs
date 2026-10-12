@@ -43,6 +43,7 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-tracequitafterdemo", "+playdemo", demo], width, height);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: true));
+        RunFiles.AssertSame(trace, userdir);
     }
 
     [Fact]
@@ -53,6 +54,20 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-oracleframes", "20000"]);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 20000));
+        RunFiles.AssertSame("attract.trace", userdir);
+    }
+
+    // The config.cfg the menus' run wrote (other bindings and cvars), read back by quake.rc over the attract loop
+    [Fact]
+    public void ConfigReadBackPlaysInSyncWithTheOracle()
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile("attract.config.trace");
+        RunFiles.CopyInputs(userdir, "menus/config.cfg");
+
+        var run = new TraceRun(baseDir, userdir, ["-oracleframes", "600"]);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 600));
+        RunFiles.AssertSame("attract.config.trace", userdir);
     }
 
     // The menus, the console, the scores and the renderer's cvars, driven by tools/oracle/events/menus.events over
@@ -68,6 +83,7 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", "3700"], width, height);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 3700));
+        RunFiles.AssertSame(trace, userdir);
     }
 
     // The scripted games of tools/oracle/events (design.md §11.1): a new game from the menu through the start map
@@ -75,7 +91,7 @@ public sealed class DemoTests : IDisposable
     // exit and the episode's finale, the network menus (a search, the game options starting a deathmatch, the setup),
     // a tour of every map of the episodes, the end and the deathmatch maps, fighting in each, and a game played by hand
     // (recorded with the executable's -recordevents) from the menu through e1m1 into e1m2, ending on the quit screen,
-    // and the sound's (design.md �11.2): its commands and cvars, the CD's, the menu's volume sliders, a game's pause
+    // and the sound's (design.md §11.2): its commands and cvars, the CD's, the menu's volume sliders, a game's pause
     [Theory]
     [InlineData("start", 2000, 320, 240, "start.trace")]
     [InlineData("commands", 3800, 320, 240, "commands.trace")]
@@ -94,6 +110,7 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", frames.ToString(CultureInfo.InvariantCulture)], width, height);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: frames));
+        RunFiles.AssertSame(trace, userdir);
     }
 
     // The sound game without a sound device or a CD (WinQuake's -nosound and -nocdaudio)
@@ -106,6 +123,7 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-nosound", "-nocdaudio", "-traceevents", events, "-oracleframes", "3500"]);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 3500));
+        RunFiles.AssertSame("sound.nosound.trace", userdir);
     }
 
     private static string RepositoryRoot()
