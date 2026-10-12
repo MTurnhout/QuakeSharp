@@ -96,6 +96,8 @@ public sealed partial class QuakeEngine
         net_numdrivers = net_drivers.Length;
         net_landrivers = [new Net.VirtualLanDriver(this)];
         net_numlandrivers = net_landrivers.Length;
+        pr_builtins = PR_Builtins();
+        pr_numbuiltins = pr_builtins.Length;
         slistSendProcedure = new(Slist_Send);
         slistPollProcedure = new(Slist_Poll);
         testPollProcedure = new(Test_Poll);

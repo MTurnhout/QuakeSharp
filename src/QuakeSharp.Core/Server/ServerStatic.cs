@@ -38,7 +38,7 @@ public sealed class ServerClient
     public Vec3 wishdir;
 
     /// <summary>can be added to at any time, copied and clear once per frame</summary>
-    public SizeBuf message = new(QuakeDef.MAX_MSGLEN);
+    public SizeBuf message = new(QuakeDef.MAX_MSGLEN) { maxsize = 0 };
 
     /// <summary>EDICT_NUM(clientnum+1)</summary>
     public Progs.Edict? edict;
@@ -58,6 +58,24 @@ public sealed class ServerClient
 
     /// <summary>client known data for deltas</summary>
     public int old_frags;
+
+    /// <summary>memset (client, 0, sizeof(*client)): every field 0 (the message has no buffer until it is given one)</summary>
+    public void Clear()
+    {
+        active = spawned = dropasap = privileged = sendsignon = false;
+        last_message = 0;
+        netconnection = null;
+        cmd = default;
+        wishdir = default;
+        message = new SizeBuf(QuakeDef.MAX_MSGLEN) { maxsize = 0 };
+        edict = null;
+        name = "";
+        colors = 0;
+        Array.Clear(ping_times);
+        num_pings = 0;
+        Array.Clear(spawn_parms);
+        old_frags = 0;
+    }
 }
 
 /// <summary>server.h: server_static_t</summary>

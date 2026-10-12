@@ -287,6 +287,186 @@ public sealed partial class QuakeEngine
         }
     }
 
+    // host.c: SV_ClientPrintf
+    // Sends text across to be displayed
+    // FIXME: make this just a stuffed echo?
+    public void SV_ClientPrintf(string fmt, params ReadOnlySpan<PrintfArg> args)
+    {
+        string @string = CFormat.Sprintf(fmt, args);
+
+        MSG_WriteByte(host_client!.message, Protocol.svc_print);
+        MSG_WriteString(host_client.message, @string);
+    }
+
+    // host.c: SV_BroadcastPrintf
+    // Sends text to all active clients
+    public void SV_BroadcastPrintf(string fmt, params ReadOnlySpan<PrintfArg> args)
+    {
+        string @string = CFormat.Sprintf(fmt, args);
+        int i;
+
+        for (i = 0; i < svs.maxclients; i++)
+        {
+            if (svs.clients[i].active && svs.clients[i].spawned)
+            {
+                MSG_WriteByte(svs.clients[i].message, Protocol.svc_print);
+                MSG_WriteString(svs.clients[i].message, @string);
+            }
+        }
+    }
+
+    // host.c: Host_ClientCommands
+    // Send text over to the client to be executed
+    public void Host_ClientCommands(string fmt, params ReadOnlySpan<PrintfArg> args)
+    {
+        string @string = CFormat.Sprintf(fmt, args);
+
+        MSG_WriteByte(host_client!.message, Protocol.svc_stufftext);
+        MSG_WriteString(host_client.message, @string);
+    }
+
+    // host.c: SV_DropClient
+    // Called when the player is getting totally kicked off the host
+    // if (crash = true), don't bother sending signofs
+    public void SV_DropClient(bool crash)
+    {
+        int saveSelf;
+        int i;
+        ServerClient client;
+        ServerClient host_client = this.host_client!;
+        int clientnum = Array.IndexOf(svs.clients, host_client);
+
+        if (!crash)
+        {
+            // send any final messages (don't check for errors)
+            if (NET_CanSendMessage(host_client.netconnection))
+            {
+                MSG_WriteByte(host_client.message, Protocol.svc_disconnect);
+                NET_SendMessage(host_client.netconnection, host_client.message);
+            }
+
+            if (host_client.edict != null && host_client.spawned)
+            {
+                // call the prog function for removing a client
+                // this will set the body to a dead frame, among other things
+                saveSelf = pr_global_struct.self;
+                pr_global_struct.self = EDICT_TO_PROG(host_client.edict);
+                PR_ExecuteProgram(pr_global_struct.ClientDisconnect);
+                pr_global_struct.self = saveSelf;
+            }
+
+            Sys_Printf("Client %s removed\n", host_client.name);
+        }
+
+        // break the net connection
+        NET_Close(host_client.netconnection);
+        host_client.netconnection = null;
+
+        // free the client (the body stays around)
+        host_client.active = false;
+        host_client.name = "";
+        host_client.old_frags = -999999;
+        net_activeconnections--;
+
+        // send notification to all clients
+        for (i = 0; i < svs.maxclients; i++)
+        {
+            client = svs.clients[i];
+            if (!client.active)
+            {
+                continue;
+            }
+
+            MSG_WriteByte(client.message, Protocol.svc_updatename);
+            MSG_WriteByte(client.message, clientnum);
+            MSG_WriteString(client.message, "");
+            MSG_WriteByte(client.message, Protocol.svc_updatefrags);
+            MSG_WriteByte(client.message, clientnum);
+            MSG_WriteShort(client.message, 0);
+            MSG_WriteByte(client.message, Protocol.svc_updatecolors);
+            MSG_WriteByte(client.message, clientnum);
+            MSG_WriteByte(client.message, 0);
+        }
+    }
+
+    // host.c: Host_ShutdownServer
+    // This only happens at the end of a game, not between levels
+    public void Host_ShutdownServer(bool crash)
+    {
+        int i;
+        int count;
+        SizeBuf buf;
+        double start;
+
+        if (!sv.active)
+        {
+            return;
+        }
+
+        sv.active = false;
+
+        // stop all client sounds immediately
+        if (cls.state == cactive_t.ca_connected)
+        {
+            CL_Disconnect();
+        }
+
+        // flush any pending messages - like the score!!!
+        start = Sys_FloatTime();
+        do
+        {
+            count = 0;
+            for (i = 0; i < svs.maxclients; i++)
+            {
+                host_client = svs.clients[i];
+                if (host_client.active && host_client.message.cursize != 0)
+                {
+                    if (NET_CanSendMessage(host_client.netconnection))
+                    {
+                        NET_SendMessage(host_client.netconnection, host_client.message);
+                        SZ_Clear(host_client.message);
+                    }
+                    else
+                    {
+                        NET_GetMessage(host_client.netconnection);
+                        count++;
+                    }
+                }
+            }
+
+            if (Sys_FloatTime() - start > 3.0)
+            {
+                break;
+            }
+        }
+        while (count != 0);
+
+        // make sure all the clients know we're disconnecting
+        buf = new SizeBuf(4) { maxsize = 4 };
+        MSG_WriteByte(buf, Protocol.svc_disconnect);
+        count = NET_SendToAll(buf, 5);
+        if (count != 0)
+        {
+            Con_Printf("Host_ShutdownServer: NET_SendToAll failed for %u clients\n", count);
+        }
+
+        for (i = 0; i < svs.maxclients; i++)
+        {
+            host_client = svs.clients[i];
+            if (host_client.active)
+            {
+                SV_DropClient(crash);
+            }
+        }
+
+        // clear structures
+        sv = new ServerState();
+        for (i = 0; i < svs.maxclientslimit; i++)
+        {
+            svs.clients[i].Clear();
+        }
+    }
+
     // host.c: Host_ClearMemory (the hunk is managed memory: nothing to free)
     public void Host_ClearMemory()
     {
@@ -332,6 +512,32 @@ public sealed partial class QuakeEngine
         }
 
         return true;
+    }
+
+    // host.c: Host_ServerFrame
+    public void Host_ServerFrame()
+    {
+        // run the world state
+        pr_global_struct.frametime = (float)host_frametime;
+
+        // set the time and clear the general datagram
+        SV_ClearDatagram();
+
+        // check for new clients
+        SV_CheckForNewClients();
+
+        // read client messages
+        SV_RunClients();
+
+        // move things around and think
+        // always pause in single player if in console or menus
+        if (!sv.paused && (svs.maxclients > 1 || key_dest == keydest_t.key_game))
+        {
+            SV_Physics();
+        }
+
+        // send all messages to the clients
+        SV_SendClientMessages();
     }
 
     // host.c: Host_GetConsoleCommands

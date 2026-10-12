@@ -82,6 +82,36 @@ public sealed partial class FileSystem
         return HostPath.ResolveForWrite(OnHost(path));
     }
 
+    /// <summary>
+    /// A file the game opens in com_gamedir with fopen (a savegame): from where <see cref="WritePath"/> writes it
+    /// first, then com_gamedir itself; null if neither has it.
+    /// </summary>
+    public byte[]? ReadWritten(string filename)
+    {
+        foreach (string? dir in new[] { UserDirFor(GameDir), GameDir })
+        {
+            if (dir == null)
+            {
+                continue;
+            }
+
+            string? path = HostPath.Resolve(OnHost($"{dir}/{filename}"));
+            if (path != null && File.Exists(path))
+            {
+                try
+                {
+                    return File.ReadAllBytes(path);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    return null;
+                }
+            }
+        }
+
+        return null;
+    }
+
     // A game directory's namesake under UserDir
     private string? UserDirFor(string dir) =>
         UserDir == null || dir.Length == 0 ? null : Path.Combine(UserDir, Path.GetFileName(dir.TrimEnd('/', '\\')));
