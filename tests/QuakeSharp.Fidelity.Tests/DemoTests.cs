@@ -73,7 +73,8 @@ public sealed class DemoTests : IDisposable
     // The scripted games of tools/oracle/events (design.md §11.1): a new game from the menu through the start map
     // into e1m1, the server's commands with fights, saves and level changes, e1m1's exit and intermission, e1m7's
     // exit and the episode's finale, the network menus (a search, the game options starting a deathmatch, the setup),
-    // and a tour of every map of the episodes, the end and the deathmatch maps, fighting in each
+    // a tour of every map of the episodes, the end and the deathmatch maps, fighting in each, and a game played by hand
+    // (recorded with the executable's -recordevents) from the menu through e1m1 into e1m2, ending on the quit screen
     [Theory]
     [InlineData("start", 2000, 320, 240, "start.trace")]
     [InlineData("commands", 3800, 320, 240, "commands.trace")]
@@ -82,6 +83,7 @@ public sealed class DemoTests : IDisposable
     [InlineData("finale", 3100, 320, 240, "finale.trace")]
     [InlineData("netmenus", 3000, 320, 240, "netmenus.trace")]
     [InlineData("tour", 22200, 320, 240, "tour.trace")]
+    [InlineData("e1", 24500, 320, 240, "e1.trace")]
     public void GamePlaysInSyncWithTheOracle(string game, int frames, int width, int height, string trace)
     {
         string baseDir = GameDataLocator.RequireBaseDir();

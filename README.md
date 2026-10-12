@@ -9,15 +9,16 @@ A faithful C# port of id Software's Quake, translated from the original source r
 
 See [design.md](design.md) for the full design and milestones.
 
-> **Status:** milestone 7: the Quake file system, the C library's maths functions (from musl) and `rand()`, the host,
-> the commands, cvars, console text and keys, the client (demo playback, models, particles, the view, the sound mixer),
-> the software renderer, the console, the status bar and the menus, the QuakeC VM and its builtins, the server
-> (physics, monsters, the world), the host's server commands and the network layer (loopback, and the datagram protocol
-> over a virtual TCP/IP driver) are ported and checked against WinQuake 1.09's own C, built headless as a reference
-> oracle that traces every frame: the three demos at three video modes, the attract loop, a scripted tour of the menus
-> and scripted games (a new game through the start map, the server's commands and fights, an intermission, an
-> episode's finale, the network menus starting a deathmatch) match it on every frame, pixel for pixel and edict for
-> edict. The executable plays, with the keyboard.
+> **Status:** milestone 8 (milestones 0-7 done): the Quake file system, the C library's maths functions (from musl)
+> and `rand()`, the host, the commands, cvars, console text and keys, the client (demo playback, models, particles,
+> the view, the sound mixer), the software renderer, the console, the status bar and the menus, the QuakeC VM and its
+> builtins, the server (physics, monsters, the world), the host's server commands and the network layer (loopback, and
+> the datagram protocol over a virtual TCP/IP driver) are ported and checked against WinQuake 1.09's own C, built
+> headless as a reference oracle that traces every frame: the three demos at three video modes, the attract loop, a
+> scripted tour of the menus and scripted games (a new game through the start map, the server's commands and fights,
+> an intermission, an episode's finale, the network menus starting a deathmatch, a tour of every map) and a game
+> played by hand and recorded in QuakeSharp match it on every frame, pixel for pixel and edict for edict. The
+> executable plays, with the keyboard.
 
 ## Game data
 

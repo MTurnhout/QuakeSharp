@@ -15,7 +15,8 @@ Each trace starts from a clean game folder: the oracle's Quake folder holds only
                         renderer cvars), at 320x240; menus.640x480.trace the same at 640x480
   <game>.trace          the scripted games of events/<game>.events (start, commands, intermission, finale, netmenus:
                         a new game from the menu, the server's commands and fights, the end of a level and of an
-                        episode, the network menus starting a deathmatch; tour: every map in turn, fighting), at
+                        episode, the network menus starting a deathmatch; tour: every map in turn, fighting; e1: a game played by hand
+                        and recorded with -recordevents, e1m1 into e1m2), at
                         320x240; commands.640x480.trace the same at 640x480. Savegames the games write are removed
                         before each run, as config.cfg is
 
@@ -87,7 +88,7 @@ Trace 'menus' @('-traceevents', $events, '-oracleframes', '3700')
 Trace 'menus.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-oracleframes', '3700')
 
 # the scripted games (design.md §11.1): the frames each runs for are in GameTests too
-$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200 }
+$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500 }
 foreach ($game in $games.Keys) {
     $events = Join-Path $PSScriptRoot "events\$game.events"
     Trace $game @('-traceevents', $events, '-oracleframes', "$($games[$game])")

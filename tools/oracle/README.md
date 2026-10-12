@@ -39,9 +39,11 @@ menu, the start map's normal skill hall and episode 1's slipgate), `commands.tra
 server's commands, fights, a save and a load, a restart and a level change), `intermission.trace` (e1m1's exit and
 the intermission), `finale.trace` (e1m7's exit and the episode's finale) and `netmenus.trace` (the network menus over
 the virtual TCP/IP driver: a search, the LAN settings, the game options starting a three-player deathmatch, the setup
-menu's name and colours sent to it), and `tour.trace`: every map of the four episodes, the end and the six
-deathmatch maps in turn, 600 frames each, in god mode with all the weapons, shooting while turning and moving. The routes through walls are flown with
-`noclip`, planned from the edicts' positions in `-tracedump`.
+menu's name and colours sent to it), `tour.trace` (every map of the four episodes, the end and the six deathmatch
+maps in turn, 600 frames each, in god mode with all the weapons, shooting while turning and moving; the routes through
+walls are flown with `noclip`, planned from the edicts' positions in `-tracedump`), and `e1.trace`: a game played by
+hand in QuakeSharp and recorded with `-recordevents`, from the menu through e1m1 into e1m2, ending on the quit screen
+(24,500 frames).
 
 ## How the oracle is built
 
