@@ -1,0 +1,203 @@
+# The console's text (console.c) and the keys (keys.c): printing, wrapping, resizing, typing, history, completion,
+# bindings and the message line.
+time 1.25
+dump
+
+# printing before the video is set up: 38 columns
+print hello\n
+print a line that is long enough to wrap at the console's width of thirty-eight\n
+print averyveryveryverylongwordthatcannotwrapanywhereatallbecauseithasnospaces\n
+print no newline,
+print  continued\n
+print carriage\rreturn\n
+print \x01talk colored\n
+print \x02colored\n
+print high\xe9 bytes\xff end\n
+print tab\x09and\x0bvertical\n
+time 2.5
+print \n\nblank lines above\n
+dump
+
+# resizing reflows the text
+vid 640 480
+dump
+vid 320 200
+dump
+vid 512 384
+print after resizing to 62 columns\n
+dump
+
+# typing into the console
+dest 1
+key 101 1
+key 101 0
+key 99 1
+key 99 0
+key 104 1
+key 104 0
+key 111 1
+key 111 0
+key 32 1
+key 32 0
+key 104 1
+key 104 0
+key 105 1
+key 105 0
+dump
+key 13 1
+key 13 0
+execute
+dump
+
+# shift, backspace and the left arrow, autorepeat
+key 134 1
+key 101 1
+key 101 0
+key 134 0
+key 99 1
+key 99 1
+key 99 0
+key 127 1
+key 127 1
+key 127 0
+key 104 1
+key 104 0
+key 130 1
+key 130 0
+key 111 1
+key 111 0
+key 49 1
+key 49 0
+key 134 1
+key 49 1
+key 49 0
+key 134 0
+dump
+key 13 1
+key 13 0
+execute
+dump
+
+# completion of commands and cvars, and history
+key 101 1
+key 101 0
+key 99 1
+key 99 0
+key 9 1
+key 9 0
+key 116 1
+key 116 0
+dump
+key 13 1
+key 13 0
+execute
+key 117 1
+key 117 0
+key 110 1
+key 110 0
+key 105 1
+key 105 0
+key 116 1
+key 116 0
+key 95 1
+key 95 0
+key 97 1
+key 97 0
+key 9 1
+key 9 0
+dump
+key 128 1
+key 128 0
+dump
+key 128 1
+key 128 0
+key 128 1
+key 128 0
+dump
+key 129 1
+key 129 0
+dump
+key 129 1
+key 129 0
+key 129 1
+key 129 0
+key 129 1
+key 129 0
+dump
+
+# scrolling back
+key 150 1
+key 150 0
+key 150 1
+key 150 0
+dump
+key 151 1
+key 151 0
+dump
+key 149 1
+key 149 0
+key 152 1
+key 152 0
+dump
+
+# bindings, as the game sees keys
+text bind w +forward\n
+text bind SPACE +jump\n
+text bind k "echo kick ; echo twice"\n
+text bind PGUP "echo page up"\n
+text bind NOSUCHKEY foo\n
+text bind w\n
+text bind x\n
+text bind\n
+text bind SEMICOLON "echo semi"\n
+text bind mouse1 +attack\n
+text unbind x\n
+text unbind bogus\n
+execute
+dest 0
+key 119 1
+key 119 1
+key 119 0
+key 32 1
+key 32 0
+key 107 1
+key 107 0
+key 150 1
+key 150 0
+key 59 1
+key 59 0
+key 201 1
+key 201 0
+dump
+execute
+dump
+
+# a + binding on a shifted key is released through its unshifted twin
+text bind 1 +one\n
+execute
+key 134 1
+key 49 1
+key 134 0
+key 49 0
+dump
+
+# the message line
+dest 2
+key 104 1
+key 104 0
+key 105 1
+key 105 0
+key 127 1
+key 127 0
+key 111 1
+key 111 0
+dump
+key 13 1
+key 13 0
+dump
+execute
+dump
+
+text unbindall\n
+execute
+dump

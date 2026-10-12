@@ -159,6 +159,95 @@ public static class QString
         return (float)(val * sign);
     }
 
+    // common.c: Q_strcmp (0 if the strings are equal, -1 if not)
+    public static int Q_strcmp(string s1, string s2)
+    {
+        for (int i = 0; ; i++)
+        {
+            if (Ch(s1, i) != Ch(s2, i))
+            {
+                return -1; // strings not equal
+            }
+
+            if (Ch(s1, i) == 0)
+            {
+                return 0; // strings are equal
+            }
+        }
+    }
+
+    // common.c: Q_strncmp
+    public static int Q_strncmp(string s1, string s2, int count)
+    {
+        for (int i = 0; ; i++)
+        {
+            if (count-- == 0)
+            {
+                return 0;
+            }
+
+            if (Ch(s1, i) != Ch(s2, i))
+            {
+                return -1; // strings not equal
+            }
+
+            if (Ch(s1, i) == 0)
+            {
+                return 0; // strings are equal
+            }
+        }
+    }
+
+    // common.c: Q_strncasecmp
+    public static int Q_strncasecmp(string s1, string s2, int n)
+    {
+        int c1, c2;
+
+        for (int i = 0; ; i++)
+        {
+            c1 = Ch(s1, i);
+            c2 = Ch(s2, i);
+
+            if (n-- == 0)
+            {
+                return 0; // strings are equal until end point
+            }
+
+            if (c1 != c2)
+            {
+                if (c1 is >= 'a' and <= 'z')
+                {
+                    c1 -= 'a' - 'A';
+                }
+
+                if (c2 is >= 'a' and <= 'z')
+                {
+                    c2 -= 'a' - 'A';
+                }
+
+                if (c1 != c2)
+                {
+                    return -1; // strings not equal
+                }
+            }
+
+            if (c1 == 0)
+            {
+                return 0; // strings are equal
+            }
+        }
+    }
+
+    // common.c: Q_strcasecmp
+    public static int Q_strcasecmp(string s1, string s2) => Q_strncasecmp(s1, s2, 99999);
+
+    // common.c: Q_strlen (up to an embedded 0)
+    public static int Q_strlen(string str)
+    {
+        int end = str.IndexOf('\0', StringComparison.Ordinal);
+        return end < 0 ? str.Length : end;
+    }
+
     /// <summary>The C string's character at <paramref name="i"/> as a signed char: 0 at and after its end.</summary>
     public static int Ch(string s, int i)
     {

@@ -22,6 +22,8 @@ Write("Common/FileSystem.g.cs", GenerateUShortTable("common.c", "QuakeSharp.Core
 Write("Numerics/Libm.g.cs", GenerateLibm());
 Dictionary<string, long> keyDefines = Defines(File.ReadAllText(Path.Combine(src, "keys.h")), "K_");
 Write("UI/Keys.g.cs", GenerateKeys());
+Write("UI/QuakeEngine.Keys.g.cs", GenerateKeyNames());
+Write("Protocol.g.cs", GenerateProtocol());
 WriteTo("QuakeSharp.Platform.Sdl", "ScanToKey.g.cs", GenerateScanToKey());
 return 0;
 
@@ -37,6 +39,44 @@ string GenerateKeys()
         sb.AppendLine($"    public const int {name} = {value};");
     }
 
+    sb.AppendLine("}");
+    return sb.ToString();
+}
+
+// protocol.h: every #define (message types svc_* and clc_*, update bits U_* and SU_*, sound bits, temp entities...)
+string GenerateProtocol()
+{
+    var sb = Header("protocol.h", "QuakeSharp.Core");
+    sb.AppendLine("/// <summary>protocol.h: the network protocol's constants, as the C defines them.</summary>");
+    sb.AppendLine("public static class Protocol");
+    sb.AppendLine("{");
+    foreach (Match m in Regex.Matches(Source("protocol.h"), @"^\s*#define\s+(\w+)\s+(\(1<<\d+\)|\d+)\s*$", RegexOptions.Multiline))
+    {
+        sb.AppendLine($"    public const int {m.Groups[1].Value} = {m.Groups[2].Value.Replace("<<", " << ")};");
+    }
+
+    sb.AppendLine("}");
+    return sb.ToString();
+}
+
+// keys.c: keynames, the names of the keys that are not one printable character
+string GenerateKeyNames()
+{
+    string c = Source("keys.c");
+    var sb = Header("keys.c", "QuakeSharp.Core");
+    sb.AppendLine("using static QuakeSharp.Core.UI.Keys;");
+    sb.AppendLine();
+    sb.AppendLine("public sealed partial class QuakeEngine");
+    sb.AppendLine("{");
+    sb.AppendLine("    /// <summary>keys.c: keynames, in order (the C's list ends with {NULL,0}).</summary>");
+    sb.AppendLine("    private static readonly (string name, int keynum)[] keynames =");
+    sb.AppendLine("    [");
+    foreach (Match m in Regex.Matches(InitializerBody(c, "keynames"), @"\{\s*""([^""]*)""\s*,\s*('(?:\\.|[^'\\])'|K_\w+)\s*\}"))
+    {
+        sb.AppendLine($"        (\"{m.Groups[1].Value}\", {m.Groups[2].Value}),");
+    }
+
+    sb.AppendLine("    ];");
     sb.AppendLine("}");
     return sb.ToString();
 }

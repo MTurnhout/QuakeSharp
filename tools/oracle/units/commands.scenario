@@ -1,0 +1,69 @@
+# The command buffer, commands, aliases and cvars (cmd.c, cvar.c), through Cbuf_AddText and Cbuf_Execute.
+dump
+
+# echo, separators, quotes, comments
+text echo hello world\n
+text echo "a quoted ; semicolon" ; echo after semicolon\n
+text echo one;echo two\necho three\n
+text echo // a comment\n
+text echo with // trailing comment\n
+text echo "unterminated quote\n
+text echo parens(a)b{c}d:e'f\n
+text echo tab\x09separated\n
+text echo high\xe9chars \xff end\n
+text    echo   leading   spaces   \n
+execute
+dump
+
+# unknown commands, cvars printed and set
+text nosuchcommand arg\n
+text skill\n
+text skill 3\n
+text skill\n
+text unit_value\n
+text unit_value 0x1A\n
+text unit_value '\n
+text unit_value 'A\n
+text unit_value -2.5e3\n
+text unit_value 1.2.3\n
+text unit_archive "quoted value"\n
+text deathmatch 1 extra args\n
+text SKILL 2\n
+execute
+dump
+
+# aliases: definition, listing, case, replacement, too long names
+text alias greet "echo hi ; echo there"\n
+text alias many echo one two three\n
+text greet\n
+text GREET\n
+text many\n
+text alias\n
+text alias greet echo replaced\n
+text greet\n
+text alias aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa echo long\n
+text alias empty\n
+text empty\n
+execute
+dump
+
+# wait leaves the rest of the buffer for the next frame
+text echo before wait ; wait ; echo after wait\n
+execute
+dump
+execute
+dump
+
+# cmd while not connected, exec without a file name, stuffcmds with an argument
+text cmd hello\n
+text exec\n
+text stuffcmds extra\n
+text echo\n
+execute
+dump
+
+# a buffer overflow: Cbuf_AddText refuses text that does not fit
+text echo 0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n
+dump
+execute
+dump

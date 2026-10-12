@@ -5,7 +5,7 @@ internal static class ReferenceSource
 {
     public static string WinQuakeFile(string name) => Path.Combine(RepositoryRoot(), "reference", "Quake", "WinQuake", name);
 
-    private static string RepositoryRoot()
+    public static string RepositoryRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {

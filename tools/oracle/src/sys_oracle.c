@@ -193,15 +193,22 @@ void Sys_Error (char *error, ...)
 
 qboolean oracle_verbose;
 
+// units.c's scenarios capture what is printed
+void (*oracle_print_hook) (const char *text);
+
 void Sys_Printf (char *fmt, ...)
 {
 	va_list         argptr;
+	char		text[4096];
 
-	if (!oracle_verbose)
-		return;
 	va_start (argptr,fmt);
-	vprintf (fmt,argptr);
+	vsprintf (text, fmt, argptr);
 	va_end (argptr);
+
+	if (oracle_print_hook)
+		oracle_print_hook (text);
+	if (oracle_verbose)
+		printf ("%s", text);
 }
 
 void Sys_Quit (void)
@@ -245,6 +252,7 @@ void Sys_SetFPCW (void)
 //=============================================================================
 
 void Oracle_Units (int argc, char **argv);
+unsigned long long Oracle_Scenario (const char *path, int print);
 
 int main (int argc, char **argv)
 {
@@ -252,6 +260,17 @@ int main (int argc, char **argv)
 	int t;
 
 	COM_InitArgv (argc, argv);
+
+	// -oraclescenario <file> [-print]: one scenario (scenarios.c), then quit
+	t = COM_CheckParm ("-oraclescenario");
+	if (t && t < com_argc - 1)
+	{
+		int print = COM_CheckParm ("-print") != 0;
+		unsigned long long hash = Oracle_Scenario (com_argv[t + 1], print);
+		if (!print)
+			printf ("%s %016llx\n", COM_SkipPath (com_argv[t + 1]), hash);
+		return 0;
+	}
 
 	// -oracleunits [<set> <n>]: the unit sets (units.c), then quit
 	t = COM_CheckParm ("-oracleunits");

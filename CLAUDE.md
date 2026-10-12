@@ -23,6 +23,10 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
 - `LibmTests` and `RandTests` keep hashes printed by the oracle's `numerics.exe`, `OracleUnitTests` those of
   `quake-oracle.exe -oracleunits` (`tools/oracle/src/units.c`); if the input sets change, change the C alike and take
   the new hashes from it. Mind the oracle's right-to-left argument order when mirroring C calls (design.md §3.2).
+  `ScenarioTests` keeps the hashes of `quake-oracle.exe -oraclescenario tools/oracle/units/<file>`; when one differs,
+  diff `-print`'s transcript with the `.transcript` file the test writes next to its assembly.
+- Engine code lives in `QuakeEngine`, a partial file per C module, with the C's names (design.md §6.2 rule 13).
+  Functions of unported modules are stand-ins in `QuakeEngine.Pending.cs`; move them out as their module is ported.
 
 ## Rules
 
