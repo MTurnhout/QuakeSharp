@@ -26,6 +26,9 @@ jobs:
     env:
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+      SLANG_VERSION: 2026.18
+      SLANG_SHA256_WINDOWS: 6ffa4827b519fd0a85b38407049d87ab0c1f045fe2289cb1e6831f965169f8a1
+      SLANG_SHA256_LINUX: 03acde8d19ad17f7b94312078ed945bed554a220feff084898a1bc94a9c998f5
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,6 +37,31 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+
+      # The shaders are compiled with slangc (design.md §4): a pinned Slang release, checked by its SHA-256 and cached.
+      - name: Cache Slang
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/slang
+          key: slang-${{ env.SLANG_VERSION }}-${{ runner.os }}
+
+      - name: Install Slang
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            asset="slang-$SLANG_VERSION-windows-x86_64.zip"; sha256="$SLANG_SHA256_WINDOWS"; slangc="bin/slangc.exe"
+          else
+            asset="slang-$SLANG_VERSION-linux-x86_64.tar.gz"; sha256="$SLANG_SHA256_LINUX"; slangc="bin/slangc"
+          fi
+          dir="$RUNNER_TEMP/slang"
+          if [ ! -f "$dir/$slangc" ]; then
+            curl -fsSL -o "$RUNNER_TEMP/$asset" "https://github.com/shader-slang/slang/releases/download/v$SLANG_VERSION/$asset"
+            echo "$sha256  $RUNNER_TEMP/$asset" | sha256sum -c -
+            mkdir -p "$dir"
+            if [ "$RUNNER_OS" = "Windows" ]; then unzip -q "$RUNNER_TEMP/$asset" -d "$dir"; else tar -xzf "$RUNNER_TEMP/$asset" -C "$dir"; fi
+          fi
+          "$dir/$slangc" -version
+          echo "SLANGC=$dir/$slangc" >> "$GITHUB_ENV"
 
       - name: Build
         run: dotnet build QuakeSharp.slnx -c Release

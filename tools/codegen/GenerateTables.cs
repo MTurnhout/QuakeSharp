@@ -14,14 +14,82 @@ string src = Path.Combine(repo, "reference", "Quake", "WinQuake");
 const string SourceTree = "reference/Quake/WinQuake";
 string musl = Path.Combine(repo, "reference", "musl", "src", "math");
 const string MuslTree = "reference/musl/src/math";
-string core = Path.Combine(repo, "src", "QuakeSharp.Core");
 
 Write("Common/Crc.g.cs", GenerateUShortTable("crc.c", "QuakeSharp.Core.Common", "static partial class Crc", "crctable",
     "The CCITT CRC table (polynomial 0x1021, as XMODEM)."));
 Write("Common/FileSystem.g.cs", GenerateUShortTable("common.c", "QuakeSharp.Core.Common", "sealed partial class FileSystem", "pop",
     "The picture gfx/pop.lmp must hold for the registered version, as big-endian shorts."));
 Write("Numerics/Libm.g.cs", GenerateLibm());
+Dictionary<string, long> keyDefines = Defines(File.ReadAllText(Path.Combine(src, "keys.h")), "K_");
+Write("UI/Keys.g.cs", GenerateKeys());
+WriteTo("QuakeSharp.Platform.Sdl", "ScanToKey.g.cs", GenerateScanToKey());
 return 0;
+
+// keys.h: the key numbers (K_TAB, K_UPARROW...), as constants
+string GenerateKeys()
+{
+    var sb = Header("keys.h", "QuakeSharp.Core.UI");
+    sb.AppendLine("/// <summary>keys.h: the key numbers; the printable keys are their lower case characters.</summary>");
+    sb.AppendLine("public static class Keys");
+    sb.AppendLine("{");
+    foreach ((string name, long value) in keyDefines)
+    {
+        sb.AppendLine($"    public const int {name} = {value};");
+    }
+
+    sb.AppendLine("}");
+    return sb.ToString();
+}
+
+// vid_win.c: scantokey, PC scan codes (set 1) to key numbers
+string GenerateScanToKey()
+{
+    string c = StripComments(File.ReadAllText(Path.Combine(src, "vid_win.c")));
+    // the values are character literals (',' among them), key names and numbers
+    var values = Regex.Matches(InitializerBody(c, "scantokey"), @"'(?:\\.|[^'\\])'|K_\w+|\d+").Select(m => m.Value).Select(v =>
+        v.StartsWith('\'') ? CharLiteral(v)
+        : v.StartsWith("K_", StringComparison.Ordinal) ? keyDefines[v]
+        : long.Parse(v, CultureInfo.InvariantCulture)).ToList();
+    if (values.Count != 128)
+    {
+        throw new InvalidOperationException($"scantokey has {values.Count} entries");
+    }
+
+    var sb = Header("vid_win.c", "QuakeSharp.Platform.Sdl");
+    sb.AppendLine("internal static partial class KeyTranslation");
+    sb.AppendLine("{");
+    sb.AppendLine("    /// <summary>vid_win.c: scantokey, the key number of each PC scan code (set 1, without the e0 prefix).</summary>");
+    sb.AppendLine("    internal static readonly byte[] scantokey =");
+    sb.AppendLine("    [");
+    foreach (long[] row in values.Chunk(8))
+    {
+        sb.AppendLine("        " + string.Join(" ", row.Select(v => $"{v},")));
+    }
+
+    sb.AppendLine("    ];");
+    sb.AppendLine("}");
+    return sb.ToString();
+
+    static long CharLiteral(string v)
+    {
+        string inner = v[1..^1];
+        return inner.Length == 2 && inner[0] == '\\' ? inner[1]
+            : inner.Length == 1 ? inner[0]
+            : throw new InvalidOperationException($"unsupported character literal {v}");
+    }
+}
+
+// The "#define NAME number" lines of a header whose names start with prefix, in order.
+static Dictionary<string, long> Defines(string header, string prefix)
+{
+    var defines = new Dictionary<string, long>(StringComparer.Ordinal);
+    foreach (Match m in Regex.Matches(StripComments(header), $@"^\s*#define\s+({prefix}\w+)\s+(\d+)\s*$", RegexOptions.Multiline))
+    {
+        defines.Add(m.Groups[1].Value, long.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+    }
+
+    return defines;
+}
 
 // An array of unsigned shorts, as a static field of a partial type (its declaration, e.g. "static partial class Crc").
 string GenerateUShortTable(string file, string ns, string type, string name, string summary)
@@ -183,9 +251,11 @@ string Source(string file) => StripComments(File.ReadAllText(Path.Combine(src, f
 
 string MuslSource(string file) => StripComments(File.ReadAllText(Path.Combine(musl, file)));
 
-void Write(string relative, string content)
+void Write(string relative, string content) => WriteTo("QuakeSharp.Core", relative, content);
+
+void WriteTo(string project, string relative, string content)
 {
-    string path = Path.Combine(core, relative);
+    string path = Path.Combine(repo, "src", project, relative);
     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
     File.WriteAllText(path, content.ReplaceLineEndings("\n"), new UTF8Encoding(false));
     Console.WriteLine($"wrote {Path.GetRelativePath(repo, path)}");

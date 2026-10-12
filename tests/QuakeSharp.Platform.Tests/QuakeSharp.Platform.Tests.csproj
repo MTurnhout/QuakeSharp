@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QuakeSharp.Platform.Sdl\QuakeSharp.Platform.Sdl.csproj" />
+  </ItemGroup>
+
+</Project>

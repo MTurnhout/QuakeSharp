@@ -9,9 +9,11 @@ A faithful C# port of id Software's Quake, translated from the original source r
 
 See [design.md](design.md) for the full design and milestones.
 
-> **Status:** milestone 2: the Quake file system, pack files and gfx.wad are ported, game data is identified by MD5,
-> the C library's maths functions (from musl) and `rand()` are ported bit for bit, and the reference oracle (WinQuake
-> 1.09's own C, built headless) traces every demo frame by frame. Nothing is playable yet.
+> **Status:** milestone 3: the Quake file system, pack files and gfx.wad are ported, game data is identified by MD5,
+> the C library's maths functions (from musl) and `rand()` are ported bit for bit, the reference oracle (WinQuake 1.09's
+> own C, built headless) traces every demo frame by frame, and the platform layer shows 8-bit frames through Vulkan,
+> reads keys as WinQuake does and opens the sound device. Nothing is playable yet: the executable shows the console
+> background and logs the keys (Escape quits).
 
 ## Game data
 
@@ -21,13 +23,23 @@ the original PAKs in `id1/`.
 
 ## Building
 
-Requires the .NET 10 SDK, and the [Vulkan SDK](https://vulkan.lunarg.com/) (`VULKAN_SDK` set) for the shaders.
+Requires the .NET 10 SDK, and Slang's `slangc` for the shaders: from the [Vulkan SDK](https://vulkan.lunarg.com/)
+(`VULKAN_SDK` set), or any Slang release with `SLANGC` set to its `slangc`. Running needs a GPU with Vulkan 1.3.
 
 ```bash
 git clone --recurse-submodules <repo-url>
 dotnet build QuakeSharp.slnx
-dotnet run --project src/QuakeSharp
 ```
+
+Like WinQuake, QuakeSharp looks for `id1/` in the current directory (`-basedir <dir>` names another):
+
+```bash
+cd path/to/Quake
+dotnet run --project path/to/QuakeSharp/src/QuakeSharp -- -window
+```
+
+`-window` opens a window instead of covering the screen, `-noaspect` shows square pixels instead of a 4:3 picture,
+`-vkvalidation` turns on the Vulkan validation layer (it comes with the Vulkan SDK).
 
 ## Developer tools
 

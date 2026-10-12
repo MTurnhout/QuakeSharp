@@ -2,10 +2,15 @@
 
   <PropertyGroup>
     <RootNamespace>QuakeSharp.Platform.Sdl</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="ppy.SDL3-CS" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="QuakeSharp.Platform.Tests" />
   </ItemGroup>
 
   <ItemGroup>

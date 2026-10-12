@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <RootNamespace>QuakeSharp.Render.Vulkan</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,5 +13,35 @@
   <ItemGroup>
     <ProjectReference Include="..\QuakeSharp.Core\QuakeSharp.Core.csproj" />
   </ItemGroup>
+
+  <!--
+    The shaders (shaders/*.slang; shaders/common holds their modules) are compiled to SPIR-V with slangc and embedded,
+    so the game needs no shader compiler. slangc comes from SLANGC (its path), or else the Vulkan SDK (VULKAN_SDK).
+  -->
+  <ItemGroup>
+    <SlangShader Include="..\..\shaders\*.slang" />
+    <SlangModule Include="..\..\shaders\common\*.slang" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <SlangCompiler Condition="'$(SLANGC)' != ''">$(SLANGC)</SlangCompiler>
+    <SlangCompiler Condition="'$(SlangCompiler)' == '' and '$(VULKAN_SDK)' != '' and '$(OS)' == 'Windows_NT'">$(VULKAN_SDK)\Bin\slangc.exe</SlangCompiler>
+    <SlangCompiler Condition="'$(SlangCompiler)' == '' and '$(VULKAN_SDK)' != ''">$(VULKAN_SDK)/bin/slangc</SlangCompiler>
+    <ShaderOutputDir>$(BaseIntermediateOutputPath)$(Configuration)\shaders\</ShaderOutputDir>
+  </PropertyGroup>
+
+  <Target Name="CompileShaders" BeforeTargets="BeforeBuild"
+          Inputs="@(SlangShader);@(SlangModule);$(MSBuildProjectFullPath)" Outputs="@(SlangShader->'$(ShaderOutputDir)%(Filename).spv')">
+    <Error Condition="'$(SlangCompiler)' == '' or !Exists('$(SlangCompiler)')"
+           Text="slangc not found: install the Vulkan SDK and set VULKAN_SDK, or set SLANGC to slangc's path" />
+    <MakeDir Directories="$(ShaderOutputDir)" />
+    <Exec Command="&quot;$(SlangCompiler)&quot; &quot;%(SlangShader.FullPath)&quot; -I &quot;$(MSBuildProjectDirectory)/../../shaders/common&quot; -target spirv -profile spirv_1_3 -fvk-use-entrypoint-name -default-image-format-unknown -O2 -o &quot;$(ShaderOutputDir)%(SlangShader.Filename).spv&quot;" />
+  </Target>
+
+  <Target Name="EmbedShaders" BeforeTargets="BeforeBuild" AfterTargets="CompileShaders">
+    <ItemGroup>
+      <EmbeddedResource Include="@(SlangShader->'$(ShaderOutputDir)%(Filename).spv')" LogicalName="shaders.%(Filename).spv" />
+    </ItemGroup>
+  </Target>
 
 </Project>

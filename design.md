@@ -1,8 +1,9 @@
 # QuakeSharp: Design
 
-> Status: **v0.3**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
-> (repository skeleton), 1 (files and data) and 2 (the oracle and the numerics: WinQuake built headless writes
-> traces of every demo; musl's libm and `rand()` ported and checked against the C) done.
+> Status: **v0.4**. Plan agreed (§12); the smaller open decisions are in §13 with proposed defaults. Milestones 0
+> (repository skeleton), 1 (files and data), 2 (the oracle and the numerics: WinQuake built headless writes traces of
+> every demo; musl's libm and `rand()` ported and checked against the C) and 3 (the platform: an SDL3 window showing
+> 8-bit frames through Vulkan, keys as WinQuake reads them, the sound device) done.
 
 ## 1. Goal
 
@@ -123,7 +124,7 @@ show up only in the last bits of positions and angles.
 | Build hygiene | `Directory.Build.props`, `Directory.Packages.props` (central package management), `.editorconfig`, nullable, warnings as errors, built-in analyzers | As DoomSharp. |
 | Window, input, audio | **SDL3** via `ppy.SDL3-CS` | As DoomSharp and Contrail. |
 | Graphics | **Vulkan 1.3** via **Vortice.Vulkan** 3.3.0 and **Vortice.VulkanMemoryAllocator** 1.8.0 | Dynamic rendering, sync2; the setup modelled on Contrail's `Contrail.Render` (context, swapchain, shader library). |
-| Shaders | **Slang** → SPIR-V with `slangc` from the Vulkan SDK (`VULKAN_SDK` must be set to build) | Compiled at build time and shipped as SPIR-V, so players need no SDK. |
+| Shaders | **Slang** → SPIR-V with `slangc` (`SLANGC`, or the Vulkan SDK's through `VULKAN_SDK`) | Compiled by `QuakeSharp.Render.Vulkan`'s build (`shaders/*.slang`, their modules in `shaders/common`) and embedded, so players need no SDK. CI installs a pinned Slang release (2026.18), checked by SHA-256. |
 | Music | An Ogg Vorbis decoder for the CD tracks (§7.2; library to choose, needs approval) | |
 | Tests | xUnit v3 on Microsoft.Testing.Platform + golden-trace tests | Fidelity tests skip without game data or traces. |
 | CI | GitHub Actions, Windows + Linux: build, unit tests, generated tables up to date | No GPU needed: Core and the tests never touch Vulkan. |
@@ -144,10 +145,11 @@ QuakeSharp/
 │  ├─ QuakeSharp.Render.Vulkan/   Presents the 8-bit framebuffer (palette, aspect, scaling); later the enhanced
 │  │                              hardware renderer (§6.6).
 │  └─ QuakeSharp/                 Executable: command line, composition.
-├─ shaders/                       Slang sources
+├─ shaders/                       Slang sources (common/: their modules)
 ├─ tests/
 │  ├─ QuakeSharp.Core.Tests/      Unit tests (math, libm, rand, formatting, PAK/WAD/BSP parsing, VM, mixer…)
-│  └─ QuakeSharp.Fidelity.Tests/  Demo and scenario traces against the oracle (skip without data/traces)
+│  ├─ QuakeSharp.Fidelity.Tests/  Demo and scenario traces against the oracle (skip without data/traces)
+│  └─ QuakeSharp.Platform.Tests/  The platform layer's own logic (key translation)
 ├─ tools/
 │  ├─ QuakeSharp.Tools/           Dev CLI: identify, list/extract PAK, dump pics/textures/palette to PNG, trace,
 │  │                              trace-compare
@@ -287,6 +289,14 @@ gamma and shifts included) are uploaded each frame, a fragment shader looks up t
 scaled to the window: nearest-neighbour by the largest integer factor that fits, then linear to the mode's display
 aspect (320×200 shown as 4:3, as on a CRT), letterboxed. Core never touches Vulkan, so the tests and CI need no GPU.
 
+As built (`VulkanPresenter`, `PresentationLayout`): the frame's rectangle is the largest 4:3 one that fits the window
+(`-noaspect`: the frame's own shape, square pixels), centred; the first pass (`palette.slang`) writes the frame
+through its palette into an image k times its size, k the smallest whole number that covers the rectangle; the second
+(`scale.slang`) filters that linearly into the rectangle, black around. The palette's colours pass through unchanged
+(a UNORM swapchain, not sRGB: they are already what the screen shows). Two frames in flight; mailbox presentation
+where the driver has it, else FIFO. The window is borderless over the whole screen by default, `-window` a window
+(as DoomSharp).
+
 ### 6.5 Networking
 
 NetQuake is client-server even in single player (a listen server and a client joined by `net_loop`). Ported as is:
@@ -328,6 +338,14 @@ mixed with the sound effects. (Decision pending, §13 D6.)
 Keyboard and mouse through SDL3, posted as `Key_Event` with Quake's key numbers; bindings, `+mlook`, `in_mouse`,
 `sensitivity`, `m_pitch`… as the original (`in_win.c`'s roles). A game controller works as the original joystick
 support (`in_win.c`'s `joy_*` cvars and `JOY1`-`AUX32` keys) where that maps cleanly.
+
+Keys are read as WinQuake reads them (`vid_win.c`: `MapKey`): the PC scan code of the key message (SDL's scan code
+turned back into it, `KeyTranslation`) looked up in `scantokey` (generated from `vid_win.c`), without the extended-key
+prefix. So keys go by position (the typing keys give the US layout's characters on any keyboard), the grey keys give
+what their keypad twins do whatever NumLock says, the right-hand Ctrl and Alt are Ctrl and Alt, NumLock gives
+`K_PAUSE` as Pause does, and held keys repeat as Windows repeats them. Mouse buttons are `K_MOUSE1` + button (left,
+right, middle) and each wheel notch a press and release of `K_MWHEELUP` or `K_MWHEELDOWN`, as `MainWndProc` posts
+them. The key numbers (`keys.h`) are generated too.
 
 ## 9. Persistence
 
@@ -377,7 +395,7 @@ Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 f
 | 0 ✅ | Repo skeleton | Solution, projects, build & one test green, license, README, .gitignore (`*.pak`), reference submodule, CI |
 | 1 ✅ | Files & data | PAKs identified by MD5; search paths and `-game`; `gfx.wad` (WAD2), palette, colormap, pics, BSP textures, MDL skins dump to PNG through the tools |
 | 2 ✅ | Oracle & numerics | The headless oracle builds and writes traces of demo1-3; the libm and `rand()` ported and tested. *Traces of the three demos at three sizes and of the attract loop; musl's six functions and `rand()` bit-exact against the C. `mathlib.c`, printf formatting and `Q_atof` move to milestone 4, the tables of the client and renderer to 5 and 6, with the code that uses them* |
-| 3 | Platform & presentation | SDL3 window, Vulkan presents an 8-bit frame with the palette at 4:3 (e.g. `gfx/conback.lmp`); input events; audio device open |
+| 3 ✅ | Platform & presentation | SDL3 window, Vulkan presents an 8-bit frame with the palette at 4:3 (e.g. `gfx/conback.lmp`); input events; audio device open. *The executable shows `gfx/conback.lmp` at 4:3 in a window or over a 4K screen, clean under the validation layer; keys come as WinQuake's key numbers; the sound device plays a 16-bit stereo 11025 Hz buffer through SDL3; CI builds the shaders with a pinned Slang* |
 | 4 | Host & common | `Host_Frame` with the virtual clock, command buffer, cvars, console text, `MSG_*`, `net_loop`, `quake.rc`/`default.cfg` executed; `mathlib.c`, printf formatting (`%f`, `%5.1f`...) and `Q_atof` checked against the C |
 | 5 | Client & demos | `cl_*` parse and interpolate; **demo1-3 play with the client state in sync on every frame** (no rendering yet) |
 | 6 | Software renderer & 2D | `r_*`/`d_*`, `draw`, `screen`, `console`, `sbar`; **every frame of demo1-3 pixel-exact** at 320×200 and a larger mode; menus |
@@ -407,6 +425,10 @@ Current result: the oracle plays demo1-3 to their ends (4,755, 4,476 and 5,269 f
 | 13 | Virtual sound device | The oracle and the tests mix into a virtual DirectSound-like buffer whose play position follows the virtual clock, because `S_StartSound`'s `rand()` draw depends on what the mixer has painted (§7.1) | 2026-10-12 |
 | 14 | WinQuake's video driver | What `vid_win.c` does that shows is part of the target: the colormap remapping of index 0, `S_Init` between the mode sets, its console messages and cvars, the "(WinQuake) 1.09" console stamp and Winquake.exe's build stamp (§6.4) | 2026-10-12 |
 | 15 | Oracle build | WinQuake's sources are copied and patched in the oracle's work folder (`quake-oracle.patch`: only `id386` off so far), never in `reference/Quake`; its platform layer lives in `tools/oracle/src` (§10) | 2026-10-12 |
+| 16 | Shaders in CI | The shaders are compiled at build time and embedded; CI downloads Slang 2026.18 from its GitHub release, checks its SHA-256 and caches it, rather than committing SPIR-V (§4) | 2026-10-12 |
+| 17 | Presentation | Two passes, integer nearest-neighbour then linear to the 4:3 rectangle, letterboxed; a UNORM swapchain so the palette's colours pass unchanged; borderless fullscreen by default, `-window`, `-noaspect` (§6.4) | 2026-10-12 |
+| 18 | Keyboard | Keys as `vid_win.c`'s `MapKey` reads them: PC scan codes through `scantokey`, without the extended prefix (so by position, the grey keys as the keypad's, NumLock as Pause) (§8) | 2026-10-12 |
+| 19 | Sound device | An SDL3 audio stream of 16-bit stereo at 11025 Hz playing a 64 KB ring buffer round and round, as `snd_win.c`'s DirectSound buffer; its position is how far SDL has taken (§7.1) | 2026-10-12 |
 
 ## 13. Open decisions
 
