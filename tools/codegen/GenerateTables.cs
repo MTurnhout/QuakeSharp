@@ -1,8 +1,10 @@
-// Generates C# data tables from the original C sources in reference/Quake/WinQuake.
+// Generates C# data tables from the original C sources in reference/Quake/WinQuake, and the constants of the musl
+// libm functions QuakeSharp ports (design.md §3.1) from reference/musl.
 // Usage (from anywhere): dotnet run tools/codegen/GenerateTables.cs
 //
 // Everything this writes is a *.g.cs file; never edit those by hand: change this generator and re-run it.
 using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -10,12 +12,15 @@ using System.Text.RegularExpressions;
 string repo = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(ScriptPath())!, "..", ".."));
 string src = Path.Combine(repo, "reference", "Quake", "WinQuake");
 const string SourceTree = "reference/Quake/WinQuake";
+string musl = Path.Combine(repo, "reference", "musl", "src", "math");
+const string MuslTree = "reference/musl/src/math";
 string core = Path.Combine(repo, "src", "QuakeSharp.Core");
 
 Write("Common/Crc.g.cs", GenerateUShortTable("crc.c", "QuakeSharp.Core.Common", "static partial class Crc", "crctable",
     "The CCITT CRC table (polynomial 0x1021, as XMODEM)."));
 Write("Common/FileSystem.g.cs", GenerateUShortTable("common.c", "QuakeSharp.Core.Common", "sealed partial class FileSystem", "pop",
     "The picture gfx/pop.lmp must hold for the registered version, as big-endian shorts."));
+Write("Numerics/Libm.g.cs", GenerateLibm());
 return 0;
 
 // An array of unsigned shorts, as a static field of a partial type (its declaration, e.g. "static partial class Crc").
@@ -38,7 +43,145 @@ string GenerateUShortTable(string file, string ns, string type, string name, str
     return sb.ToString();
 }
 
+// musl's constants: every "static const double" declaration of the ported files, the integer tables of
+// __rem_pio2_large.c, and the pow and exp tables, each file's in a nested class named after it (__sin.c: __sin_c).
+string GenerateLibm()
+{
+    var sb = Header("*.c", "QuakeSharp.Core.Numerics", MuslTree);
+    sb.AppendLine("public static partial class Libm");
+    sb.AppendLine("{");
+    foreach (string file in new[] { "__sin.c", "__cos.c", "__tan.c", "__rem_pio2.c", "__rem_pio2_large.c", "atan.c", "atan2.c" })
+    {
+        string c = MuslSource(file);
+        sb.AppendLine($"    /// <summary>{file}</summary>");
+        sb.AppendLine($"    private static class {file.Replace('.', '_')}");
+        sb.AppendLine("    {");
+        if (file == "__rem_pio2_large.c")
+        {
+            // without the long double part (#if LDBL_MAX_EXP > 1024): long double is double here
+            string ipio2 = InitializerBody(c, "ipio2");
+            ipio2 = ipio2[..ipio2.IndexOf("#if", StringComparison.Ordinal)];
+            sb.AppendLine($"        internal static readonly int[] init_jk = [{string.Join(", ", NumericArray(c, "init_jk"))}];");
+            sb.AppendLine();
+            sb.AppendLine("        internal static readonly int[] ipio2 =");
+            sb.AppendLine("        [");
+            foreach (string[] row in Values(ipio2).Chunk(6))
+            {
+                sb.AppendLine("            " + string.Join(" ", row.Select(v => v + ",")));
+            }
+
+            sb.AppendLine("        ];");
+            sb.AppendLine();
+        }
+
+        foreach (Match decl in Regex.Matches(c, @"static\s+const\s+double\s+(.*?);", RegexOptions.Singleline))
+        {
+            foreach (string item in SplitTopLevel(decl.Groups[1].Value))
+            {
+                var m = Regex.Match(item, @"^\s*(\w+)\s*(\[\s*\])?\s*=\s*(.*)$", RegexOptions.Singleline);
+                string name = m.Groups[1].Value;
+                if (m.Groups[2].Success)
+                {
+                    AppendDoubles(sb, name, Values(m.Groups[3].Value.Trim().TrimStart('{').TrimEnd('}')).Select(v => Evaluate(v, MuslConstant)));
+                }
+                else
+                {
+                    sb.AppendLine($"        internal const double {name} = {DoubleLiteral(Evaluate(m.Groups[3].Value, MuslConstant))};");
+                }
+            }
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    // pow_data.c: __pow_log_data
+    string pow = MuslSource("pow_data.c");
+    sb.AppendLine("    /// <summary>pow_data.c: __pow_log_data (tab as three arrays: invc, logc, logctail)</summary>");
+    sb.AppendLine("    private static class __pow_log_data");
+    sb.AppendLine("    {");
+    sb.AppendLine($"        internal const double ln2hi = {DoubleLiteral(Evaluate(Field(pow, "ln2hi"), MuslConstant))};");
+    sb.AppendLine($"        internal const double ln2lo = {DoubleLiteral(Evaluate(Field(pow, "ln2lo"), MuslConstant))};");
+    AppendDoubles(sb, "poly", Values(Braced(pow, "poly")).Select(v => Evaluate(v, MuslConstant)));
+    var tab = Regex.Matches(Regex.Replace(Braced(pow, "tab"), @"#[^\n]*", ""), @"A\(([^)]*)\)")
+        .Select(m => Values(m.Groups[1].Value).Select(v => Evaluate(v, MuslConstant)).ToArray())
+        .ToList();
+    AppendDoubles(sb, "invc", tab.Select(t => t[0]));
+    AppendDoubles(sb, "logc", tab.Select(t => t[1]));
+    AppendDoubles(sb, "logctail", tab.Select(t => t[2]));
+    sb.AppendLine("    }");
+    sb.AppendLine();
+
+    // exp_data.c: __exp_data, as built with EXP_USE_TOINT_NARROW 0
+    string exp = Regex.Replace(MuslSource("exp_data.c"), @"#if EXP_USE_TOINT_NARROW.*?#else(.*?)#endif", "$1", RegexOptions.Singleline);
+    sb.AppendLine("    /// <summary>exp_data.c: __exp_data</summary>");
+    sb.AppendLine("    private static class __exp_data");
+    sb.AppendLine("    {");
+    foreach (string name in new[] { "invln2N", "shift", "negln2hiN", "negln2loN" })
+    {
+        sb.AppendLine($"        internal const double {name} = {DoubleLiteral(Evaluate(Field(exp, name), MuslConstant))};");
+    }
+
+    AppendDoubles(sb, "poly", Values(Braced(exp, "poly")).Select(v => Evaluate(v, MuslConstant)));
+    sb.AppendLine("        internal static readonly ulong[] tab =");
+    sb.AppendLine("        [");
+    foreach (string[] row in Values(Braced(exp, "tab")).Chunk(2))
+    {
+        sb.AppendLine("            " + string.Join(" ", row.Select(v => $"0x{ulong.Parse(v[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture):x16}UL,")));
+    }
+
+    sb.AppendLine("        ];");
+    sb.AppendLine("    }");
+    sb.AppendLine("}");
+    return sb.ToString();
+
+    // The named constants in these files' expressions (pow_data.h, exp_data.h, float.h)
+    static double MuslConstant(string name) => name switch
+    {
+        "N" => 1 << 7, // POW_LOG_TABLE_BITS, EXP_TABLE_BITS
+        "EPS" or "DBL_EPSILON" => Math.ScaleB(1.0, -52),
+        _ => throw new InvalidOperationException($"unknown constant {name}"),
+    };
+
+    static void AppendDoubles(StringBuilder sb, string name, IEnumerable<double> values)
+    {
+        sb.AppendLine($"        internal static readonly double[] {name} =");
+        sb.AppendLine("        [");
+        foreach (double v in values)
+        {
+            sb.AppendLine($"            {DoubleLiteral(v)},");
+        }
+
+        sb.AppendLine("        ];");
+    }
+
+    // The value of a designated initializer: .name = value,
+    static string Field(string c, string name) =>
+        Regex.Match(c, $@"\.{name}\s*=\s*([^,{{}}]+),").Groups[1].Value;
+
+    // The body of a designated initializer: .name = { ... }
+    static string Braced(string c, string name)
+    {
+        int start = Regex.Match(c, $@"\.{name}\s*=\s*\{{").Index;
+        start = c.IndexOf('{', start) + 1;
+        int depth = 1;
+        for (int i = start; ; i++)
+        {
+            depth += c[i] switch { '{' => 1, '}' => -1, _ => 0 };
+            if (depth == 0)
+            {
+                return c[start..i];
+            }
+        }
+    }
+
+    static IEnumerable<string> Values(string body) =>
+        Regex.Replace(body, @"#[^\n]*", "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+}
+
 string Source(string file) => StripComments(File.ReadAllText(Path.Combine(src, file)));
+
+string MuslSource(string file) => StripComments(File.ReadAllText(Path.Combine(musl, file)));
 
 void Write(string relative, string content)
 {
@@ -83,11 +226,121 @@ static List<long> NumericArray(string c, string name) =>
             : long.Parse(v, CultureInfo.InvariantCulture))
         .ToList();
 
-static StringBuilder Header(string origin, string ns)
+// Splits at the commas outside braces and parentheses.
+static List<string> SplitTopLevel(string s)
+{
+    var parts = new List<string>();
+    int depth = 0;
+    int start = 0;
+    for (int i = 0; i < s.Length; i++)
+    {
+        depth += s[i] switch { '{' or '(' => 1, '}' or ')' => -1, _ => 0 };
+        if (s[i] == ',' && depth == 0)
+        {
+            parts.Add(s[start..i]);
+            start = i + 1;
+        }
+    }
+
+    if (s[start..].Trim().Length > 0)
+    {
+        parts.Add(s[start..]);
+    }
+
+    return parts;
+}
+
+// Evaluates a C constant expression of numbers (decimal and hexadecimal floating point, integers), named constants,
+// unary signs, * and / and parentheses, in double precision as a C compiler folds it.
+static double Evaluate(string expr, Func<string, double> constant)
+{
+    var tokens = Regex.Matches(expr, @"0[xX][0-9a-fA-F]*\.?[0-9a-fA-F]*(?:[pP][+-]?\d+)?[fFlL]?|\d*\.?\d+(?:[eE][+-]?\d+)?[fFlL]?|\w+|[-+*/()]")
+        .Select(m => m.Value)
+        .ToList();
+    int pos = 0;
+    double value = Product();
+    if (pos != tokens.Count)
+    {
+        throw new InvalidOperationException($"can't evaluate {expr}");
+    }
+
+    return value;
+
+    double Product()
+    {
+        double v = Unary();
+        while (pos < tokens.Count && tokens[pos] is "*" or "/")
+        {
+            v = tokens[pos++] == "*" ? v * Unary() : v / Unary();
+        }
+
+        return v;
+    }
+
+    double Unary()
+    {
+        string t = tokens[pos++];
+        return t switch
+        {
+            "-" => -Unary(),
+            "+" => Unary(),
+            "(" => Paren(),
+            _ when char.IsDigit(t[0]) || t[0] == '.' => Number(t),
+            _ => constant(t),
+        };
+    }
+
+    double Paren()
+    {
+        double v = Product();
+        pos++; // ')'
+        return v;
+    }
+}
+
+// A C numeric literal as a double: hexadecimal floating point is exact (musl's have at most 53 significant bits).
+static double Number(string t)
+{
+    t = t.TrimEnd('f', 'F', 'l', 'L');
+    if (!t.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+    {
+        return double.Parse(t, NumberStyles.Float, CultureInfo.InvariantCulture);
+    }
+
+    var m = Regex.Match(t[2..], @"^([0-9a-fA-F]*)\.?([0-9a-fA-F]*)(?:[pP]([+-]?\d+))?$");
+    string digits = m.Groups[1].Value + m.Groups[2].Value;
+    int exponent = (m.Groups[3].Success ? int.Parse(m.Groups[3].Value, CultureInfo.InvariantCulture) : 0) - (4 * m.Groups[2].Value.Length);
+    var mantissa = BigInteger.Parse("0" + digits, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+    if (mantissa >= BigInteger.One << 53)
+    {
+        throw new InvalidOperationException($"{t} has more than 53 significant bits");
+    }
+
+    return Math.ScaleB((double)mantissa, exponent);
+}
+
+// A C# literal of exactly this double, with its bits for reference.
+static string DoubleLiteral(double v)
+{
+    string s = v.ToString("R", CultureInfo.InvariantCulture);
+    if (!s.Contains('.', StringComparison.Ordinal) && !s.Contains('E', StringComparison.Ordinal))
+    {
+        s += ".0";
+    }
+
+    if (BitConverter.DoubleToInt64Bits(double.Parse(s, CultureInfo.InvariantCulture)) != BitConverter.DoubleToInt64Bits(v))
+    {
+        throw new InvalidOperationException($"{s} does not round-trip");
+    }
+
+    return $"{s} /* 0x{BitConverter.DoubleToInt64Bits(v):x16} */";
+}
+
+static StringBuilder Header(string origin, string ns, string tree = SourceTree)
 {
     var sb = new StringBuilder();
     sb.AppendLine("// <auto-generated>");
-    sb.AppendLine($"//     Generated by tools/codegen/GenerateTables.cs from {SourceTree}/{origin}.");
+    sb.AppendLine($"//     Generated by tools/codegen/GenerateTables.cs from {tree}/{origin}.");
     sb.AppendLine("//     Do not edit by hand; change the generator and re-run it.");
     sb.AppendLine("// </auto-generated>");
     sb.AppendLine();

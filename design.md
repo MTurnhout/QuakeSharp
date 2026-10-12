@@ -96,8 +96,11 @@ code's own semantics, made deterministic and identical on both sides (decision 6
   keeps the original's pointer arithmetic (`pr_strings` offsets, edict pointers) working unchanged.
 - **Transcendental functions** (`sin`, `cos`, `tan`, `atan`, `atan2`, `pow`: the only ones the C code calls;
   `sqrt`, `floor`, `ceil` and `fabs` are exact everywhere) are not correctly rounded by C runtimes, and .NET calls
-  the platform's (UCRT on Windows, glibc on Linux). One implementation serves both sides: musl's (MIT) is ported
-  to C#, and the oracle is linked to the same C code, so Windows and Linux give the same results.
+  the platform's (UCRT on Windows, glibc on Linux). One implementation serves both sides: musl 1.2.5's (MIT,
+  read-only submodule `reference/musl`) is ported to C# (`Libm`, its constants and tables generated from the C), and
+  the oracle is linked to the same C, with the functions renamed `musl_*` so they never mix with the C runtime's.
+  `tools/oracle/numerics.c` runs musl's C on 18 sets of 100,000 inputs (random bit patterns, float values, the
+  ranges Quake uses) and `LibmTests` the C# on the same inputs: every result is the same, bit for bit.
 - **Float to integer conversions** in C are undefined out of range; x86's `cvttss2si` gives `0x80000000`, while
   .NET 9 and later saturate. Ported casts that can go out of range use a helper with the x86 result.
 - **`rand()`** is the Microsoft C runtime's (`seed * 214013 + 2531011`, bits 16-30), as WinQuake.exe and an oracle
