@@ -35,6 +35,22 @@ index 8672556..957f6b0 100644
 +	return n;
 +}
 +#endif
+diff --git a/cl_demo.c b/cl_demo.c
+index 550368e..7f86bd4 100644
+--- a/cl_demo.c
++++ b/cl_demo.c
+@@ -91,6 +91,11 @@ int CL_GetMessage (void)
+ {
+ 	int		r, i;
+ 	float	f;
++#ifdef ORACLE
++// at the end of the demo the freads below fail and leave f as it was, yet it is copied into the view angles:
++// start it at 0, as QuakeSharp does, rather than with whatever the stack holds
++	f = 0;
++#endif
+ 	
+ 	if	(cls.demoplayback)
+ 	{
 diff --git a/common.c b/common.c
 index e07e6ce..ca085ec 100644
 --- a/common.c

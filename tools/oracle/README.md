@@ -9,7 +9,7 @@ and write a trace, and the traces must agree on every frame. See design.md §10.
 | `Trace-Demos.ps1` | Writes the reference traces of the demos and the attract loop |
 | `numerics.c` | musl's libm and the C runtime's `rand()` on fixed input sets: the expected values of `LibmTests` and `RandTests` |
 | `src/scenarios.c`, `units/*.scenario` | `quake-oracle.exe -oraclescenario <file> [-print]`: a scenario of commands, key events and prints run on WinQuake's command, cvar, console and key code; prints the hash of its transcript (what was printed and the state dumps), or with `-print` the transcript. `ScenarioTests` runs the same files |
-| `src/units.c` | `quake-oracle.exe -oracleunits`: WinQuake's own functions (`Q_atoi`, `Q_atof`, printf formatting, `mathlib.c`...) on fixed input sets, the expected values of `OracleUnitTests`; `-oracleunits <set> <n>` prints a set's first results |
+| `src/units.c` | `quake-oracle.exe -oracleunits`: WinQuake's own functions (`Q_atoi`, `Q_atof`, printf formatting, `mathlib.c`...) and the C runtime's that read savegames (`atof`, `fscanf`'s `%f`, `%i` and `%s` on a file in text mode) on fixed input sets, the expected values of `OracleUnitTests`; `-oracleunits <set> <n>` prints a set's first results (and inputs) |
 | `quake-oracle.patch` | The changes to WinQuake's sources (a copy in the work folder; `reference/Quake` is never touched) |
 | `src/` | The oracle's platform layer in place of WinQuake's Windows drivers, and the trace writer |
 | `musl/` | Stands in for musl's internal headers so its libm builds on Windows; `musl_names.h` renames its functions `musl_*` |
@@ -29,10 +29,13 @@ powershell -ExecutionPolicy Bypass -File tools/oracle/Trace-Demos.ps1 -Oracle D:
 ```
 
 `Trace-Demos.ps1` copies the original `id1/pak0.pak` and `id1/pak1.pak` into the oracle's own Quake folder (beside
-the executable) and removes `config.cfg` before every run, since the oracle writes one when it quits. It writes
+the executable) and empties its `id1` of everything else before every run. What a run leaves there (`config.cfg`,
+which the oracle writes when it quits, savegames, demos, screenshots, `qconsole.log`) is kept in `<name>.files`
+beside the trace, for the tests to compare with QuakeSharp's (design.md §11.3); a run can start with files an
+earlier run wrote. `-Only <names>` writes only those traces. It writes
 `demo1-3.trace` (320x240, WinQuake's default windowed mode), `.320x200.trace` (DOS Quake's mode 0) and
-`.640x480.trace`, `attract.trace` (the attract loop, 20,000 frames) with `attract.config.cfg` (the `config.cfg` the
-oracle wrote when that run quit), and `menus.trace` and `menus.640x480.trace`: 3,700 frames of the attract loop with
+`.640x480.trace`, `attract.trace` (the attract loop, 20,000 frames), `attract.config.trace` (600 frames of it with
+the `config.cfg` the menus' run wrote), and `menus.trace` and `menus.640x480.trace`: 3,700 frames of the attract loop with
 the scripted keys and commands of `events/menus.events` (every menu but the network ones, the console, the scores,
 the help pages and the renderer's cvars), and the scripted games of `events/`: `start.trace` (a new game from the
 menu, the start map's normal skill hall and episode 1's slipgate), `commands.trace` and `commands.640x480.trace` (the
@@ -45,6 +48,11 @@ walls are flown with `noclip`, planned from the edicts' positions in `-tracedump
 hand in QuakeSharp and recorded with `-recordevents`, from the menu through e1m1 into e1m2, ending on the quit screen
 (24,500 frames), and `sound.trace`: the sound and CD commands and cvars, the menu's volume sliders, a game's
 pause and level changes (3,500 frames), also traced with `-nosound -nocdaudio` (`sound.nosound.trace`).
+The files the game writes (milestone 9): `saves.trace` (a save on every map of the episodes, the end and the
+deathmatch maps, the save and load menus, the refusals: 17,705 frames) and `loads.trace` (each of its saves loaded
+in a fresh run and played on: 12,905 frames); `record.trace` (with `-condebug`: demos recorded through a level change
+and an intermission, with a forced CD track, and cut by the end of the run, two screenshots), then each of its demos
+played back in a fresh run (`record.d1-d3.trace`) and `d1` as a timedemo (`record.timedemo.trace`).
 
 ## How the oracle is built
 
@@ -55,7 +63,8 @@ pause and level changes (3,500 frames), also traced with `-nosound -nocdaudio` (
 - **Its other changes** (`quake-oracle.patch`, each under `ORACLE`): fixed substitutes for memory the C reads without
   owning it (design.md §3.3: `R_AliasDrawModel`'s `finalverts` start zeroed; `COM_FileBase` stops at the start of a
   name without `/`, where it read the memory before it; `soundinfo` prints 0 for the sound buffer's address, which
-  moves with every build), and three hooks for the traces that change nothing:
+  moves with every build; `CL_GetMessage`'s `f`, copied into the view angles when a demo ends, starts at 0), and three
+hooks for the traces that change nothing:
   `NET_SendMessage` and `NET_SendUnreliableMessage` pass every message to `Trace_Message`, world.c's
   `Oracle_AreaLinks` lists the area nodes' edicts, and cd_win.c's `Oracle_CDState` gives its static state.
 - **Floating point** as design.md §3.1: SSE2, every float operation rounded to single precision.

@@ -1,0 +1,40 @@
+3 stop
+4 record ../up e1m1
+5 record d1 e1m1
+150 noclip
+160 +forward
+447 -forward
+450 +moveright
+617 -moveright
+620 +movedown
+712 -movedown
+1000 +jump
+1010 -jump
+1300 +jump
+1310 -jump
+1400 god
+1410 impulse 9
+1420 impulse 7
+1430 +attack
+1430 +left
+1530 -left
+1540 -attack
+1600 screenshot
+1700 stop
+1710 record d2
+1720 record d2 e1m3 4
+1800 god
+1810 impulse 9
+1820 impulse 8
+1830 +attack
+1830 +right
+1950 -right
+1960 +forward
+2100 -forward
+2110 -attack
+2120 screenshot
+2200 disconnect
+2210 stop
+2300 record d3 start
+2400 +forward
+2500 -forward

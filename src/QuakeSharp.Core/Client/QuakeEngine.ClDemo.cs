@@ -58,6 +58,7 @@ public sealed partial class QuakeEngine
     public int CL_GetMessage()
     {
         int r, i;
+        float f = 0; // uninitialised in the C, which copies it into the view angles when a read fails (design.md §3.3)
         Span<byte> b = stackalloc byte[4];
 
         if (cls.demoplayback)
@@ -99,8 +100,10 @@ public sealed partial class QuakeEngine
             {
                 if (cls.demofile.ReadAtLeast(b, 4, throwOnEndOfStream: false) == 4)
                 {
-                    cl.mviewangles[0][i] = BinaryPrimitives.ReadSingleLittleEndian(b);
+                    f = BinaryPrimitives.ReadSingleLittleEndian(b);
                 }
+
+                cl.mviewangles[0][i] = f;
             }
 
             if (net_message.cursize > MAX_MSGLEN)

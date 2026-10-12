@@ -7,8 +7,10 @@
 > the frame loop, commands, cvars, console text, keys, `mathlib.c`, printf, all checked against WinQuake's own C), 5
 > (the client: demo1-3 and the attract loop play with the client state, the sound channels, the console text and the
 > view the oracle's on every frame), 6 (the software renderer and the 2D, pixel-exact), 7 (the QuakeC VM and the
-> server, in sync with the oracle on every scripted game and on a game played by hand) and 8 (the sound: the mixer
-> sample-exact and the CD's state in sync on every trace, the CD's music from the user's files) done.
+> server, in sync with the oracle on every scripted game and on a game played by hand), 8 (the sound: the mixer
+> sample-exact and the CD's state in sync on every trace, the CD's music from the user's files) and 9 (persistence:
+> config.cfg, savegames, demos, screenshots and the console log byte for byte as the oracle writes them, saves and
+> demos read back in sync) done.
 
 ## 1. Goal
 
@@ -148,6 +150,7 @@ share it only where a trace shows the difference.
 | `common.c`: `COM_FileBase` | For a name without `/` (`progs.dat`, which `PR_LoadProgs` loads) the loop looking for the `/` walks back past the name's start, through the memory before it, to a 0 or a `/`: with the oracle's string literals, the one before `"progs.dat"` went into `COM_LoadFile`'s `base[32]` and overran the stack | The loop stops at the start, as if a 0 were before it (the base is `progs`); the oracle is patched to do the same. The base only names the hunk's blocks |
 | `net_main.c`: `NET_SendToAll` | A client slot without a connection is skipped before its two states are set, so the loop that waits for the slots reads whatever the stack held: if it reads "not done" the loop waits until `blocktime` (for ever on the virtual clock) | Such a slot is done; the oracle is patched to do the same |
 | `pr_edict.c`: `ED_ParseEpair` | A vector value is copied into `char string[128]` and split at three spaces; with fewer than three numbers the split goes on past the copy's 0 into what the array held before | Past the copy the array holds zeros (the missing numbers are 0); a value of 128 characters or more, which overruns the C's array, is copied whole |
+| `cl_demo.c`: `CL_GetMessage` | At the end of a demo the `fread`s of the view angles fail, and the local `f` they would have filled, uninitialised, is copied into `cl.mviewangles[0]` (a demo cut short, `record.d3`, shows it on its last frame) | `f` starts at 0 in each call; the oracle is patched to do the same |
 | `host_cmd.c`: `Host_Loadgame_f` | A savegame that lacks a value leaves its variable as it was: the version, the spawn parms, the skill, the map's name and the time are uninitialised locals | They start at 0 or empty; a light style that cannot be read is the last string read, as the C's `str` keeps it |
 | `pr_cmds.c`: `PF_break` | Writes to the address -4 to stop in the debugger: the program crashes | A `Sys_Error` ("break statement") |
 | `snd_dma.c`: `S_SoundInfo_f` | `soundinfo` prints the DMA buffer's address (`0x%x dma buffer`): DirectSound's in WinQuake, a static array's in the oracle, moving with every build | 0; the oracle is patched to print 0 too |
@@ -488,7 +491,11 @@ the server (trace format 4), it also matches every line, the server's `G`, `Q`, 
 frame of the scripted games of §11.1: a new game through the start map (2,000 frames), the server's commands with
 fights, a save, a load, a restart and a level change (3,800, at two sizes), e1m1's intermission (1,900), e1m7's finale
 (3,100), the network menus starting a deathmatch (3,000), a tour of all 37 maps (22,200) and a game played by hand in
-QuakeSharp and recorded with `-recordevents`, e1m1 into e1m2 (24,500).
+QuakeSharp and recorded with `-recordevents`, e1m1 into e1m2 (24,500). With milestone 9 every run's files are compared
+too: the config.cfg each run writes when it quits, the 41 savegames of a save on every map (`saves`, 17,705 frames),
+three demos, two screenshots and `qconsole.log` (`record`), byte for byte; and the files read back in fresh runs match
+on every frame: the menus' config.cfg (`attract.config`), every save loaded and played on (`loads`, 12,905 frames),
+each demo played back and as a timedemo.
 
 ## 11. Milestones
 
@@ -503,7 +510,7 @@ QuakeSharp and recorded with `-recordevents`, e1m1 into e1m2 (24,500).
 | 6 ✅ | Software renderer & 2D | `r_*`/`d_*`, `draw`, `screen`, `console`, `sbar`; **every frame of demo1-3 pixel-exact** at 320×200 and a larger mode; menus. *Ported: the whole software renderer (r_*.c, d_*.c), draw.c, the console's drawing, sbar.c and menu.c. demo1-3 at 320×240, 320×200 and 640×480, 20,000 frames of the attract loop and 3,700 frames of scripted menus (`events/menus.events`: key events `@key` and commands over the attract loop) at 320×240 and 640×480 match the oracle pixel for pixel, `D` line included (trace format 3 hashes a leaf `topnode` as `0x10000 +` its index). The network menus wait for net_main.c, the intermission and finale screens for the server to reach them (milestone 7). The executable shows the game* |
 | 7 ✅ | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable. *Plan: §11.1. Ported: pr_edict.c, pr_exec.c, pr_cmds.c, world.c, sv_main.c, sv_phys.c, sv_move.c, sv_user.c, host.c's and host_cmd.c's server parts (save and load included), net_main.c, net_loop.c, net_dgrm.c with the virtual LAN driver, and menu.c's network menus. Trace format 4 adds the server's lines; the scripted games (`events/`: start, commands, intermission, finale, netmenus, tour) and a game played by hand (`e1`: recorded with `-recordevents`, from the menu through e1m1 into e1m2) match the oracle on every line of every frame, 60,500 frames of play in all, every map of the four episodes included; the recording matched on its first replay. The executable shows and plays the game (milestone 6's Program.cs still drew `gfx/conback.lmp` and never handed the engine its video output) and records games with `-recordevents`. More playthroughs are added as they are recorded (decision 35)* |
 | 8 ✅ | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files. *Plan: §11.2. Trace format 5 adds `P` (the sound device's whole buffer) and `A` (the CD); every trace (demo1-3 at three sizes, the attract loop, the menus, the scripted games, the playthrough, and `sound.events` with and without a sound device and CD) matches with them on every frame: the mixer ported with milestone 5 was already sample-exact. Ported: cd_win.c over an MCI-like `ICdDrive` (the oracle compiles it unchanged over a virtual disc), snd_win.c's start-up messages (as Winquake.exe 1.09 prints them), `AppActivate`'s sound part. The executable plays the CD's tracks from the user's files (the rerelease's Ogg Vorbis through NVorbis, or WAV) on their own SDL3 stream, is silent without the focus, and under `-recordevents` plays the virtual disc's tracks for listening only* |
-| 9 | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync. *Plan: §11.3* |
+| 9 ✅ | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync. *Plan: §11.3. Each oracle run keeps the files it writes (`<name>.files`), and every trace test compares QuakeSharp's with them byte for byte: config.cfg after every run (it already matched), the 41 saves of `saves.events` (a save on every map, the menus' slots, the refusals) and `commands`' save, three demos (through a level change and an intermission, with a forced CD track, one cut by the end of the run), two screenshots and `qconsole.log`. Read back in fresh runs, in sync on every frame: the menus' config.cfg, every save (`loads.events`), every demo played back and as a timedemo. Fixed on the way: reading a savegame as the C runtime's `fscanf` does (hex floats, exponents without digits, 64-bit `%i`, a 0xff byte taken for EOF; checked on 20,000 inputs of each against the oracle), `qconsole.log` in text mode (CR LF), `CL_GetMessage`'s uninitialised `f` at a demo's end (§3.3, the oracle patched alike), and the demo file still open at the end. Winquake.exe 1.09 loads QuakeSharp's saves, and QuakeSharp loads Winquake.exe's saves and plays its demos* |
 | 10 | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios |
 | 11 | Networking | UDP play with other NetQuake engines; net game tests |
 | Later | | Enhanced mode (Vulkan hardware renderer), QuakeWorld, release builds (single file, NativeAOT) |
@@ -659,7 +666,7 @@ bytes. Trace format stays 5.
 1. **The oracle first.** `Trace-Demos.ps1` removes what the game writes from the oracle's `id1` before every run
    (`config.cfg`, `*.sav`, `*.dem`, `*.pcx`, `qconsole.log`), copies what the run wrote into `<name>.files/` beside its
    trace afterwards (`attract.config.cfg` becomes `attract.files/config.cfg`), and can start a run with files of an
-   earlier one copied in. The scripted games of steps 3-5. `units.c` adds what reading a savegame converts, the C
+   earlier one copied in. The scripted games of steps 3-5 come with their steps. `units.c` adds what reading a savegame converts, the C
    runtime's `atof` (`ED_ParseEpair`) and `fscanf`'s `%f` into a float and `%i` (`Host_Loadgame_f`), on `%f` prints of
    float values and on random decimal strings; `OracleUnitTests` takes the hashes. The existing traces do not change.
 2. **The files in the tests.** `TraceRun` ends at the frame limit with `Sys_Quit`, as the oracle's run does, so it
@@ -685,7 +692,10 @@ bytes. Trace format stays 5.
 6. **The real executable** (decision 41): a scratch copy of Winquake.exe 1.09 (from the Steam install) writes a
    save, a demo, a config.cfg and a `qconsole.log`; QuakeSharp loads the save and plays on, plays the demo and reads
    the config, Winquake.exe loads a QuakeSharp save, and the line ends of its text files confirm the text mode. By
-   hand, not traced: its x87 floats may differ from the oracle's in the last printed digits (§3.1).
+   hand, not traced: its x87 floats may differ from the oracle's in the last printed digits (§3.1). *Done: a scratch
+   copy run with an `autoexec.cfg` saved on e1m1, recorded a demo on e1m2, loaded QuakeSharp's e1m3 save and saved
+   it again; its saves have the same form as QuakeSharp's (CR LF, the comment, `%f`), and QuakeSharp, headless, loaded
+   its save, played on and saved, and played its demo to the end.*
 
 **Done when** every run's files (config.cfg after every trace, the saves, the demos, the screenshots, the log) match
 the oracle's byte for byte; the saves and demos read back in fresh runs match on every frame; and Winquake.exe's saves

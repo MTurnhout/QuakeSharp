@@ -10,7 +10,9 @@ namespace QuakeSharp.Fidelity.Tests;
 /// (time, rand()), C (cls, cl), E (the entities), D (what the renderer writes into them), X (temporary entities,
 /// beams, lights, light styles, particles), S (sound channels), T (console text), R (the view), V (the frame and
 /// the palette), the server's lines, G (sv, svs), Q (the QuakeC globals), N (the edicts), W (the area lists) and M
-/// (the messages sent), and the sound's of milestone 8, P (the sound device's buffer) and A (the CD).
+/// (the messages sent), and the sound's of milestone 8, P (the sound device's buffer) and A (the CD). The files each
+/// run writes (config.cfg, savegames, demos, screenshots, qconsole.log) are compared with the oracle's run's, byte for
+/// byte (milestone 9).
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
@@ -111,6 +113,37 @@ public sealed class DemoTests : IDisposable
 
         var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", frames.ToString(CultureInfo.InvariantCulture)], width, height);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: frames));
+        RunFiles.AssertSame(trace, userdir);
+    }
+
+    // Demos recorded (design.md §11.3: through a level change and an intermission, with a forced CD track, the last cut
+    // by the end of the run), two screenshots and -condebug's qconsole.log
+    [Fact]
+    public void RecordingWritesTheOraclesFiles()
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile("record.trace");
+        string events = Path.Combine(RepositoryRoot(), "tools", "oracle", "events", "record.events");
+
+        var run = new TraceRun(baseDir, userdir, ["-condebug", "-traceevents", events, "-oracleframes", "2700"]);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 2700));
+        RunFiles.AssertSame("record.trace", userdir);
+    }
+
+    // Each demo the oracle recorded, played back in a fresh run, and d1 as a timedemo
+    [Theory]
+    [InlineData("d1", "+playdemo", "record.d1.trace")]
+    [InlineData("d2", "+playdemo", "record.d2.trace")]
+    [InlineData("d3", "+playdemo", "record.d3.trace")]
+    [InlineData("d1", "+timedemo", "record.timedemo.trace")]
+    public void RecordedDemoPlaysInSyncWithTheOracle(string demo, string command, string trace)
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile(trace);
+        RunFiles.CopyInputs(userdir, $"record/{demo}.dem");
+
+        var run = new TraceRun(baseDir, userdir, ["-tracequitafterdemo", command, demo]);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: true));
         RunFiles.AssertSame(trace, userdir);
     }
 

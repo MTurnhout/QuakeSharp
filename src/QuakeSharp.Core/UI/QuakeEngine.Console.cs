@@ -311,7 +311,8 @@ public sealed partial class QuakeEngine
     {
         try
         {
-            File.AppendAllText(file, CFormat.Sprintf(fmt, args), Encoding.Latin1);
+            // open without O_BINARY: text mode, so each \n is written as \r\n
+            File.AppendAllText(file, CFormat.Sprintf(fmt, args).Replace("\n", "\r\n", StringComparison.Ordinal), Encoding.Latin1);
         }
         catch (IOException)
         {

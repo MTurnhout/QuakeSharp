@@ -793,10 +793,13 @@ public sealed partial class QuakeEngine
         }
     }
 
-    // sys_win.c: Sys_Quit: the host shuts down and the program ends
+    // sys_win.c: Sys_Quit: the host shuts down and the program ends; exit closes the files the C left open (a demo
+    // being recorded or played)
     public QuitException Sys_Quit()
     {
         Host_Shutdown();
+        cls.demofile?.Dispose();
+        cls.demofile = null;
         return new QuitException();
     }
 }

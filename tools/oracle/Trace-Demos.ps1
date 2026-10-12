@@ -22,6 +22,8 @@ when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.fi
                         320x240; commands.640x480.trace the same at 640x480, sound.nosound.trace the sound game with
                         -nosound -nocdaudio; saves: a save on every map, the save and load menus, the refusals
   loads.trace           every save saves.trace's run wrote, loaded in turn and played on
+  record.trace          demos recorded (events/record.events), two screenshots, with -condebug's qconsole.log;
+                        record.d1-d3.trace: each demo played back, record.timedemo.trace: d1 as a timedemo
 
 .PARAMETER Oracle
 quake-oracle.exe, as Build-Oracle.ps1 builds it.
@@ -117,6 +119,14 @@ Trace 'commands.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, 
 # the sound game without a sound device or a CD (WinQuake's -nosound and -nocdaudio)
 $events = Join-Path $PSScriptRoot 'events\sound.events'
 Trace 'sound.nosound' @('-nosound', '-nocdaudio', '-traceevents', $events, '-oracleframes', '3500')
+# demos recorded (through a level change and an intermission, with a forced CD track, cut by the end of the run),
+# screenshots and qconsole.log; then each demo played back in a fresh run, and once as a timedemo
+$events = Join-Path $PSScriptRoot 'events\record.events'
+Trace 'record' @('-condebug', '-traceevents', $events, '-oracleframes', '2700')
+foreach ($demo in 'd1', 'd2', 'd3') {
+    Trace "record.$demo" @('-tracequitafterdemo', '+playdemo', $demo) @("record/$demo.dem")
+}
+Trace 'record.timedemo' @('-tracequitafterdemo', '+timedemo', 'd1') @('record/d1.dem')
 # the savegames the saves game wrote, each loaded in a fresh run and played on (design.md §11.3)
 $events = Join-Path $PSScriptRoot 'events\loads.events'
 if (-not $Only -or $Only -contains 'loads') {
