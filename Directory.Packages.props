@@ -8,6 +8,7 @@
     <PackageVersion Include="Vortice.Vulkan" Version="3.3.0" />
     <PackageVersion Include="Vortice.VulkanMemoryAllocator" Version="1.8.0" />
 
+    <PackageVersion Include="coverlet.MTP" Version="10.1.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
   </ItemGroup>
 </Project>

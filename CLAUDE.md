@@ -27,6 +27,9 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
   the new hashes from it. Mind the oracle's right-to-left argument order when mirroring C calls (design.md §3.2).
   `ScenarioTests` keeps the hashes of `quake-oracle.exe -oraclescenario tools/oracle/units/<file>`; when one differs,
   diff `-print`'s transcript with the `.transcript` file the test writes next to its assembly.
+- Coverage: `tools/Coverage.ps1 -OutDir <dir outside the repo>` (with the two variables above) runs the fidelity tests
+  with coverlet and writes `coverage.md`: what the traces reach of Core, file by file, and the methods and lines they
+  don't.
 - Engine code lives in `QuakeEngine`, a partial file per C module, with the C's names (design.md §6.2 rule 13).
   Functions of unported modules are stand-ins in `QuakeEngine.Pending.cs`; move them out as their module is ported.
 

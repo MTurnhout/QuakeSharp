@@ -4,4 +4,9 @@
     <ProjectReference Include="..\..\src\QuakeSharp.Core\QuakeSharp.Core.csproj" />
   </ItemGroup>
 
+  <!-- coverage of Core by the traces, only when the runner is given its coverlet option (design.md decision 46) -->
+  <ItemGroup>
+    <PackageReference Include="coverlet.MTP" />
+  </ItemGroup>
+
 </Project>

@@ -790,7 +790,31 @@ first and QuakeSharp follows them.
    x87's and the assembly's rounding, documented; quake.exe is 1.08, documented from the source.*
 2. **What the traces reach.** A coverage run of the fidelity tests over Core (decision 46) lists, module by module, the ported
    functions and branches no trace reaches. That list is the work of step 6, and the measure of its end. Without a
-   coverage tool, the list comes from reading each C module against the scenarios.
+   coverage tool, the list comes from reading each C module against the scenarios. *Done: `tools/Coverage.ps1`
+   (coverlet.MTP, decision 46) writes the list. The fidelity tests reach 15,427 of Core's 19,954 lines (77.3%) and 65.2%
+   of its branches. What they do not reach:*
+   - *Play no scenario has yet: `chase_active` (chase.c never runs); `+mlook`, `+klook`, `+speed`, `+strafe`, `+use`
+     and keyboard look; the powerups (their colour shifts, the face, the inventory's items); `+showscores` and the
+     deathmatch overlays (never drawn); a coop game (the progs' `coop` and `teamplay` never read); most of `give` (51
+     of its 67 lines); the water jump, a player stuck, a blocked pusher; Chthon's lava splash, the spawn's explosion,
+     the mission packs' `TE_EXPLOSION2` and `EF_BRIGHTFIELD`; sprites clipped at the view's edges.*
+   - *Console and keys: typing at the console (44 of `Key_Console`'s 68 lines: history, completion, scrolling back),
+     `messagemode`, `messagemode2` and `Key_Message`, `clear`, `unbind`, and `wait` (never executed).*
+   - *Screen and menus: `sizeup`, `sizedown`, the turtle, `SCR_ModalMessage` (a new game during a game), the options'
+     sliders and the key bindings in part, the LAN and game options changed in part.*
+   - *Commands: `quit`, `version`, `demos`, `say_team`, `tell`, `kick`, `viewmodel` and its kin, `entities`, `edict`,
+     `edicts`, `edictcount`, `profile`, `flush`, `mcache`, `path`, `port`, `v_cshift`, `pointfile`, `timerefresh`,
+     `host_speeds`, `r_speeds`, `r_dspeeds`, `r_timegraph`, `r_aliasstats`, `r_draworder`, `r_drawflat`.*
+   - *The QuakeC builtins id1's progs never call (`vtos`, `nextent`, `WriteChar`, `WriteShort`, `WriteLong`,
+     `WriteAngle`, `setspawnparms`, `error`, `objerror`, `eprint`...) and runtime errors (`PR_RunError`, `Host_Error`):
+     the mission packs' progs may call some.*
+   - *Unreachable in WinQuake as the oracle runs it: the serial and modem menus (no serial driver), the mixer's 8-bit and
+     mono transfers (the DirectSound buffer is 16-bit stereo), the focus (`AppActivate`), a CD track's end (unit tests
+     drive it), the datagram driver's connections and the server list (no other host before milestone 11), and
+     functions the C never calls (`InsertLinkAfter`, `S_AmbientOff`, `S_AmbientOn`, `S_ClearPrecache`,
+     `R_TransformPlane`, `D_log2`, `MaskForNum`, `Q_log2`, `W_GetLumpNum`, `D_DrawZPoint`, `D_FillRect`).*
+   - *A gap found on the way: `FileSystem.BeginDisc` is never set, so `Draw_BeginDisc` never runs; it draws nothing in
+     the frame (vid_win.c puts the disc on the screen), but the executable never shows the disc while loading.*
 3. **in_win.c**: the oracle first (format 6, the scripted mouse, in_win.c over the virtual Win32), then
    `QuakeEngine.InWin.cs` (the stand-ins leave `QuakeEngine.Pending.cs`) over the platform's mouse and joystick (SDL3
    relative motion; a gamepad as `joyGetPosEx`'s axes and buttons where that maps cleanly, §8), with vid_win.c's part:
