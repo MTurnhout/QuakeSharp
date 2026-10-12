@@ -409,6 +409,10 @@ off, its messages) over an `ICdDrive` that answers the MCI commands it sends, ea
   procedure gets it (`Sys_SendKeyEvents`), so a looping track starts again. Under `-recordevents` the virtual disc
   decides, so the recording replays in the oracle, and the files are only heard.
 
+The music keeps playing while another program has the focus, as in WinQuake's windowed mode: `AppActivate` only clears
+the game's sound buffer (which DirectSound silences) and leaves the CD alone; only the full-screen modes' `VID_Suspend`
+paused it, and QuakeSharp runs the windowed mode.
+
 NVorbis decodes the rerelease's Ogg Vorbis files, SDL3 WAV files (decision 39).
 
 ## 8. Input
