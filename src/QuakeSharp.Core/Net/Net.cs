@@ -190,3 +190,9 @@ public sealed class PollProcedure
     public double nextTime;
     public Action procedure;
 }
+
+/// <summary>net.h: GetComPortConfig's type</summary>
+public delegate void GetComPortConfigFn(int portNumber, out int port, out int irq, out int baud, out bool useModem);
+
+/// <summary>net.h: GetModemConfig's type</summary>
+public delegate void GetModemConfigFn(int portNumber, out char dialType, out string clear, out string init, out string hangup);

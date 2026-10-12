@@ -37,7 +37,9 @@ the scripted keys and commands of `events/menus.events` (every menu but the netw
 the help pages and the renderer's cvars), and the scripted games of `events/`: `start.trace` (a new game from the
 menu, the start map's normal skill hall and episode 1's slipgate), `commands.trace` and `commands.640x480.trace` (the
 server's commands, fights, a save and a load, a restart and a level change), `intermission.trace` (e1m1's exit and
-the intermission) and `finale.trace` (e1m7's exit and the episode's finale). The routes through walls are flown with
+the intermission), `finale.trace` (e1m7's exit and the episode's finale) and `netmenus.trace` (the network menus over
+the virtual TCP/IP driver: a search, the LAN settings, the game options starting a three-player deathmatch, the setup
+menu's name and colours sent to it). The routes through walls are flown with
 `noclip`, planned from the edicts' positions in `-tracedump`.
 
 ## How the oracle is built

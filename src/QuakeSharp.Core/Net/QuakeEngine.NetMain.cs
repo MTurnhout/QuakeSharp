@@ -25,9 +25,11 @@ public sealed partial class QuakeEngine
     public string my_ipx_address = "";
     public string my_tcpip_address = "";
 
-    // net_main.c: GetComPortConfig, SetComPortConfig, GetModemConfig, SetModemConfig (net_ser.c's: no serial driver,
-    // so never set)
+    // net_main.c: GetComPortConfig, SetComPortConfig, GetModemConfig, SetModemConfig (net_ser.c's: WinQuake has no
+    // serial driver, so they stay NULL)
+    public GetComPortConfigFn? GetComPortConfig;
     public Action<int, int, int, int, bool>? SetComPortConfig;
+    public GetModemConfigFn? GetModemConfig;
     public Action<int, string, string, string, string>? SetModemConfig;
 
     private bool listening;
