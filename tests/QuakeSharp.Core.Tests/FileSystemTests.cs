@@ -14,8 +14,8 @@ public sealed class FileSystemTests : IDisposable
     [Fact]
     public void PakFilesAreFoundInAnyCaseAndLaterPaksOverride()
     {
-        files.Write("ID1/PAK0.PAK", TestFiles.Pak(("a.txt", "zero"u8.ToArray()), ("b.txt", "bee"u8.ToArray())));
-        files.Write("id1/Pak1.pak", TestFiles.Pak(("a.txt", "one"u8.ToArray())));
+        files.Write("Id1/PAK0.PAK", TestFiles.Pak(("a.txt", "zero"u8.ToArray()), ("b.txt", "bee"u8.ToArray())));
+        files.Write("Id1/Pak1.pak", TestFiles.Pak(("a.txt", "one"u8.ToArray())));
         FileSystem fs = Init();
 
         Assert.Equal("one\0", Text(fs.LoadFile("a.txt")));
