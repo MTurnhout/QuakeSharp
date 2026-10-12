@@ -107,6 +107,21 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
 
     public void Dispose() => Shutdown();
 
+    /// <summary>
+    /// Silent while another program has the focus, as WinQuake's DirectSound buffer is (created without
+    /// DSBCAPS_GLOBALFOCUS); the mixer goes on painting (design.md §7.1).
+    /// </summary>
+    public bool Muted
+    {
+        set
+        {
+            if (stream != null)
+            {
+                SDL_SetAudioStreamGain(stream, value ? 0f : 1f);
+            }
+        }
+    }
+
     // SDL_AudioStreamCallback: the device needs additionalAmount more bytes, taken from the buffer where it got to
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void Fill(IntPtr userdata, SDL_AudioStream* stream, int additionalAmount, int totalAmount)

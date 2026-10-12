@@ -58,6 +58,12 @@ public sealed unsafe class SdlWindow : IInputEvents, IDisposable
 
     public bool Minimized { get; private set; }
 
+    /// <summary>
+    /// The window got the focus (true) or lost it (false), with whether it is minimized: WM_ACTIVATE, which calls
+    /// vid_win.c's AppActivate. Raised from <see cref="SendKeyEvents"/>.
+    /// </summary>
+    public Action<bool, bool>? Activated { get; set; }
+
     /// <summary>The window's size in pixels.</summary>
     public (int Width, int Height) PixelSize
     {
@@ -118,6 +124,12 @@ public sealed unsafe class SdlWindow : IInputEvents, IDisposable
                 case SDL_EventType.SDL_EVENT_WINDOW_RESTORED:
                 case SDL_EventType.SDL_EVENT_WINDOW_MAXIMIZED:
                     Minimized = false;
+                    break;
+
+                // WM_ACTIVATE
+                case SDL_EventType.SDL_EVENT_WINDOW_FOCUS_GAINED:
+                case SDL_EventType.SDL_EVENT_WINDOW_FOCUS_LOST:
+                    Activated?.Invoke(e.Type == SDL_EventType.SDL_EVENT_WINDOW_FOCUS_GAINED, Minimized);
                     break;
 
                 // WM_KEYDOWN (held keys repeat, as Windows repeats them), WM_KEYUP

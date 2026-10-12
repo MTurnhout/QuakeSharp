@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NVorbis" />
     <PackageReference Include="ppy.SDL3-CS" />
   </ItemGroup>
 

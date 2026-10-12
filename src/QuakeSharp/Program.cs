@@ -8,12 +8,13 @@ using QuakeSharp.Platform.Sdl;
 using QuakeSharp.Render.Vulkan;
 
 // sys_win.c: WinMain. The engine runs Host_Init and then Host_Frame on the real clock, showing each frame it draws and
-// playing its sound; closing the window quits. -window opens a window, -noaspect shows square pixels, -vkvalidation
-// turns on the Vulkan validation layer, -quitafter <seconds> quits by itself.
+// playing its sound and the CD's music from the user's track files (design.md §7.2); closing the window quits. -window
+// opens a window, -noaspect shows square pixels, -vkvalidation turns on the Vulkan validation layer, -quitafter
+// <seconds> quits by itself.
 //
 // -recordevents <file> (design.md decision 34) runs as a trace does instead: a virtual clock of 1/64 s steps, paced to
-// real time; the sound device's position following that clock, as the oracle's; no config.cfg (a fresh user folder,
-// thrown away); and writes the keys as -traceevents lines, so the game replays the same in the oracle and in
+// real time; the sound device's position following that clock, as the oracle's; the oracle's virtual CD (the track
+// files only heard); no config.cfg (a fresh user folder, thrown away); and writes the keys as -traceevents lines, so the game replays the same in the oracle and in
 // quakesharp-tools trace (with -traceevents <file> -oracleframes <the frames it reports>, from the same command line).
 var commandLine = new CommandLine(["quakesharp", .. args]);
 try
@@ -56,7 +57,15 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
     var system = new RealSystem();
     using var sound = new SdlSoundDma();
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound, presenter);
+    using var cd = new FileCdDrive(CdTracks.Find(".", commandLine));
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound, presenter, cd);
+
+    // WM_ACTIVATE: DirectSound silences the game while another program has the focus; AppActivate clears the buffer
+    window.Activated = (active, minimized) =>
+    {
+        sound.Muted = !active;
+        engine.AppActivate(active, minimized);
+    };
 
     try
     {
@@ -95,7 +104,11 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     int frames = 0;
     using var recorder = new EventRecorder(window, path, () => frames);
     using var sound = new SdlSoundDma(clock: () => system.Time);
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound, presenter);
+    using var cd = new ListeningCdDrive(CdTracks.Find(".", commandLine));
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound, presenter, cd);
+
+    // silent while another program has the focus, but without AppActivate's clears: the oracle never loses the focus
+    window.Activated = (active, _) => sound.Muted = !active;
     var clock = Stopwatch.StartNew();
 
     try

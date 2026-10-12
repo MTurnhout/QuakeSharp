@@ -3,6 +3,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="NVorbis" Version="0.10.5" />
     <PackageVersion Include="ppy.SDL3-CS" Version="2026.1002.1" />
     <PackageVersion Include="Vortice.Vulkan" Version="3.3.0" />
     <PackageVersion Include="Vortice.VulkanMemoryAllocator" Version="1.8.0" />
