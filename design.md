@@ -7,7 +7,8 @@
 > the frame loop, commands, cvars, console text, keys, `mathlib.c`, printf, all checked against WinQuake's own C), 5
 > (the client: demo1-3 and the attract loop play with the client state, the sound channels, the console text and the
 > view the oracle's on every frame), 6 (the software renderer and the 2D, pixel-exact) and 7 (the QuakeC VM and the
-> server, in sync with the oracle on every scripted game and on a game played by hand) done.
+> server, in sync with the oracle on every scripted game and on a game played by hand) done. Milestone 8 (sound) under
+> way: its plan is §11.2.
 
 ## 1. Goal
 
@@ -159,7 +160,7 @@ share it only where a trace shows the difference.
 | Window, input, audio | **SDL3** via `ppy.SDL3-CS` | As DoomSharp and Contrail. |
 | Graphics | **Vulkan 1.3** via **Vortice.Vulkan** 3.3.0 and **Vortice.VulkanMemoryAllocator** 1.8.0 | Dynamic rendering, sync2; the setup modelled on Contrail's `Contrail.Render` (context, swapchain, shader library). |
 | Shaders | **Slang** → SPIR-V with `slangc` (`SLANGC`, or the Vulkan SDK's through `VULKAN_SDK`) | Compiled by `QuakeSharp.Render.Vulkan`'s build (`shaders/*.slang`, their modules in `shaders/common`) and embedded, so players need no SDK. CI installs a pinned Slang release (2026.18), checked by SHA-256. |
-| Music | An Ogg Vorbis decoder for the CD tracks (§7.2; library to choose, needs approval) | |
+| Music | An Ogg Vorbis decoder for the CD tracks (§7.2; library to choose, needs approval: §13 D6) | WAV tracks through SDL3 |
 | Tests | xUnit v3 on Microsoft.Testing.Platform + golden-trace tests | Fidelity tests skip without game data or traces. |
 | CI | GitHub Actions, Windows + Linux: build, unit tests, generated tables up to date | No GPU needed: Core and the tests never touch Vulkan. |
 | License | **GPL-2.0** | A translation of id's GPL release. Third-party code must be GPL-2-compatible. |
@@ -212,8 +213,8 @@ flowchart TB
     subgraph Platform["QuakeSharp.Platform.Sdl"]
         V["IVideo"]
         I["IInput"]
-        AO["IAudioOut"]
-        CD["ICdAudio"]
+        AO["ISoundDma"]
+        CD["ICdDrive"]
     end
     VK["QuakeSharp.Render.Vulkan<br/>present 8-bit frame"]
     App --> Core
@@ -223,6 +224,7 @@ flowchart TB
     H --> UI
     SV <--> N <--> CL
     CL --> S --> AO
+    S --> CD
     R --> V --> VK
     I --> H
 ```
@@ -241,10 +243,10 @@ Each C module becomes a C# class (or a few) in a namespace that mirrors it, so a
 | `cl_main.c`, `cl_parse.c`, `cl_input.c`, `cl_demo.c`, `cl_tent.c`, `view.c`, `chase.c` | `Core/Client` | |
 | `r_*.c`, `d_*.c`, `r_shared.h`, `d_iface.h` | `Core/Render` | WinQuake's software renderer, C paths only |
 | `draw.c`, `screen.c`, `console.c`, `menu.c`, `sbar.c`, `keys.c` | `Core/UI` | |
-| `snd_dma.c`, `snd_mix.c`, `snd_mem.c` | `Core/Sound` | Produces PCM; the device is `IAudioOut` |
+| `snd_dma.c`, `snd_mix.c`, `snd_mem.c`, `cd_win.c`, snd_win.c's `SNDDMA_Init` messages | `Core/Sound` | The mixer paints the buffer of an `ISoundDma` (the device); cd_win.c drives an `ICdDrive` (§7) |
 | `net_main.c`, `net_dgrm.c`, `net_loop.c`, `net_udp.c`/`net_wins.c` | `Core/Net` | .NET sockets |
 | `vid_win.c` (what the game sees of it) | `Core/Video` | The mode's `vid` fields, the colormap remapping, `S_Init` between the mode sets, the palette (§6.4); the frame is shown through `IVideoOutput` |
-| `vid_*.c`, `in_*.c`, `snd_win.c`…, `cd_*.c`, `sys_win.c` | `Platform.Sdl`, `Render.Vulkan`, exe | Rewritten against SDL3 and Vulkan |
+| `vid_*.c`, `in_*.c`, `snd_win.c`'s device, the CD drive, `sys_win.c` | `Platform.Sdl`, `Render.Vulkan`, exe | Rewritten against SDL3 and Vulkan |
 | `tools/oracle/src/trace.c` | `Core/Diagnostics` | The oracle's trace lines from QuakeSharp's state, and a run as the oracle's (`TraceRun`: virtual clock and sound device, base directory "."), for the tests and `quakesharp-tools trace` |
 | `gl_*.c` (GLQuake) | not ported in v1 | An enhanced renderer may borrow from it later (§6.6) |
 
@@ -372,23 +374,41 @@ state it updates) changes. Verified as in DoomSharp: the traces with enhanced fr
 
 `snd_dma.c` (channels, `S_StartSound`, ambient sounds, `S_Update`), `snd_mix.c` (the paint buffer, the integer
 mixer with `snd_scaletable`) and `snd_mem.c` (loading WAVs, `ResampleSfx`) are ported as they are: the sample-exact
-contract covers them. `shm` becomes an `IAudioOut` with a ring buffer the mixer paints ahead of the device's
-position, as the DMA buffer of the original; the device's rate is the mix rate (11025 Hz as the original's default,
-`-sndspeed` for others), and SDL3 converts to the device.
+contract covers them. `shm` is the buffer of an `ISoundDma`, which the mixer paints ahead of the device's play
+position, as the DMA buffer of the original. The device is snd_win.c's DirectSound path: 64 KB of 16-bit stereo at
+11025 Hz (WinQuake has no switch for another rate), SDL3 converting to the device; the messages that path prints at
+start-up (`Set primary sound buffer format: yes`, `Using secondary sound buffer`, the format, `DirectSound
+initialized`: as on today's Windows, to confirm against Winquake.exe), printed on both sides; and no blocking of its own
+(`S_BlockSound` does nothing for DirectSound: its exclusive buffer goes silent while another program has the focus,
+and vid_win.c's `AppActivate` clears the buffer when the focus goes and comes back). snd_win.c's waveOut path
+(`-wavonly`), `-primarysound` and `-snoforceformat` are not ported (decision 38).
 
 The sound device is part of the game: `S_StartSound` draws from `rand()` when an identical sound started and has not
 been painted yet, and how far the mixer has painted depends on the device's play position. With a real device that
 is real time, as in the original; the oracle and the tests use a **virtual device** (`snd_oracle.c`, 64 KB of 16-bit
 stereo at 11025 Hz as WinQuake's DirectSound buffer; `VirtualSoundDma` in Core) whose position follows the virtual
-clock. So the three files came with the client (milestone 5): the traces' `S` line checks the channels every frame;
-the painted samples are checked with milestone 8.
+clock. So the three files came with the client (milestone 5): the traces' `S` line checks the channels every frame,
+and from trace format 5 the `P` line the whole buffer the device plays (§11.2).
 
 ### 7.2 Music
 
-Quake's music is the CD's audio tracks (2-11), played by `cd_*.c` through the CD drive; nothing of it is in the
-PAKs. The `CDAudio_*` interface is kept and traced (track, looping, pause, resume, volume). QuakeSharp plays the
-tracks from files the user has, e.g. the rerelease's `id1/music/track02.ogg`–`track11.ogg` or rips of the CD,
-mixed with the sound effects. (Decision pending, §13 D6.)
+Quake's music is the CD's audio tracks (2-11), played by `cd_win.c` through the drive's MCI commands. Nothing of it is
+in the PAKs, and it never passes through the mixer: the drive's analogue output went to the sound card's own mixer.
+cd_win.c is ported in Core as it is (the `cd` command, the track `remap`, `CDAudio_Update`'s `bgmvolume`, which is on or
+off, its messages) over an `ICdDrive` that answers the MCI commands it sends, each with MCI's error code. Two drives:
+
+- **The virtual disc** (`VirtualCdDrive` in Core; the oracle's `cd_oracle.c`): Quake's CD, track 1 data and 2-11
+  audio, whose tracks play without end (no notification ever comes). The traces and `-recordevents` use it, and trace
+  format 5's `A` line checks cd_win.c's state every frame.
+- **The file drive** (`Platform.Sdl`): the tracks are files the user has, `music/trackNN.ogg` or `.wav` in the game
+  directories, or the Steam install's `rerelease/id1/music` (the rerelease's `track02.ogg`-`track11.ogg`, or rips of
+  the CD); track 1 is data and the highest track found is the last. Without files it is a drive with no disc
+  (`CDAudio_Init: No CD in player.`). A track plays on its own SDL3 audio stream on the sound device, which SDL mixes
+  with the game's; its end is MCI's `MCI_NOTIFY_SUCCESSFUL`, handed to `CDAudio_MessageHandler` where WinQuake's window
+  procedure gets it (`Sys_SendKeyEvents`), so a looping track starts again. Under `-recordevents` the virtual disc
+  decides, so the recording replays in the oracle, and the files are only heard.
+
+The decoder for the rerelease's Ogg Vorbis files is open (§13 D6).
 
 ## 8. Input
 
@@ -428,7 +448,7 @@ Faithfulness is measured, not assumed.
 | Client | **Demo traces** | Play demo1-3 (PAK0) and demos the oracle records; compare per frame: the client state (`cl` fields, entities, temp entities, dlights, particles), the `rand()` seed and the framebuffer and palette hashes |
 | Renderer & 2D | **Golden frames** | The same traces hash the whole 8-bit frame every frame, at 320×200 and larger modes; console, menus, status bar, intermission and finale reached by scripted input |
 | Server | **Scenario traces** | Scripted games (`-traceevents`: per-frame key events and console commands, with the virtual clock): per frame, hashes of `sv` state, every edict's memory (strings by content), the QuakeC globals and the `rand()` seed; the network messages sent |
-| Sound | **Mix traces** | The traces record every `S_StartSound`/`S_StopSound` and hash the painted buffer each frame |
+| Sound | **Mix traces** | The traces hash the sound channels (`S`), the device's whole buffer (`P`) and the CD's state (`A`) every frame |
 | Persistence | **Files** | Savegames, demos and `config.cfg` written in the scenarios compare byte for byte; loaded games play on in sync |
 | Smoke | Shareware in CI | CI fetches the shareware `pak0.pak` (`quake106.zip`, checked by MD5, never committed) and checks the shareware demos against the last lines of their traces, kept in the test |
 
@@ -475,7 +495,7 @@ QuakeSharp and recorded with `-recordevents`, e1m1 into e1m2 (24,500).
 | 5 ✅ | Client & demos | `cl_*` parse and interpolate; **demo1-3 play with the client state in sync on every frame** (no rendering yet). *demo1-3 at 320×240, 320×200 and 640×480 and 20,000 frames of the attract loop match the oracle's client lines on every frame: `rand()`'s state and calls, `cls`/`cl`, the entities, temp entities, beams, lights, light styles and particles, the sound channels, the console text, `r_refdef` and the palette. Ported: cl_main, cl_parse, cl_demo, cl_input, cl_tent, view, chase, r_part (`R_DrawParticles` moves them, `D_DrawParticle` waits), model.c, snd_dma/snd_mix/snd_mem (`S_StartSound` draws `rand()`), screen.c's control flow and r_main/r_misc/r_light's view setup (`R_SetupFrame`'s view leaf gives the contents' colour shift), vid_win.c's mode in Core, host_cmd.c's client commands, sv_main.c's `SV_Init`; drawing, menus, the status bar, efrags, net and the server are stand-ins. The executable plays the demo loop's sound* |
 | 6 ✅ | Software renderer & 2D | `r_*`/`d_*`, `draw`, `screen`, `console`, `sbar`; **every frame of demo1-3 pixel-exact** at 320×200 and a larger mode; menus. *Ported: the whole software renderer (r_*.c, d_*.c), draw.c, the console's drawing, sbar.c and menu.c. demo1-3 at 320×240, 320×200 and 640×480, 20,000 frames of the attract loop and 3,700 frames of scripted menus (`events/menus.events`: key events `@key` and commands over the attract loop) at 320×240 and 640×480 match the oracle pixel for pixel, `D` line included (trace format 3 hashes a leaf `topnode` as `0x10000 +` its index). The network menus wait for net_main.c, the intermission and finale screens for the server to reach them (milestone 7). The executable shows the game* |
 | 7 ✅ | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable. *Plan: §11.1. Ported: pr_edict.c, pr_exec.c, pr_cmds.c, world.c, sv_main.c, sv_phys.c, sv_move.c, sv_user.c, host.c's and host_cmd.c's server parts (save and load included), net_main.c, net_loop.c, net_dgrm.c with the virtual LAN driver, and menu.c's network menus. Trace format 4 adds the server's lines; the scripted games (`events/`: start, commands, intermission, finale, netmenus, tour) and a game played by hand (`e1`: recorded with `-recordevents`, from the menu through e1m1 into e1m2) match the oracle on every line of every frame, 60,500 frames of play in all, every map of the four episodes included; the recording matched on its first replay. The executable shows and plays the game (milestone 6's Program.cs still drew `gfx/conback.lmp` and never handed the engine its video output) and records games with `-recordevents`. More playthroughs are added as they are recorded (decision 35)* |
-| 8 | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files. *The mixer is ported (milestone 5); what remains is a trace line of the painted buffer, the output and the CD* |
+| 8 | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files. *Plan: §11.2. The mixer is ported (milestone 5); what remains is a trace line of the painted buffer, snd_win.c's and cd_win.c's parts the game shows, the output and the CD* |
 | 9 | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync |
 | 10 | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios |
 | 11 | Networking | UDP play with other NetQuake engines; net game tests |
@@ -551,6 +571,60 @@ traces each at 320×240, some also at 640×480; `GameTests` checks them):
 **Done when** the scripted games and the playthroughs match the oracle on every line of every frame (the client's and
 the renderer's lines included) and the executable plays a game.
 
+### 11.2 Milestone 8: the plan
+
+The mixer (snd_dma.c, snd_mix.c, snd_mem.c) was ported with the client, and the `S` line already checks the channels
+and the mixer's times every frame; what it paints has never been compared. Milestone 8 adds that, the parts of
+snd_win.c and cd_win.c the game shows (§7), and the music.
+
+**Trace format 5** adds two lines after `M`, written every frame:
+
+| Line | Fields |
+|---|---|
+| `P <hash>` | The sound device's buffer: all of `shm->buffer` (64 KB), what the device plays. It holds the samples painted this frame, `S_ClearBuffer`'s clears and what stays from the laps before; a difference stays in the hash until the mixer paints over it (a lap is 1.5 s), and the first differing frame is the one that counts. Without a started sound system (`-nosound`) it hashes nothing |
+| `A <hash>` | The CD: cd_win.c's `initialized`, `enabled`, `cdValid`, `playing`, `wasPlaying`, `playLooping`, `cdvolume`, `playTrack`, `maxTrack` and `remap`, then the virtual drive's state (open, door, the track it plays or has paused) |
+
+The whole buffer rather than the frame's new samples: hashing 64 KB a frame costs little (a few seconds over every
+trace), and it also checks the clears and where in the buffer the samples went. `-tracedump` adds the bytes the mixer
+wrote during the frame (`sound <offset> <bytes>`, from `paintedtime` at the frame's start to its end, in hexadecimal)
+and the CD's fields by name; `trace-compare` knows both lines.
+
+**What the oracle adds**: those lines and dumps in `trace.c`; `snd_oracle.c` prints snd_win.c's start-up messages
+(§7.1); and `src/cd_oracle.c` in place of `cd_null.c`: WinQuake's `cd_win.c` compiled unchanged over a virtual
+`mciSendCommand`, a drive holding Quake's disc (§7.2). The oracle has no window procedure, so no MCI notification ever
+arrives, as on the virtual disc no track ends.
+
+**Porting order.** Each step builds with the tests green and is committed; the oracle's traces are regenerated at
+step 1 and QuakeSharp follows them.
+
+1. **The oracle first**: format 5, the start-up messages and `cd_oracle.c`, so its traces are the target before the C#
+   exists. The console text changes (the sound messages, `CD Audio Initialized`), and the CD volume slider is now on or
+   off (`CDAudio_Update`), so every trace changes.
+2. **snd_win.c's messages** in Core (`QuakeEngine.SndWin.cs`: `SNDDMA_Init`'s DirectSound path and `snd_firsttime`,
+   over `ISoundDma`, which keeps the device's part), and `P` in `TraceWriter`, its dump and `trace-compare`. Where `P`
+   differs, the mixer's port is fixed until every trace matches.
+3. **cd_win.c** in Core (`QuakeEngine.CdAudio.cs`; the `CDAudio_*` stand-ins leave `QuakeEngine.Pending.cs`) over
+   `ICdDrive`, the MCI commands it sends (open, set the time format, the status items, play from and to, stop, pause,
+   the door, close), and `VirtualCdDrive` as `cd_oracle.c`; `A` in `TraceWriter`. Every trace matches again. Unit tests
+   drive cd_win.c's port with a scripted drive for what the traces never reach: a track's end and its loop, a failure
+   notification, an open that fails.
+4. **A scripted game for sound**, `sound.events`: the sound commands (`play`, `playvol`, `stopsound`, `soundlist`,
+   `soundinfo`), the cvars the mixer reads (`volume` through the menu and the console, which rebuilds the scale table,
+   `loadas8bit`, `ambient_level`, `ambient_fade`, `_snd_mixahead`, `snd_noextraupdate`, `nosound`), every `cd`
+   subcommand, the CD volume slider, a pause in a game (`svc_setpause` pauses the CD) and level changes with their
+   `svc_cdtrack`. `Trace-Demos.ps1` traces it, `GameTests` checks it.
+5. **The SDL3 output**: `AppActivate`'s part (on losing and regaining the focus, `S_ClearBuffer`, and the stream
+   silent while unfocused, as DirectSound's exclusive buffer), not under `-recordevents` (the oracle never loses the
+   focus); `-nosound` and `-nocdaudio` as WinQuake's; check that the device never overtakes the mixer at the
+   executable's frame rates (the painted end stays ahead of the play position), counted in a debug counter.
+6. **The music**: the file drive (§7.2): WAV tracks through SDL3, Ogg Vorbis through the decoder D6 settles (asked
+   before it is added), each track on its own stream on the sound device, the end of a track handed to
+   `CDAudio_MessageHandler` from `Sys_SendKeyEvents`; under `-recordevents` the virtual disc with the files only heard.
+
+**Done when** every trace (the demos, the attract loop, the menus, the scripted games, the playthroughs and
+`sound.events`) matches the oracle with format 5's `P` and `A` on every frame, and the executable plays the game's
+sound through SDL3 and the CD's tracks from the user's files.
+
 ## 12. Decision log
 
 | # | Topic | Decision | Date |
@@ -590,6 +664,9 @@ the renderer's lines included) and the executable plays a game.
 | 33 | Virtual LAN driver | net_dgrm.c comes with milestone 7, and both sides get a virtual LAN driver: net_wins.c without sockets (TCP/IP available at a fixed address, its console message, no name resolves and no packet arrives). The oracle runs WinQuake's driver list (loopback, datagram), so the network menus can be played and traced and a game they start runs over loopback; the executable uses it until milestone 11 adds the UDP driver | 2026-10-12 |
 | 34 | Recorded play | `-recordevents <file>` makes the executable run as a trace does (the virtual clock, paced to real time; the virtual sound device; no `config.cfg` read) and write the key events per frame as `-traceevents` lines, keys and mouse buttons only (the oracle has no mouse motion), so a game played in QuakeSharp replays the same in the oracle | 2026-10-12 |
 | 35 | Milestone 7 closed | Closed with one playthrough, `e1.events` (24,500 frames from the menu through e1m1 into e1m2), in sync on every frame with the scripted games' coverage of every map; playthroughs of more episodes are added to `Trace-Demos.ps1` and `GameTests` as they are recorded, without holding up milestone 8 | 2026-10-12 |
+| 36 | Mix trace | Trace format 5's `P` hashes the sound device's whole 64 KB buffer every frame (what the device plays: the painted samples, the clears, where they went), not the paint buffer or only the frame's new samples; `-tracedump` shows the bytes painted during the frame (§11.2) | 2026-10-12 |
+| 37 | CD audio | cd_win.c is ported in Core over an `ICdDrive` answering the MCI commands it sends. The oracle compiles cd_win.c unchanged over a virtual MCI drive (`cd_oracle.c`: Quake's disc, track 1 data, 2-11 audio, tracks without end) instead of cd_null.c; the traces and `-recordevents` use the same virtual disc, checked by format 5's `A` line. The executable's drive plays the user's track files on their own SDL3 stream, outside the mixer, as the CD's analogue output was (§7.2) | 2026-10-12 |
+| 38 | Sound device | snd_win.c's DirectSound path is the target: 11025 Hz only (the `-sndspeed` §7.1 once named is not WinQuake's), its start-up messages printed on both sides, the focus handled as vid_win.c (clears) and DirectSound's exclusive buffer (silent while unfocused); the waveOut path (`-wavonly`), `-primarysound` and `-snoforceformat` are not ported (§7.1) | 2026-10-12 |
 
 ## 13. Open decisions
 
@@ -598,6 +675,6 @@ To confirm with the user before the milestones they affect; the proposals are th
 | # | Question | Proposal |
 |---|---|---|
 | D4 | Fidelity target version | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`; the DOS 1.08 executable's differences (DJGPP's `rand()`, x87) documented, emulated later only if wanted |
-| D6 | Music | Play the CD tracks from user-supplied audio files (the rerelease's `id1/music/*.ogg`), through a small Ogg Vorbis decoder (NuGet, e.g. NVorbis, MIT) |
+| D6 | Music decoder | The CD tracks come from the user's files (§7.2, decision 37); WAV through SDL3, and the rerelease's Ogg Vorbis (`rerelease/id1/music/*.ogg`) through NVorbis (NuGet, MIT, GPL-2-compatible), to be approved before §11.2's step 6 |
 | D7 | Default video mode | 320×240 in a window scaled to the screen, as WinQuake's default mode (the fidelity target is WinQuake: decision 14); DOS's 320×200 and larger modes from the menu |
 | D8 | Scope of v1 | Quake and both mission packs on the WinQuake engine; GLQuake and QuakeWorld after v1 |
