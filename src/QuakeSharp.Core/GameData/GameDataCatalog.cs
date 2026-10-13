@@ -16,10 +16,13 @@ public static class GameDataCatalog
     [
         new("Quake registered 1.06, pak0", "id1/pak0.pak", "5906e5998fc3d896ddaf5e6a62e03abb", true),
         new("Quake registered 1.06, pak1", "id1/pak1.pak", "d76b3e5678f0b64ac74ce5e340e6a685", true),
-        new("Mission Pack 1: Scourge of Armagon (Steam; not yet confirmed as the original)", "hipnotic/pak0.pak",
-            "0ab83681aaf841c4320269e02941a14a", false),
-        new("Mission Pack 2: Dissolution of Eternity (Steam; not yet confirmed as the original)", "rogue/pak0.pak",
-            "c38a4e04219c317cd1b02f386bdfe11f", false),
+        new("Mission Pack 1: Scourge of Armagon", "hipnotic/pak0.pak", "0ab83681aaf841c4320269e02941a14a", true),
+        new("Mission Pack 2: Dissolution of Eternity (the mission packs' CD of 1998, Steam)", "rogue/pak0.pak",
+            "c38a4e04219c317cd1b02f386bdfe11f", true),
+        new("Mission Pack 2: Dissolution of Eternity (its own CD)", "rogue/pak0.pak",
+            "f8898a483b131de21581656c94f3c1a4", true),
+        new("Mission Pack 2: Dissolution of Eternity (GOG.com)", "rogue/pak0.pak",
+            "f71428763229bdb373f00a547296efe3", true),
     ];
 
     public static GameDataFile? IdentifyByHash(string md5) =>

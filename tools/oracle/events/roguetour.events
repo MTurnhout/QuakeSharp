@@ -1,0 +1,729 @@
+5 map start
+60 god
+62 noclip
+68 cl_forwardspeed 320
+68 cl_upspeed 320
+85 cl_yawspeed 140
+85 noclip
+85 impulse 9
+86 give s 40
+86 give n 60
+86 give l 30
+86 give r 20
+86 give m 15
+86 give c 40
+86 give p 30
+87 impulse 4
+105 +attack
+105 +left
+145 impulse 4
+205 -left
+215 impulse 5
+215 +forward
+285 -forward
+295 +jump
+305 -jump
+325 -attack
+980 save start
+1005 changelevel r1m1
+1060 god
+1062 noclip
+1068 cl_forwardspeed 320
+1068 cl_upspeed 320
+1080 +movedown
+1091 -movedown
+1094 cl_yawspeed 419.096774
+1095 +right
+1111 -right
+1114 +forward
+1378 -forward
+1381 +movedown
+1495 -movedown
+1498 cl_yawspeed 181.677419
+1499 +right
+1515 -right
+1518 +forward
+1540 -forward
+1543 +moveup
+1585 -moveup
+1588 cl_yawspeed 532.645161
+1589 +right
+1605 -right
+1608 +forward
+1659 -forward
+1667 cl_yawspeed 140
+1667 noclip
+1667 impulse 9
+1668 give s 40
+1668 give n 60
+1668 give l 30
+1668 give r 20
+1668 give m 15
+1668 give c 40
+1668 give p 30
+1669 impulse 5
+1687 +attack
+1687 +right
+1727 impulse 5
+1787 -right
+1797 impulse 6
+1797 +forward
+1867 -forward
+1877 +jump
+1887 -jump
+1907 -attack
+1980 save r1m1
+2005 changelevel r1m2
+2060 god
+2062 noclip
+2068 cl_forwardspeed 320
+2068 cl_upspeed 320
+2080 cl_yawspeed 270.451613
+2081 +right
+2097 -right
+2100 +forward
+2164 -forward
+2167 +moveup
+2200 -moveup
+2203 cl_yawspeed 392.258065
+2204 +left
+2220 -left
+2223 +forward
+2406 -forward
+2409 +moveup
+2435 -moveup
+2438 cl_yawspeed 293.161290
+2439 +right
+2455 -right
+2458 +forward
+2683 -forward
+2691 cl_yawspeed 140
+2691 noclip
+2691 impulse 9
+2692 give s 40
+2692 give n 60
+2692 give l 30
+2692 give r 20
+2692 give m 15
+2692 give c 40
+2692 give p 30
+2693 impulse 6
+2711 +attack
+2711 +left
+2751 impulse 6
+2811 -left
+2821 impulse 7
+2821 +forward
+2891 -forward
+2901 +jump
+2911 -jump
+2931 -attack
+2980 save r1m2
+3005 changelevel r1m3
+3060 god
+3062 noclip
+3068 cl_forwardspeed 320
+3068 cl_upspeed 320
+3080 +movedown
+3099 -movedown
+3102 cl_yawspeed 286.967742
+3103 +left
+3119 -left
+3122 +forward
+3278 -forward
+3281 +moveup
+3310 -moveup
+3313 cl_yawspeed 94.967742
+3314 +left
+3330 -left
+3333 +forward
+3414 -forward
+3417 +movedown
+3446 -movedown
+3449 cl_yawspeed 673.032258
+3450 +left
+3466 -left
+3469 +forward
+3567 -forward
+3570 cl_yawspeed 441.806452
+3571 +left
+3587 -left
+3590 +forward
+3643 -forward
+3651 cl_yawspeed 140
+3651 noclip
+3651 impulse 9
+3652 give s 40
+3652 give n 60
+3652 give l 30
+3652 give r 20
+3652 give m 15
+3652 give c 40
+3652 give p 30
+3653 impulse 7
+3671 +attack
+3671 +right
+3711 impulse 7
+3771 -right
+3781 impulse 8
+3781 +forward
+3851 -forward
+3861 +jump
+3871 -jump
+3891 -attack
+3980 save r1m3
+4005 changelevel r1m4
+4060 god
+4062 noclip
+4068 cl_forwardspeed 320
+4068 cl_upspeed 320
+4080 +movedown
+4158 -movedown
+4161 cl_yawspeed 369.548387
+4162 +right
+4178 -right
+4181 +forward
+4522 -forward
+4530 cl_yawspeed 140
+4530 noclip
+4530 impulse 9
+4531 give s 40
+4531 give n 60
+4531 give l 30
+4531 give r 20
+4531 give m 15
+4531 give c 40
+4531 give p 30
+4532 impulse 8
+4550 +attack
+4550 +left
+4590 impulse 8
+4650 -left
+4660 impulse 3
+4660 +forward
+4730 -forward
+4740 +jump
+4750 -jump
+4770 -attack
+4980 save r1m4
+5005 changelevel r1m5
+5060 god
+5062 noclip
+5068 cl_forwardspeed 320
+5068 cl_upspeed 320
+5080 +movedown
+5083 -movedown
+5086 cl_yawspeed 220.903226
+5087 +left
+5103 -left
+5106 +forward
+5506 -forward
+5509 +movedown
+5529 -movedown
+5532 cl_yawspeed 718.451613
+5533 +left
+5549 -left
+5552 +forward
+5587 -forward
+5595 cl_yawspeed 140
+5595 noclip
+5595 impulse 9
+5596 give s 40
+5596 give n 60
+5596 give l 30
+5596 give r 20
+5596 give m 15
+5596 give c 40
+5596 give p 30
+5597 impulse 3
+5615 +attack
+5615 +right
+5655 impulse 4
+5715 -right
+5725 impulse 4
+5725 +forward
+5795 -forward
+5805 +jump
+5815 -jump
+5835 -attack
+5980 save r1m5
+6005 changelevel r1m6
+6060 god
+6062 noclip
+6068 cl_forwardspeed 320
+6068 cl_upspeed 320
+6080 +moveup
+6134 -moveup
+6137 cl_yawspeed 365.419355
+6138 +left
+6154 -left
+6157 +forward
+6487 -forward
+6490 cl_yawspeed 611.096774
+6491 +right
+6507 -right
+6510 +forward
+6678 -forward
+6686 cl_yawspeed 140
+6686 noclip
+6686 impulse 9
+6687 give s 40
+6687 give n 60
+6687 give l 30
+6687 give r 20
+6687 give m 15
+6687 give c 40
+6687 give p 30
+6688 impulse 4
+6706 +attack
+6706 +left
+6746 impulse 4
+6806 -left
+6816 impulse 5
+6816 +forward
+6886 -forward
+6896 +jump
+6906 -jump
+6926 -attack
+6980 save r1m6
+7005 changelevel r1m7
+7060 god
+7062 noclip
+7068 cl_forwardspeed 320
+7068 cl_upspeed 320
+7080 +movedown
+7168 -movedown
+7171 cl_yawspeed 2.064516
+7172 +left
+7188 -left
+7191 +forward
+7472 -forward
+7475 +moveup
+7562 -moveup
+7570 cl_yawspeed 140
+7570 noclip
+7570 impulse 9
+7571 give s 40
+7571 give n 60
+7571 give l 30
+7571 give r 20
+7571 give m 15
+7571 give c 40
+7571 give p 30
+7572 impulse 5
+7590 +attack
+7590 +right
+7630 impulse 5
+7690 -right
+7700 impulse 6
+7700 +forward
+7770 -forward
+7780 +jump
+7790 -jump
+7810 -attack
+7980 save r1m7
+8005 changelevel r2m1
+8060 god
+8062 noclip
+8068 cl_forwardspeed 320
+8068 cl_upspeed 320
+8080 +moveup
+8111 -moveup
+8114 cl_yawspeed 154.838710
+8115 +left
+8131 -left
+8134 +forward
+8333 -forward
+8336 cl_yawspeed 103.225806
+8337 +left
+8353 -left
+8356 +forward
+8457 -forward
+8460 +movedown
+8497 -movedown
+8500 cl_yawspeed 28.903226
+8501 +left
+8517 -left
+8520 +forward
+8604 -forward
+8612 cl_yawspeed 140
+8612 noclip
+8612 impulse 9
+8613 give s 40
+8613 give n 60
+8613 give l 30
+8613 give r 20
+8613 give m 15
+8613 give c 40
+8613 give p 30
+8614 impulse 6
+8632 +attack
+8632 +left
+8672 impulse 6
+8732 -left
+8742 impulse 7
+8742 +forward
+8812 -forward
+8822 +jump
+8832 -jump
+8852 -attack
+8980 save r2m1
+9005 changelevel r2m2
+9060 god
+9062 noclip
+9068 cl_forwardspeed 320
+9068 cl_upspeed 320
+9080 +movedown
+9156 -movedown
+9159 cl_yawspeed 373.677419
+9160 +left
+9176 -left
+9179 +forward
+9373 -forward
+9376 +moveup
+9420 -moveup
+9423 cl_yawspeed 346.838710
+9424 +right
+9440 -right
+9443 +forward
+9566 -forward
+9574 cl_yawspeed 140
+9574 noclip
+9574 impulse 9
+9575 give s 40
+9575 give n 60
+9575 give l 30
+9575 give r 20
+9575 give m 15
+9575 give c 40
+9575 give p 30
+9576 impulse 7
+9594 +attack
+9594 +right
+9634 impulse 7
+9694 -right
+9704 impulse 8
+9704 +forward
+9774 -forward
+9784 +jump
+9794 -jump
+9814 -attack
+9980 save r2m2
+10005 changelevel r2m3
+10060 god
+10062 noclip
+10068 cl_forwardspeed 320
+10068 cl_upspeed 320
+10080 cl_yawspeed 192.000000
+10081 +right
+10097 -right
+10100 +forward
+10139 -forward
+10142 +moveup
+10160 -moveup
+10163 cl_yawspeed 185.806452
+10164 +left
+10180 -left
+10183 +forward
+10659 -forward
+10667 cl_yawspeed 140
+10667 noclip
+10667 impulse 9
+10668 give s 40
+10668 give n 60
+10668 give l 30
+10668 give r 20
+10668 give m 15
+10668 give c 40
+10668 give p 30
+10669 impulse 8
+10687 +attack
+10687 +left
+10727 impulse 8
+10787 -left
+10797 impulse 3
+10797 +forward
+10867 -forward
+10877 +jump
+10887 -jump
+10907 -attack
+10980 save r2m3
+11005 changelevel r2m4
+11060 god
+11062 noclip
+11068 cl_forwardspeed 320
+11068 cl_upspeed 320
+11080 +movedown
+11135 -movedown
+11138 cl_yawspeed 146.580645
+11139 +right
+11155 -right
+11158 +forward
+11278 -forward
+11281 +moveup
+11298 -moveup
+11301 cl_yawspeed 417.032258
+11302 +right
+11318 -right
+11321 +forward
+11419 -forward
+11422 +movedown
+11458 -movedown
+11461 cl_yawspeed 202.322581
+11462 +left
+11478 -left
+11481 +forward
+11638 -forward
+11646 cl_yawspeed 140
+11646 noclip
+11646 impulse 9
+11647 give s 40
+11647 give n 60
+11647 give l 30
+11647 give r 20
+11647 give m 15
+11647 give c 40
+11647 give p 30
+11648 impulse 3
+11666 +attack
+11666 +right
+11706 impulse 4
+11766 -right
+11776 impulse 4
+11776 +forward
+11846 -forward
+11856 +jump
+11866 -jump
+11886 -attack
+11980 save r2m4
+12005 changelevel r2m5
+12060 god
+12062 noclip
+12068 cl_forwardspeed 320
+12068 cl_upspeed 320
+12080 +movedown
+12150 -movedown
+12153 cl_yawspeed 64.000000
+12154 +right
+12170 -right
+12173 +forward
+12426 -forward
+12429 +moveup
+12460 -moveup
+12463 cl_yawspeed 487.225806
+12464 +left
+12480 -left
+12483 +forward
+12531 -forward
+12534 +movedown
+12565 -movedown
+12568 cl_yawspeed 734.967742
+12569 +left
+12585 -left
+12588 +forward
+12646 -forward
+12654 cl_yawspeed 140
+12654 noclip
+12654 impulse 9
+12655 give s 40
+12655 give n 60
+12655 give l 30
+12655 give r 20
+12655 give m 15
+12655 give c 40
+12655 give p 30
+12656 impulse 4
+12674 +attack
+12674 +left
+12714 impulse 4
+12774 -left
+12784 impulse 5
+12784 +forward
+12854 -forward
+12864 +jump
+12874 -jump
+12894 -attack
+12980 save r2m5
+13005 changelevel r2m6
+13060 god
+13062 noclip
+13068 cl_forwardspeed 320
+13068 cl_upspeed 320
+13080 +movedown
+13128 -movedown
+13131 cl_yawspeed 101.161290
+13132 +left
+13148 -left
+13151 +forward
+13387 -forward
+13390 +movedown
+13402 -movedown
+13405 cl_yawspeed 305.548387
+13406 +left
+13422 -left
+13425 +forward
+13630 -forward
+13638 cl_yawspeed 140
+13638 noclip
+13638 impulse 9
+13639 give s 40
+13639 give n 60
+13639 give l 30
+13639 give r 20
+13639 give m 15
+13639 give c 40
+13639 give p 30
+13640 impulse 5
+13658 +attack
+13658 +right
+13698 impulse 5
+13758 -right
+13768 impulse 6
+13768 +forward
+13838 -forward
+13848 +jump
+13858 -jump
+13878 -attack
+13980 save r2m6
+14005 changelevel r2m7
+14060 god
+14062 noclip
+14068 cl_forwardspeed 320
+14068 cl_upspeed 320
+14080 +moveup
+14088 -moveup
+14091 cl_yawspeed 150.709677
+14092 +left
+14108 -left
+14111 +forward
+14330 -forward
+14333 +moveup
+14363 -moveup
+14366 cl_yawspeed 350.967742
+14367 +left
+14383 -left
+14386 +forward
+14561 -forward
+14564 +movedown
+14606 -movedown
+14609 cl_yawspeed 119.741935
+14610 +right
+14626 -right
+14629 +forward
+14680 -forward
+14688 cl_yawspeed 140
+14688 noclip
+14688 impulse 9
+14689 give s 40
+14689 give n 60
+14689 give l 30
+14689 give r 20
+14689 give m 15
+14689 give c 40
+14689 give p 30
+14690 impulse 6
+14708 +attack
+14708 +left
+14748 impulse 6
+14808 -left
+14818 impulse 7
+14818 +forward
+14888 -forward
+14898 +jump
+14908 -jump
+14928 -attack
+14980 save r2m7
+15005 changelevel r2m8
+15060 god
+15062 noclip
+15068 cl_forwardspeed 320
+15068 cl_upspeed 320
+15080 +movedown
+15094 -movedown
+15097 cl_yawspeed 22.709677
+15098 +left
+15114 -left
+15117 +forward
+15256 -forward
+15259 cl_yawspeed 53.677419
+15260 +right
+15276 -right
+15279 +forward
+15541 -forward
+15544 +moveup
+15547 -moveup
+15550 cl_yawspeed 458.322581
+15551 +left
+15567 -left
+15570 +forward
+15644 -forward
+15652 cl_yawspeed 140
+15652 noclip
+15652 impulse 9
+15653 give s 40
+15653 give n 60
+15653 give l 30
+15653 give r 20
+15653 give m 15
+15653 give c 40
+15653 give p 30
+15654 impulse 7
+15672 +attack
+15672 +right
+15712 impulse 7
+15772 -right
+15782 impulse 8
+15782 +forward
+15852 -forward
+15862 +jump
+15872 -jump
+15892 -attack
+15980 save r2m8
+16005 changelevel ctf1
+16060 god
+16062 noclip
+16068 cl_forwardspeed 320
+16068 cl_upspeed 320
+16080 +moveup
+16113 -moveup
+16116 cl_yawspeed 55.741935
+16117 +left
+16133 -left
+16136 +forward
+16307 -forward
+16310 +moveup
+16367 -moveup
+16370 cl_yawspeed 536.774194
+16371 +left
+16387 -left
+16390 +forward
+16466 -forward
+16469 +moveup
+16473 -moveup
+16476 cl_yawspeed 396.387097
+16477 +right
+16493 -right
+16496 +forward
+16616 -forward
+16624 cl_yawspeed 140
+16624 noclip
+16624 impulse 9
+16625 give s 40
+16625 give n 60
+16625 give l 30
+16625 give r 20
+16625 give m 15
+16625 give c 40
+16625 give p 30
+16626 impulse 8
+16644 +attack
+16644 +left
+16684 impulse 8
+16744 -left
+16754 impulse 3
+16754 +forward
+16824 -forward
+16834 +jump
+16844 -jump
+16864 -attack
+16980 save ctf1

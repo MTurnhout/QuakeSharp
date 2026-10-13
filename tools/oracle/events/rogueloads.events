@@ -1,0 +1,128 @@
+5 load start
+65 +attack
+65 +left
+125 -left
+135 +forward
+235 -forward
+245 -attack
+305 load r1m1
+365 +attack
+365 +right
+425 -right
+435 +forward
+535 -forward
+545 -attack
+605 load r1m2
+665 +attack
+665 +left
+725 -left
+735 +forward
+835 -forward
+845 -attack
+905 load r1m3
+965 +attack
+965 +right
+1025 -right
+1035 +forward
+1135 -forward
+1145 -attack
+1205 load r1m4
+1265 +attack
+1265 +left
+1325 -left
+1335 +forward
+1435 -forward
+1445 -attack
+1505 load r1m5
+1565 +attack
+1565 +right
+1625 -right
+1635 +forward
+1735 -forward
+1745 -attack
+1805 load r1m6
+1865 +attack
+1865 +left
+1925 -left
+1935 +forward
+2035 -forward
+2045 -attack
+2105 load r1m7
+2165 +attack
+2165 +right
+2225 -right
+2235 +forward
+2335 -forward
+2345 -attack
+2405 load r2m1
+2465 +attack
+2465 +left
+2525 -left
+2535 +forward
+2635 -forward
+2645 -attack
+2705 load r2m2
+2765 +attack
+2765 +right
+2825 -right
+2835 +forward
+2935 -forward
+2945 -attack
+3005 load r2m3
+3065 +attack
+3065 +left
+3125 -left
+3135 +forward
+3235 -forward
+3245 -attack
+3305 load r2m4
+3365 +attack
+3365 +right
+3425 -right
+3435 +forward
+3535 -forward
+3545 -attack
+3605 load r2m5
+3665 +attack
+3665 +left
+3725 -left
+3735 +forward
+3835 -forward
+3845 -attack
+3905 load r2m6
+3965 +attack
+3965 +right
+4025 -right
+4035 +forward
+4135 -forward
+4145 -attack
+4205 load r2m7
+4265 +attack
+4265 +left
+4325 -left
+4335 +forward
+4435 -forward
+4445 -attack
+4505 load r2m8
+4565 +attack
+4565 +right
+4625 -right
+4635 +forward
+4735 -forward
+4745 -attack
+4805 load ctf1
+4865 +attack
+4865 +left
+4925 -left
+4935 +forward
+5035 -forward
+5045 -attack
+5100 save s0
+5105 load nothere
+5120 menu_load
+5140 @key 13 1
+5141 @key 13 0
+5200 +attack
+5200 +forward
+5300 -forward
+5310 -attack

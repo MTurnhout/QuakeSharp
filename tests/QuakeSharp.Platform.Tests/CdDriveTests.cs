@@ -51,6 +51,20 @@ public sealed class CdDriveTests : IDisposable
         Assert.Equal(2, tracks.Count);
     }
 
+    [Theory]
+    [InlineData("-hipnotic", "hipnotic")]
+    [InlineData("-rogue", "rogue")]
+    public void AMissionPackPlaysItsOwnDisc(string parm, string pack)
+    {
+        Wav(Path.Combine(Folder(Path.Combine("rerelease", "id1", "music")), "track11.wav"), 0.1);
+        string music = Folder(Path.Combine("rerelease", pack, "music"));
+        Wav(Path.Combine(music, "track09.wav"), 0.1);
+
+        CdTracks tracks = CdTracks.Find(dir, new CommandLine(["quake", parm]));
+        Assert.Equal(9, tracks.Count);
+        Assert.Equal(Path.Combine(music, "track09.wav"), tracks.File(9));
+    }
+
     [Fact]
     public void WithoutFilesTheDriveHasNoDisc()
     {

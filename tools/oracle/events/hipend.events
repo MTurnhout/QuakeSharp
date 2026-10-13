@@ -1,0 +1,42 @@
+5 map hipend
+60 god
+62 impulse 9
+64 give r 100
+66 impulse 7
+70 noclip
+70 cl_forwardspeed 320
+80 +forward
+217 -forward
+230 noclip
+600 impulse 255
+600 give r 100
+750 impulse 255
+750 give r 100
+900 impulse 255
+900 give r 100
+1050 impulse 255
+1050 give r 100
+1100 +attack
+1200 impulse 255
+1200 give r 100
+1350 impulse 255
+1350 give r 100
+1500 impulse 255
+1500 give r 100
+1650 impulse 255
+1650 give r 100
+1800 impulse 255
+1800 give r 100
+1950 impulse 255
+1950 give r 100
+2100 impulse 255
+2100 give r 100
+2250 impulse 255
+2250 give r 100
+2400 impulse 255
+2400 give r 100
+2550 impulse 255
+2550 give r 100
+2700 -attack
+7000 +jump
+7010 -jump

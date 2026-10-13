@@ -5,7 +5,9 @@ namespace QuakeSharp.Platform.Sdl;
 /// <summary>
 /// The CD's audio tracks as files the user has (design.md §7.2): <c>music/trackNN.ogg</c> or <c>.wav</c> in the game
 /// directories (<c>-game</c>'s, then <c>id1</c>), or the Steam install's <c>rerelease/id1/music</c> (the rerelease's
-/// <c>track02.ogg</c>-<c>track11.ogg</c>). Names on disk match in any case.
+/// <c>track02.ogg</c>-<c>track11.ogg</c>). A mission pack (<c>-hipnotic</c>, <c>-rogue</c>) came on its own CD: its
+/// tracks are its folder's <c>music</c> or the rerelease's <c>rerelease/hipnotic/music</c>, <c>rerelease/rogue/music</c>
+/// (<c>track02.ogg</c>-<c>track09.ogg</c>), never id1's. Names on disk match in any case.
 /// </summary>
 public sealed class CdTracks
 {
@@ -36,8 +38,12 @@ public sealed class CdTracks
             dirs.Add(Path.Combine(baseDir, commandLine.Argv(game + 1), "music"));
         }
 
-        dirs.Add(Path.Combine(baseDir, "id1", "music"));
-        dirs.Add(Path.Combine(baseDir, "rerelease", "id1", "music"));
+        // common.c adds rogue's directory, then hipnotic's: the last is the game's
+        string disc = commandLine.CheckParm("-hipnotic") != 0 ? "hipnotic"
+            : commandLine.CheckParm("-rogue") != 0 ? "rogue"
+            : "id1";
+        dirs.Add(Path.Combine(baseDir, disc, "music"));
+        dirs.Add(Path.Combine(baseDir, "rerelease", disc, "music"));
         return In(dirs);
     }
 

@@ -12,7 +12,8 @@ namespace QuakeSharp.Fidelity.Tests;
 /// the palette), the server's lines, G (sv, svs), Q (the QuakeC globals), N (the edicts), W (the area lists) and M
 /// (the messages sent), the sound's of milestone 8, P (the sound device's buffer) and A (the CD), and I (the mouse and
 /// the joystick, milestone 10). The files each run writes (config.cfg, savegames, demos, screenshots, qconsole.log)
-/// are compared with the oracle's run's, byte for byte (milestone 9).
+/// are compared with the oracle's run's, byte for byte (milestone 9). The mission packs are checked the same way
+/// (milestone 10).
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
@@ -177,6 +178,64 @@ public sealed class DemoTests : IDisposable
         var run = new TraceRun(baseDir, userdir, ["-nosound", "-nocdaudio", "-traceevents", events, "-oracleframes", "3500"]);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 3500));
         RunFiles.AssertSame("sound.nosound.trace", userdir);
+    }
+
+    // The mission packs (design.md §11.4, decision 45), from a Quake folder holding only their original PAKs, writing
+    // into their own game folders: their demos and attract loops
+    [Theory]
+    [InlineData("hipnotic", "-tracequitafterdemo +playdemo hipdemo1", "hipdemo1.trace")]
+    [InlineData("hipnotic", "-tracequitafterdemo +playdemo hipdemo2", "hipdemo2.trace")]
+    [InlineData("hipnotic", "-tracequitafterdemo +playdemo hipdemo3", "hipdemo3.trace")]
+    [InlineData("hipnotic", "-tracequitafterdemo +playdemo hipdemo4", "hipdemo4.trace")]
+    [InlineData("hipnotic", "-oracleframes 14000", "hipattract.trace")]
+    [InlineData("rogue", "-tracequitafterdemo +playdemo demo1", "roguedemo1.trace")]
+    [InlineData("rogue", "-tracequitafterdemo +playdemo demo2", "roguedemo2.trace")]
+    [InlineData("rogue", "-tracequitafterdemo +playdemo demo3", "roguedemo3.trace")]
+    [InlineData("rogue", "-oracleframes 17000", "rogueattract.trace")]
+    public void PackDemoPlaysInSyncWithTheOracle(string pack, string args, string trace)
+    {
+        string baseDir = GameDataLocator.RequirePackBaseDir(pack);
+        string reference = TraceLocator.RequireFile(trace);
+        string[] arguments = ["-" + pack, .. args.Split(' ')];
+        bool quitAfterDemo = args.StartsWith("-tracequitafterdemo", StringComparison.Ordinal);
+
+        var run = new TraceRun(baseDir, userdir, arguments);
+        AssertSameTrace(reference, quitAfterDemo
+            ? run.Frames(quitAfterDemo: true)
+            : run.Frames(quitAfterDemo: false, maxFrames: int.Parse(args.Split(' ')[1], CultureInfo.InvariantCulture)));
+        RunFiles.AssertSame(trace, userdir, pack);
+    }
+
+    // The mission packs' scripted games: a tour of every map with the pack's items, weapons and a save on each, the
+    // menus' episodes and levels and the games they start (rogue's team modes), and each pack's end; then the tour's
+    // saves, each loaded in a fresh run and played on
+    [Theory]
+    [InlineData("hipnotic", "hiptour", 18000)]
+    [InlineData("hipnotic", "hipmenus", 2344)]
+    [InlineData("hipnotic", "hipend", 9000)]
+    [InlineData("hipnotic", "hiploads", 5700)]
+    [InlineData("rogue", "roguetour", 17000)]
+    [InlineData("rogue", "roguemenus", 3843)]
+    [InlineData("rogue", "rogueend", 7000)]
+    [InlineData("rogue", "rogueloads", 5400)]
+    public void PackGamePlaysInSyncWithTheOracle(string pack, string game, int frames)
+    {
+        string baseDir = GameDataLocator.RequirePackBaseDir(pack);
+        string reference = TraceLocator.RequireFile(game + ".trace");
+        if (game.EndsWith("loads", StringComparison.Ordinal))
+        {
+            string tour = game.Replace("loads", "tour", StringComparison.Ordinal);
+            string saves = TraceLocator.RequireDirectory(tour + ".files");
+            RunFiles.CopyInputsInto(userdir, pack,
+                [.. Directory.EnumerateFiles(saves, "*.sav").Select(f => $"{tour}/{Path.GetFileName(f)}")]);
+        }
+
+        string events = Path.Combine(RepositoryRoot(), "tools", "oracle", "events", game + ".events");
+
+        var run = new TraceRun(baseDir, userdir,
+            ["-" + pack, "-traceevents", events, "-oracleframes", frames.ToString(CultureInfo.InvariantCulture)]);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: frames));
+        RunFiles.AssertSame(game + ".trace", userdir, pack);
     }
 
     private static string RepositoryRoot()

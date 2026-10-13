@@ -54,6 +54,18 @@ in a fresh run and played on: 12,905 frames); `record.trace` (with `-condebug`: 
 and an intermission, with a forced CD track, and cut by the end of the run, two screenshots), then each of its demos
 played back in a fresh run (`record.d1-d3.trace`) and `d1` as a timedemo (`record.timedemo.trace`).
 
+With the mission packs in `-QuakeDir` (`hipnotic/pak0.pak`, `rogue/pak0.pak`; only those PAKs are copied, never the
+packs' loose `config.cfg`, design.md decision 45), it also runs `-hipnotic` and `-rogue`, in their own game folders,
+whose files are kept: their demos (`hipdemo1-4.trace`, `roguedemo1-3.trace`) and attract loops (`hipattract.trace`,
+`rogueattract.trace`: their own `quake.rc`, once around); the tours (`hiptour.trace`, 18,000 frames, and
+`roguetour.trace`, 17,000: on every map of the pack a noclip route to its items, planned from the oracle's
+`-tracedump` of each map, then the pack's weapons fired and a save named after the map) and those saves loaded in a fresh
+run and played on (`hiploads.trace`, `rogueloads.trace`), ending in the load menu; the menus (`hipmenus.trace`,
+`roguemenus.trace`: Single Player's new game, then the game options' teamplay values, every episode and level, and a
+game they start: rogue's capture the flag, then its one-flag, three-team and tag modes with the scores); and each
+pack's end (`hipend.trace`: Armagon killed and the finale; `rogueend.trace`: the four buttons, the time machine
+destroyed and the finale).
+
 ## How the oracle is built
 
 - **WinQuake's C, not its assembly.** The sources are copied and `quake-oracle.patch` applied: with `ORACLE` defined,
@@ -63,7 +75,9 @@ played back in a fresh run (`record.d1-d3.trace`) and `d1` as a timedemo (`recor
 - **Its other changes** (`quake-oracle.patch`, each under `ORACLE`): fixed substitutes for memory the C reads without
   owning it (design.md §3.3: `R_AliasDrawModel`'s `finalverts` start zeroed; `COM_FileBase` stops at the start of a
   name without `/`, where it read the memory before it; `soundinfo` prints 0 for the sound buffer's address, which
-  moves with every build; `CL_GetMessage`'s `f`, copied into the view angles when a demo ends, starts at 0), and three
+  moves with every build; `CL_GetMessage`'s `f`, copied into the view angles when a demo ends, starts at 0;
+  `ED_ParseEpair`'s `string`, which a vector of fewer than three numbers is split past the copy into, starts zeroed: a
+  rogue map's one-number `mangle`), and three
 hooks for the traces that change nothing:
   `NET_SendMessage` and `NET_SendUnreliableMessage` pass every message to `Trace_Message`, world.c's
   `Oracle_AreaLinks` lists the area nodes' edicts, and cd_win.c's `Oracle_CDState` gives its static state.
@@ -93,7 +107,9 @@ hooks for the traces that change nothing:
   640x480 and 800x600 (stretched), and DirectDraw's 8-bit full-screen modes 320x240, 640x480, 800x600 and 1024x768, one
   page each (drawn in a memory DC). The window's client area is at the screen's top left and gets the focus when first
   shown. Not part of it: `-dibonly` and the full-screen DIB modes, the window's position, minimizing, an 8-bit desktop's
-  palette, and the loading disc (WinQuake draws it on the screen and restores it: never in the frame).
+  palette, and the loading disc (WinQuake draws it on the screen and restores it: never in the frame). The frame's and
+  the z-buffer's memory start after 64 bytes of padding: a sprite clipped to the view's left edge can write one pixel
+  and one depth value before them (design.md §3.3), which land there rather than in the heap's bookkeeping.
   `Trace-Demos.ps1` starts every run with `-startwindowed -noautostretch`: in mode 0.
 - `snd_oracle.c`: a 64 KB, 16-bit stereo, 11025 Hz buffer standing in for DirectSound's, whose play position follows
   the virtual clock. The mixer then paints the same samples at the same frames in every run, which the game depends on:

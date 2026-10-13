@@ -14,7 +14,8 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
   Vulkan SDK's through `VULKAN_SDK`. CI pins the Slang release and its SHA-256 in `.github/workflows/ci.yml`.
 - Try the executable from a Quake folder (it looks for `id1/` in the current directory) with `-window`,
   `-vkvalidation` and `-quitafter <seconds>`.
-- Fidelity tests need `QUAKESHARP_QUAKE_DIR` (a folder with the original `id1/pak0.pak`, `id1/pak1.pak`) and
+- Fidelity tests need `QUAKESHARP_QUAKE_DIR` (a folder with the original `id1/pak0.pak`, `id1/pak1.pak`; the mission
+  packs' tests also `hipnotic/pak0.pak`, `rogue/pak0.pak`) and
   `QUAKESHARP_TRACE_DIR` (traces from the oracle in `tools/oracle`); otherwise they skip. When one fails, write
   QuakeSharp's trace of the same command line with `quakesharp-tools trace <quake-dir> <out> <oracle's args>`, find
   the first differing frame with `quakesharp-tools trace-compare`, then compare detail around it: `-tracedump <frame>`

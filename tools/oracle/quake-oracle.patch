@@ -186,6 +186,22 @@ index 5f5d2cf..5a28664 100644
  		if (host_client->active)
  		{
  			if (host_client->netconnection->driver == 0)
+diff --git a/pr_edict.c b/pr_edict.c
+index 544e01a..5d177bc 100644
+--- a/pr_edict.c
++++ b/pr_edict.c
+@@ -747,6 +747,11 @@ qboolean	ED_ParseEpair (void *base, ddef_t *key, char *s)
+ 		break;
+ 		
+ 	case ev_vector:
++#ifdef ORACLE
++// a value of fewer than three numbers is split past the copy's 0, into what the array held before: zeros, as
++// QuakeSharp has them, rather than what the stack held
++		memset (string, 0, sizeof(string));
++#endif
+ 		strcpy (string, s);
+ 		v = string;
+ 		w = string;
 diff --git a/quakeasm.h b/quakeasm.h
 index 96b758b..b63f5a1 100644
 --- a/quakeasm.h

@@ -58,6 +58,33 @@ public sealed class TraceRun
 
     public QuakeEngine Engine { get; }
 
+    /// <summary>
+    /// The game directory a run with <paramref name="args"/> writes into, as COM_InitFilesystem picks com_gamedir: id1,
+    /// then rogue (-rogue), hipnotic (-hipnotic) and -game's, the last added winning.
+    /// </summary>
+    public static string GameDirectory(IReadOnlyList<string> args)
+    {
+        var commandLine = new CommandLine(["quake", .. args]);
+        string game = FileSystem.GAMENAME;
+        if (commandLine.CheckParm("-rogue") != 0)
+        {
+            game = "rogue";
+        }
+
+        if (commandLine.CheckParm("-hipnotic") != 0)
+        {
+            game = "hipnotic";
+        }
+
+        int i = commandLine.CheckParm("-game");
+        if (i != 0 && i < commandLine.Argc - 1)
+        {
+            game = commandLine.Argv(i + 1);
+        }
+
+        return game;
+    }
+
     /// <summary>The trace's lines (and the oracle's -tracedump).</summary>
     public TraceWriter Writer => writer;
 

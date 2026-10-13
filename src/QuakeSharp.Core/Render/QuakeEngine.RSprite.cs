@@ -557,7 +557,9 @@ public sealed partial class QuakeEngine
                     btemp = texture[pbase + (s >> 16) + ((t >> 16) * cachewidth)];
                     if (btemp != 255)
                     {
-                        if (zbuffer[pz] <= (izi >> 16))
+                        // a left edge clipped to u -1 on the frame's first row: the C writes the pixel and its depth
+                        // before the frame and the z-buffer (design.md §3.3), where nothing is drawn
+                        if (pz >= 0 && zbuffer[pz] <= (izi >> 16))
                         {
                             zbuffer[pz] = (short)(izi >> 16);
                             dest[pdest] = btemp;

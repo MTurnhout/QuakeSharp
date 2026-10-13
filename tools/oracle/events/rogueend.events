@@ -1,0 +1,82 @@
+5 map r2m8
+60 god
+62 noclip
+64 cl_forwardspeed 320
+64 cl_upspeed 320
+80 +moveup
+101 -moveup
+104 cl_yawspeed 26.838710
+105 +left
+121 -left
+124 +forward
+607 -forward
+610 +movedown
+638 -movedown
+641 cl_yawspeed 718.451613
+642 +left
+658 -left
+661 noclip
+664 +forward
+694 -forward
+724 noclip
+729 +moveup
+731 -moveup
+734 cl_yawspeed 379.870968
+735 +right
+751 -right
+754 +forward
+785 -forward
+788 cl_yawspeed 379.870968
+789 +left
+805 -left
+808 noclip
+811 +forward
+841 -forward
+871 noclip
+876 +moveup
+880 -moveup
+883 cl_yawspeed 693.677419
+884 +left
+900 -left
+903 +forward
+1023 -forward
+1026 cl_yawspeed 49.548387
+1027 +left
+1043 -left
+1046 noclip
+1049 +forward
+1079 -forward
+1109 noclip
+1114 +moveup
+1118 -moveup
+1121 cl_yawspeed 371.612903
+1122 +left
+1138 -left
+1141 +forward
+1163 -forward
+1166 cl_yawspeed 371.612903
+1167 +right
+1183 -right
+1186 noclip
+1189 +forward
+1219 -forward
+1249 noclip
+1254 +moveup
+1294 -moveup
+1297 cl_yawspeed 454.193548
+1298 +left
+1314 -left
+1317 +forward
+1476 -forward
+1479 cl_yawspeed 82.580645
+1480 +right
+1496 -right
+1499 impulse 9
+1500 give p 100
+1501 impulse 8
+1503 impulse 8
+1505 impulse 255
+1509 +attack
+2099 -attack
+5000 +jump
+5010 -jump

@@ -61,8 +61,15 @@ Identified by MD5 at startup, so the game mode is chosen reliably:
 |---|---|---|
 | `id1/pak0.pak` | Quake registered 1.06 (also in 1.08, 1.09) | `5906e5998fc3d896ddaf5e6a62e03abb` |
 | `id1/pak1.pak` | Quake registered 1.06 | `d76b3e5678f0b64ac74ce5e340e6a685` |
-| `hipnotic/pak0.pak` | Mission Pack 1, Scourge of Armagon (to verify) | `0ab83681aaf841c4320269e02941a14a` |
-| `rogue/pak0.pak` | Mission Pack 2, Dissolution of Eternity (to verify) | `c38a4e04219c317cd1b02f386bdfe11f` |
+| `hipnotic/pak0.pak` | Mission Pack 1, Scourge of Armagon (its CD; Steam's) | `0ab83681aaf841c4320269e02941a14a` |
+| `rogue/pak0.pak` | Mission Pack 2, Dissolution of Eternity (the mission packs' CD of 1998; Steam's) | `c38a4e04219c317cd1b02f386bdfe11f` |
+| `rogue/pak0.pak` | Mission Pack 2 (its own CD) | `f8898a483b131de21581656c94f3c1a4` |
+| `rogue/pak0.pak` | Mission Pack 2 (GOG.com) | `f71428763229bdb373f00a547296efe3` |
+
+The mission packs' MD5s are confirmed against Debian's game-data-packager (`data/quake.yaml`), which lists them by the
+discs they were read from: Steam's hipnotic PAK is the Scourge of Armagon CD's, its rogue PAK the 1998 CD that holds
+both packs. Dissolution of Eternity shipped in three builds of the same size; all three are original releases (not the
+rerelease), and the traces are made from whichever the user has (decision 51).
 
 The shareware `pak0.pak` (1.06, freely distributable as part of `quake106.zip`) will be added when CI fetches it
 (§10).
@@ -149,11 +156,12 @@ share it only where a trace shows the difference.
 | `r_alias.c`: `R_AliasDrawModel` | The vertices behind the near plane are not projected, so their `v[0]`, `v[1]`, `v[5]` are what the stack array `finalverts` held; `R_Alias_clip_z` picks its direction of interpolation from `v[1]`, which moves a clipped vertex's `t` by one (demo3 at 640x480, frame 2760) | `finalverts` starts zeroed; the oracle is patched to zero it too (`quake-oracle.patch`) |
 | `common.c`: `COM_FileBase` | For a name without `/` (`progs.dat`, which `PR_LoadProgs` loads) the loop looking for the `/` walks back past the name's start, through the memory before it, to a 0 or a `/`: with the oracle's string literals, the one before `"progs.dat"` went into `COM_LoadFile`'s `base[32]` and overran the stack | The loop stops at the start, as if a 0 were before it (the base is `progs`); the oracle is patched to do the same. The base only names the hunk's blocks |
 | `net_main.c`: `NET_SendToAll` | A client slot without a connection is skipped before its two states are set, so the loop that waits for the slots reads whatever the stack held: if it reads "not done" the loop waits until `blocktime` (for ever on the virtual clock) | Such a slot is done; the oracle is patched to do the same |
-| `pr_edict.c`: `ED_ParseEpair` | A vector value is copied into `char string[128]` and split at three spaces; with fewer than three numbers the split goes on past the copy's 0 into what the array held before | Past the copy the array holds zeros (the missing numbers are 0); a value of 128 characters or more, which overruns the C's array, is copied whole |
+| `pr_edict.c`: `ED_ParseEpair` | A vector value is copied into `char string[128]` and split at three spaces; with fewer than three numbers the split goes on past the copy's 0 into what the array held before (rogue's r1m4 has a `mangle` of `"20"`: the oracle read 15 for its second number) | Past the copy the array holds zeros (the missing numbers are 0); the oracle is patched to do the same. A value of 128 characters or more, which overruns the C's array, is copied whole |
 | `cl_demo.c`: `CL_GetMessage` | At the end of a demo the `fread`s of the view angles fail, and the local `f` they would have filled, uninitialised, is copied into `cl.mviewangles[0]` (a demo cut short, `record.d3`, shows it on its last frame) | `f` starts at 0 in each call; the oracle is patched to do the same |
 | `host_cmd.c`: `Host_Loadgame_f` | A savegame that lacks a value leaves its variable as it was: the version, the spawn parms, the skill, the map's name and the time are uninitialised locals | They start at 0 or empty; a light style that cannot be read is the last string read, as the C's `str` keeps it |
 | `pr_cmds.c`: `PF_break` | Writes to the address -4 to stop in the debugger: the program crashes | A `Sys_Error` ("break statement") |
 | `snd_dma.c`: `S_SoundInfo_f` | `soundinfo` prints the DMA buffer's address (`0x%x dma buffer`): DirectSound's in WinQuake, a static array's in the oracle, moving with every build | 0; the oracle is patched to print 0 too |
+| `d_sprite.c`: `D_SpriteDrawSpans` | A sprite clipped to the view's left edge can keep a vertex just left of it (u -1.16 after the clip's rounding), so a span starts at u -1: on the frame's first row its first pixel and depth are written before the frame and the z-buffer (the hunk's header in WinQuake; in the oracle, heap memory; underwater, the stack below the warp buffer). On the rows below, u -1 is the previous row's last pixel, as in the C (hiptour, hip2m6) | Writes before the arrays are dropped; nothing there is drawn. The oracle's frame and z-buffer start after padding, which takes them |
 | `d_edge.c`: `D_DrawSurfaces` with `r_drawflat` | A surface's flat colour is the low byte of its `msurface_t`'s address | The surface's index in the frame's surface list |
 
 ### 3.4 The executables
@@ -452,7 +460,9 @@ off, its messages) over an `ICdDrive` that answers the MCI commands it sends, ea
   format 5's `A` line checks cd_win.c's state every frame.
 - **The file drive** (`Platform.Sdl`): the tracks are files the user has, `music/trackNN.ogg` or `.wav` in the game
   directories, or the Steam install's `rerelease/id1/music` (the rerelease's `track02.ogg`-`track11.ogg`, or rips of
-  the CD); track 1 is data and the highest track found is the last. Without files it is a drive with no disc
+  the CD); track 1 is data and the highest track found is the last. A mission pack came on its own CD, so with
+  `-hipnotic` or `-rogue` the disc is the pack's: its folder's `music`, or the rerelease's `rerelease/hipnotic/music`
+  and `rerelease/rogue/music` (`track02.ogg`-`track09.ogg`), never id1's. Without files it is a drive with no disc
   (`CDAudio_Init: No CD in player.`). A track plays on its own SDL3 audio stream on the sound device, which SDL mixes
   with the game's; its end is MCI's `MCI_NOTIFY_SUCCESSFUL`, handed to `CDAudio_MessageHandler` where WinQuake's window
   procedure gets it (`Sys_SendKeyEvents`), so a looping track starts again. Under `-recordevents` the virtual disc
@@ -547,7 +557,11 @@ QuakeSharp and recorded with `-recordevents`, e1m1 into e1m2 (24,500). With mile
 too: the config.cfg each run writes when it quits, the 41 savegames of a save on every map (`saves`, 17,705 frames),
 three demos, two screenshots and `qconsole.log` (`record`), byte for byte; and the files read back in fresh runs match
 on every frame: the menus' config.cfg (`attract.config`), every save loaded and played on (`loads`, 12,905 frames),
-each demo played back and as a timedemo.
+each demo played back and as a timedemo. With milestone 10 the mission packs are traced as id1 is (decision 45),
+`-hipnotic` and `-rogue` from folders holding only their original PAKs: their seven demos, their attract loops, a tour
+of each pack's maps (18 and 17, 35,000 frames, with the packs' items picked up and weapons fired) whose 37 saves are
+compared and then loaded in fresh runs, the menus' episodes and levels and the games they start (rogue's four team
+modes), and each pack's end through its finale: every line of all 128,276 frames matches, and every file.
 
 ## 11. Milestones
 
@@ -871,6 +885,21 @@ first and QuakeSharp follows them.
    items (`give`, the impulses), so sbar.c draws them; their saves on every map, read back; the single-player and
    network menus' episodes and levels; rogue's team modes (`teamplay` 4-6, the scores sbar.c draws); each pack's end.
    `GameTests` checks them; the executable plays the packs' tracks (the rerelease's `hipnotic/music`, `rogue/music`).
+   *Done: the MD5s confirmed (§2: hipnotic's the Scourge of Armagon CD's, rogue's the 1998 CD's, one of three original
+   builds); `Trace-Demos.ps1` copies only the packs' PAKs, the tests run from a folder holding only the original PAKs
+   (the installations' pack folders hold a loose config.cfg) and compare the files in the pack's game folder. Traced
+   and matched on every line and every file (`DemoTests`): the seven demos and both attract loops (QuakeSharp matched
+   them at their first run); `hiptour` and `roguetour` (18,000 and 17,000 frames: on every map a noclip route to the
+   pack's items, the keys, powerups, armours and rogue's ammo picked up, planned from the oracle's dumps of each map, then
+   `impulse 9`, `give` with the packs' weapons and ammo, each pack's weapons fired, its second weapons and ammo by a
+   second press, and a save) and their 37 saves loaded in fresh runs (`hiploads`, `rogueloads`), then the load menu;
+   `hipmenus` and `roguemenus` (Single Player's new game, the game options' teamplay through rogue's six modes, every
+   episode and level, a game started from them: rogue's capture the flag, then one flag, three teams and tag with the
+   scores and the bar's team colours); `hipend` (Armagon killed with quad rockets, the finale's two pages) and `rogueend`
+   (the four buttons pressed, the time machine destroyed, the finale). Found on the way, both undefined behaviour of the
+   C the oracle now shares (§3.3): rogue's r1m4 has a one-number vector, which `ED_ParseEpair` split into stack memory,
+   and a sprite clipped at the view's left edge wrote before the frame and the z-buffer (hip2m6, where QuakeSharp's port
+   threw). The executable plays a pack's own disc: its music folder or the rerelease's (§7.2).*
 6. **The remaining UI**, from step 2's list, in new events files traced at 320×240 (some also at 640×480). Expected
    there: the console (scrolling back, the history, command completion, `messagemode` and `messagemode2`,
    `con_notifytime`), screen.c (the turtle, the net icon, the disc, `showpause`, the loading plaque, centre prints of
@@ -943,6 +972,7 @@ plays with the mouse, in every mode, and both mission packs.
 | 48 | Shareware in CI (was D11) | CI downloads `quake106.zip` from a fixed mirror (chosen with the user before it is committed), checks its MD5, extracts `pak0.pak` (the registered one, same MD5) and caches it, never committed; the test keeps only the last trace lines of demo1-3 (milestone 10, step 7) | 2026-10-12 |
 | 49 | Fidelity target version (was D4) | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`. Audited (§3.4): Winquake.exe's start-up lines (IPX, the joystick), its `joystick` cvar and its seven modes are emulated; its real-time `rand()` and its x87 and assembly rounding are documented; DOS quake.exe 1.08's differences (DJGPP's `rand()`, VGA's palette, its drivers) are documented, not emulated | 2026-10-12 |
 | 50 | Default video mode (was D7) | As Winquake.exe 1.09 on the audited machine: the game starts in mode 3, 320×240 full screen (vid_win.c's `vid_default` once DirectDraw offers modes), where the mouse is taken; `-window` is WinQuake's `-startwindowed` (mode 1, a 640×480 window showing 320×240 doubled). The oracle's runs, the traces and `-recordevents` start with `-startwindowed -noautostretch`: mode 0, a 320×240 window (`-oraclevid` its size), so the existing traces keep their frames and the recorded playthrough its windowed mouse (§6.4) | 2026-10-13 |
+| 51 | Mission packs' data and disc | The packs' MD5s are confirmed with Debian's game-data-packager: hipnotic's is the Scourge of Armagon CD's; Dissolution of Eternity has three original builds of one size (its CD, the 1998 mission packs CD that Steam ships, GOG's), all valid, the traces made from the user's. The fidelity tests copy the original PAKs into a folder of their own, as the oracle's holds only them. A pack plays its own CD's tracks (`rerelease/hipnotic/music`, `rerelease/rogue/music`), never id1's (§2, §7.2) | 2026-10-13 |
 
 ## 13. Open decisions
 

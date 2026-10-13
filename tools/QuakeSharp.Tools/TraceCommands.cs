@@ -10,8 +10,8 @@ internal static class TraceCommands
     // trace <quake-dir> <out.trace> [args]: QuakeSharp's trace of a run, the oracle's switches read as it reads them
     // (-tracequitafterdemo, -oracleframes <n>, -oraclevid <w> <h>, -oraclestep <n>, -tracedump <frame>,
     // -traceshot <frame>); -traceinput <file> (any number of times, not passed on) puts a file into the user folder's
-    // id1 before the run, as Trace-Demos.ps1 puts an earlier run's files into the oracle's. What the run leaves in
-    // the user folder's id1 is kept in <out>.files, as the oracle's run's
+    // game directory (id1, or -rogue's, -hipnotic's) before the run, as Trace-Demos.ps1 puts an earlier run's files
+    // into the oracle's. What the run leaves there is kept in <out>.files, as the oracle's run's
     public static int Trace(string baseDir, string output, string[] args)
     {
         Commands.RefuseRepository(output);
@@ -54,13 +54,13 @@ internal static class TraceCommands
         }
 
         string userDir = Path.Combine(Path.GetTempPath(), "quakesharp-trace", Guid.NewGuid().ToString("N"));
-        string id1 = Path.Combine(userDir, "id1");
+        string gameDir = Path.Combine(userDir, TraceRun.GameDirectory(args));
         try
         {
-            Directory.CreateDirectory(id1);
+            Directory.CreateDirectory(gameDir);
             foreach (string input in inputs)
             {
-                File.Copy(input, Path.Combine(id1, Path.GetFileName(input)));
+                File.Copy(input, Path.Combine(gameDir, Path.GetFileName(input)));
             }
 
             var run = new TraceRun(baseDir, userDir, args, width, height, fps);
@@ -103,9 +103,9 @@ internal static class TraceCommands
             }
 
             Directory.CreateDirectory(files);
-            foreach (string file in Directory.EnumerateFiles(id1, "*", SearchOption.AllDirectories))
+            foreach (string file in Directory.EnumerateFiles(gameDir, "*", SearchOption.AllDirectories))
             {
-                string target = Path.Combine(files, Path.GetRelativePath(id1, file));
+                string target = Path.Combine(files, Path.GetRelativePath(gameDir, file));
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 File.Copy(file, target);
             }

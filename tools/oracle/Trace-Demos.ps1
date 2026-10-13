@@ -27,6 +27,17 @@ when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.fi
   record.trace          demos recorded (events/record.events), two screenshots, with -condebug's qconsole.log;
                         record.d1-d3.trace: each demo played back, record.timedemo.trace: d1 as a timedemo
 
+With the mission packs' hipnotic/pak0.pak and rogue/pak0.pak in -QuakeDir (only those PAKs are copied, never the
+packs' loose config.cfg), run with -hipnotic and -rogue in their own game folders, whose files are kept:
+  hipdemo1-4.trace, roguedemo1-3.trace    the packs' demos
+  hipattract.trace, rogueattract.trace    their attract loops (their own quake.rc), once around
+  hiptour.trace, roguetour.trace          every map of the pack: a noclip route to its items, then the pack's weapons
+                                          fired, and a save named after the map
+  hiploads.trace, rogueloads.trace        each of those saves loaded in a fresh run and played on, then the load menu
+  hipmenus.trace, roguemenus.trace        a new game, the game options' teamplay, every episode and level, a game
+                                          started from them (rogue: capture the flag, one flag, three teams, tag)
+  hipend.trace, rogueend.trace            each pack's end: Armagon killed, the time machine destroyed; the finale
+
 .PARAMETER Oracle
 quake-oracle.exe, as Build-Oracle.ps1 builds it.
 
@@ -58,27 +69,38 @@ if (($OutDir + '\').StartsWith($repo.TrimEnd('\') + '\', [StringComparison]::Ord
     throw "$OutDir is inside the repository; traces are derived from game data and stay outside it"
 }
 
-# The oracle's own game folder, beside the executable
+# The oracle's own game folder, beside the executable: id1's two PAKs, and the mission packs' (design.md decision 45:
+# only their pak0.pak, never the installation's loose config.cfg)
 $Oracle = (Resolve-Path $Oracle).Path
 $base = Join-Path (Split-Path $Oracle) 'quake'
-$id1 = Join-Path $base 'id1'
-New-Item -ItemType Directory -Force $id1 | Out-Null
-foreach ($pak in 'pak0.pak', 'pak1.pak') {
-    $source = Get-ChildItem (Join-Path $QuakeDir 'id1') | Where-Object { $_.Name -ieq $pak } | Select-Object -First 1
-    if (-not $source) { throw "no id1/$pak in $QuakeDir" }
-    $target = Join-Path $id1 $pak
+function CopyPak([string] $game, [string] $pak) {
+    $dir = Get-ChildItem $QuakeDir -Directory | Where-Object { $_.Name -ieq $game } | Select-Object -First 1
+    $source = if ($dir) { Get-ChildItem $dir.FullName | Where-Object { $_.Name -ieq $pak } | Select-Object -First 1 }
+    if (-not $source) { return $false }
+    New-Item -ItemType Directory -Force (Join-Path $base $game) | Out-Null
+    $target = Join-Path (Join-Path $base $game) $pak
     if (-not (Test-Path $target) -or (Get-FileHash $target).Hash -ne (Get-FileHash $source.FullName).Hash) {
         Copy-Item $source.FullName $target
     }
+    return $true
 }
+foreach ($pak in 'pak0.pak', 'pak1.pak') {
+    if (-not (CopyPak 'id1' $pak)) { throw "no id1/$pak in $QuakeDir" }
+}
+$packs = @('hipnotic', 'rogue' | Where-Object { CopyPak $_ 'pak0.pak' })
+$gameDirs = @('id1') + $packs
 
-# A run of the oracle: from an id1 holding only the PAKs (and the files of earlier runs named in $inputs, as
-# "<run>/<file>"), writing <name>.trace; what id1 holds afterwards, but the PAKs, is kept in <name>.files
-function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @()) {
+# A run of the oracle: from game folders holding only the PAKs (and the files of earlier runs named in $inputs, as
+# "<run>/<file>", in the run's game folder $game), writing <name>.trace; what the run's game folder holds afterwards,
+# but the PAKs, is kept in <name>.files
+function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), [string] $game = 'id1') {
     if ($Only -and $Only -notcontains $name) { return }
-    Get-ChildItem $id1 | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' } | Remove-Item -Recurse
+    foreach ($g in $gameDirs) {
+        Get-ChildItem (Join-Path $base $g) | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' } | Remove-Item -Recurse
+    }
+    $gamedir = Join-Path $base $game
     foreach ($earlier in $inputs) {
-        Copy-Item (Join-Path $OutDir ($earlier -replace '^([^/]+)/', '$1.files/')) $id1
+        Copy-Item (Join-Path $OutDir ($earlier -replace '^([^/]+)/', '$1.files/')) $gamedir
     }
     $trace = Join-Path $OutDir "$name.trace"
     # from the Quake folder with WinQuake's base directory ".": the console shows "./id1/pak0.pak", as QuakeSharp's
@@ -91,7 +113,7 @@ function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @()) 
     $files = Join-Path $OutDir "$name.files"
     if (Test-Path $files) { Remove-Item $files -Recurse }
     New-Item -ItemType Directory $files | Out-Null
-    $written = @(Get-ChildItem $id1 | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' })
+    $written = @(Get-ChildItem $gamedir | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' })
     $written | Copy-Item -Destination $files -Recurse
     Write-Host "$name.trace: $frames frames; files: $(($written | ForEach-Object Name) -join ', ')"
 }
@@ -134,4 +156,32 @@ $events = Join-Path $PSScriptRoot 'events\loads.events'
 if (-not $Only -or $Only -contains 'loads') {
     $saves = @(Get-ChildItem (Join-Path $OutDir 'saves.files') -Filter '*.sav' | ForEach-Object { "saves/$($_.Name)" })
     Trace 'loads' @('-traceevents', $events, '-oracleframes', '12905') $saves
+}
+
+# the mission packs (design.md §11.4, decision 45), in their own game folders: their demos and attract loops; the
+# tours of every map with the packs' weapons and items, saving on each, and those saves loaded in a fresh run; the
+# menus' episodes and levels and the games they start (rogue's team modes); each pack's end
+$prefixes = @{ 'hipnotic' = 'hip'; 'rogue' = 'rogue' }
+$demos = @{ 'hipnotic' = @('hipdemo1', 'hipdemo2', 'hipdemo3', 'hipdemo4'); 'rogue' = @('demo1', 'demo2', 'demo3') }
+$attract = @{ 'hipnotic' = 14000; 'rogue' = 17000 }
+$packGames = @{
+    'hipnotic' = [ordered]@{ 'tour' = 18000; 'menus' = 2344; 'end' = 9000; 'loads' = 5700 }
+    'rogue' = [ordered]@{ 'tour' = 17000; 'menus' = 3843; 'end' = 7000; 'loads' = 5400 }
+}
+foreach ($pack in $packs) {
+    $p = $prefixes[$pack]
+    foreach ($demo in $demos[$pack]) {
+        Trace "$p$($demo -replace '^hip', '')" @("-$pack", '-tracequitafterdemo', '+playdemo', $demo) @() $pack
+    }
+    Trace "${p}attract" @("-$pack", '-oracleframes', "$($attract[$pack])") @() $pack
+    foreach ($game in $packGames[$pack].Keys) {
+        $name = "$p$game"
+        if ($Only -and $Only -notcontains $name) { continue }
+        $events = Join-Path $PSScriptRoot "events\$name.events"
+        $inputs = @()
+        if ($game -eq 'loads') {
+            $inputs = @(Get-ChildItem (Join-Path $OutDir "${p}tour.files") -Filter '*.sav' | ForEach-Object { "${p}tour/$($_.Name)" })
+        }
+        Trace $name @("-$pack", '-traceevents', $events, '-oracleframes', "$($packGames[$pack][$game])") $inputs $pack
+    }
 }

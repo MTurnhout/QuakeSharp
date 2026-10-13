@@ -46,7 +46,8 @@ static int Usage()
                                                             QuakeSharp's trace of a run, as the oracle writes
                                                             it (e.g. -tracequitafterdemo +playdemo demo1);
                                                             its files in <out>.files; -traceinput <file> puts
-                                                            a file into its id1 first
+                                                            a file into its game directory (id1, -rogue's,
+                                                            -hipnotic's) first
           quakesharp-tools trace-compare <a.trace> <b.trace> [letters]
                                                             the first frame at which each kind of line differs
                                                             (letters: which, e.g. FCEXSTR; all by default)

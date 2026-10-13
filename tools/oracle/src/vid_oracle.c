@@ -147,11 +147,27 @@ static short	*zbuffer;
 // whether the window has been shown: Windows activates it then
 static qboolean	window_shown;
 
+// The buffers start after some padding: a sprite whose clipped left edge rounds below the view's on its first row
+// writes a pixel and a depth value just before the frame and the z-buffer (design.md §3.3, D_SpriteDrawSpans),
+// which land there rather than in the heap's own bookkeeping
+#define BUFFER_GUARD	64
+
+static void *GuardedAlloc (int size)
+{
+	return (byte *)calloc (size + BUFFER_GUARD, 1) + BUFFER_GUARD;
+}
+
+static void GuardedFree (void *buffer)
+{
+	if (buffer)
+		free ((byte *)buffer - BUFFER_GUARD);
+}
+
 static byte *MemoryDC (byte *old, int width, int height)
 {
-	free (old);
+	GuardedFree (old);
 	dc_rowbytes = (width + 3) & ~3;
-	return calloc (dc_rowbytes * height, 1);
+	return GuardedAlloc (dc_rowbytes * height);
 }
 
 /*
@@ -260,8 +276,8 @@ qboolean VID_AllocBuffers (int width, int height)
 		d_pzbuffer = NULL;
 	}
 
-	free (zbuffer);
-	zbuffer = calloc (tbuffersize, 1);
+	GuardedFree (zbuffer);
+	zbuffer = GuardedAlloc (tbuffersize);
 	d_pzbuffer = zbuffer;
 
 	vid_surfcache = (byte *)d_pzbuffer +
@@ -626,7 +642,7 @@ static void DestroyDIBWindow (void)
 	if (modestate == MS_WINDOWED)
 	{
 	// destroy the associated MGL DC's; the window gets reused
-		free (dibdc);
+		GuardedFree (dibdc);
 		dibdc = NULL;
 	}
 }
@@ -638,7 +654,7 @@ static void DestroyFullscreenWindow (void)
 	if (modestate == MS_FULLSCREEN)
 	{
 	// destroy the existing fullscreen mode and DC's
-		free (memdc);
+		GuardedFree (memdc);
 		memdc = NULL;
 	}
 }
@@ -673,7 +689,7 @@ qboolean VID_SetWindowedMode (int modenum)
 
 	DestroyFullscreenWindow ();
 
-	free (dibdc);
+	GuardedFree (dibdc);
 	dibdc = NULL;
 
 	stretched = modelist[modenum].stretched;
@@ -740,7 +756,7 @@ qboolean VID_SetFullscreenMode (int modenum)
 	DestroyDIBWindow ();
 
 	// Destroy old DC's, resetting back to fullscreen mode
-	free (memdc);
+	GuardedFree (memdc);
 	memdc = NULL;
 
 	memdc = MemoryDC (memdc, modelist[modenum].width, modelist[modenum].height);
