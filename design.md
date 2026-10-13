@@ -589,7 +589,7 @@ registered data's, byte for byte).
 | 8 ✅ | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files. *Plan: §11.2. Trace format 5 adds `P` (the sound device's whole buffer) and `A` (the CD); every trace (demo1-3 at three sizes, the attract loop, the menus, the scripted games, the playthrough, and `sound.events` with and without a sound device and CD) matches with them on every frame: the mixer ported with milestone 5 was already sample-exact. Ported: cd_win.c over an MCI-like `ICdDrive` (the oracle compiles it unchanged over a virtual disc), snd_win.c's start-up messages (as Winquake.exe 1.09 prints them), `AppActivate`'s sound part. The executable plays the CD's tracks from the user's files (the rerelease's Ogg Vorbis through NVorbis, or WAV) on their own SDL3 stream, is silent without the focus, and under `-recordevents` plays the virtual disc's tracks for listening only* |
 | 9 ✅ | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync. *Plan: §11.3. Each oracle run keeps the files it writes (`<name>.files`), and every trace test compares QuakeSharp's with them byte for byte: config.cfg after every run (it already matched), the 41 saves of `saves.events` (a save on every map, the menus' slots, the refusals) and `commands`' save, three demos (through a level change and an intermission, with a forced CD track, one cut by the end of the run), two screenshots and `qconsole.log`. Read back in fresh runs, in sync on every frame: the menus' config.cfg, every save (`loads.events`), every demo played back and as a timedemo. Fixed on the way: reading a savegame as the C runtime's `fscanf` does (hex floats, exponents without digits, 64-bit `%i`, a 0xff byte taken for EOF; checked on 20,000 inputs of each against the oracle), `qconsole.log` in text mode (CR LF), `CL_GetMessage`'s uninitialised `f` at a demo's end (§3.3, the oracle patched alike), and the demo file still open at the end. Winquake.exe 1.09 loads QuakeSharp's saves, and QuakeSharp loads Winquake.exe's saves and plays its demos* |
 | 10 ✅ | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios. *Plan: §11.4. Winquake.exe 1.09 audited (§3.4): its start-up lines, `joystick` cvar and seven modes emulated, its real-time `rand()` and x87 rounding documented, quake.exe 1.08 documented from the source. Ported: in_win.c over a virtual Win32 on both sides (trace format 6's `I`; `QuakeEngine.Pending.cs` gone) and vid_win.c's modes and Video menu; the executable starts as Winquake.exe, in mode 3 full screen, and plays with the mouse in every mode. Both mission packs traced from their original PAKs (MD5s confirmed): their demos, attract loops, tours, saves read back, menus and endings, every line and file in sync. The rest of the UI in six scripted runs; the fidelity tests reach 84.3% of Core's lines, what none reaches listed with why. CI's shareware smoke test plays demo1-3 from `quake106.zip`'s `pak0.pak` to the oracle's last frames* |
-| 11 | Networking | UDP play with other NetQuake engines; net game tests |
+| 11 | Networking | UDP play with other NetQuake engines; net game tests. *Plan: §11.5* |
 | Later | | Enhanced mode (Vulkan hardware renderer), QuakeWorld, release builds (single file, NativeAOT) |
 
 ### 11.1 Milestone 7: the plan
@@ -993,6 +993,83 @@ mission packs' demos, attract loops, tours, saves and scripted games match the o
 included; each function step 2 found unreached is reached by a trace in sync or listed with why; and the executable
 plays with the mouse, in every mode, and both mission packs.
 
+### 11.5 Milestone 11: the plan
+
+net_main.c, net_loop.c and net_dgrm.c are ported and traced, but under the datagram driver both sides run stand-ins
+for WinQuake's LAN drivers (decision 33): `VirtualLanDriver` and `net_oracle.c`'s TCP/IP, net_wins.c with the sockets
+taken out (no name resolves, no packet arrives, what is written goes nowhere), and an IPX driver that fails as
+today's Windows' does (§3.4). So no trace has another host: the datagram driver's connections, the server list,
+`ban`, `net_stats`, `test` and `test2` are among what milestone 10 found unreached. Milestone 11 ports the LAN drivers
+themselves over a Winsock that is real in the executable and virtual in the traces, traces games between several
+hosts, adds the dedicated server, and plays with other NetQuake engines.
+
+**Winsock, as in_win.c's Win32** (decision 43's pattern). net_win.c (the driver lists), net_wins.c and net_wipx.c are
+ported in Core (`QuakeEngine.NetWin.cs`, `NetWins.cs`, `NetWipx.cs`, the C's names) over `IWinsock`: the wsock32
+calls they make (`WSAStartup`, `WSACleanup`, `WSAGetLastError`, `socket`, `ioctlsocket`'s `FIONBIO`, `setsockopt`'s
+`SO_BROADCAST`, `bind`, `recvfrom` with and without `MSG_PEEK`, `sendto`, `closesocket`, `gethostname`,
+`gethostbyname`, `gethostbyaddr`, `getsockname`, `inet_addr`, the blocking hook's), with Winsock's error codes. The
+oracle compiles the three files unchanged over `winsock_oracle.c` (`LoadLibrary("wsock32.dll")` and `GetProcAddress`
+answered with its functions, as `in_oracle.c` answers user32's); `VirtualLanDriver`, `VirtualIpxDriver` and
+`net_oracle.c` go. IPX stays a socket family the machine refuses, so net_wipx.c fails as on today's Windows.
+
+**The virtual network** (`VirtualWinsock`, `winsock_oracle.c`). A machine with a fixed name and IPv4 address on a
+virtual LAN (proposal: `quake1` at 10.0.0.1, other hosts 10.0.0.2 and up), ports as wsock32 hands them out, datagrams
+queued per socket, broadcast to the LAN, and the error codes Windows gives (`WSAEWOULDBLOCK` on an empty socket,
+`WSAECONNRESET` after a datagram to a closed port, as today's Windows reports the ICMP answer: to be audited). The
+machine now has a name, so net_wins.c sets `hostname` to it and every trace changes once and is regenerated.
+
+**Trace format 7** adds a line after `I`, and scripted input takes datagrams:
+
+| Line | Fields |
+|---|---|
+| `U <hash> <datagrams>` | The datagrams the LAN drivers sent and received during the frame, in order: the socket's port, the other end's address, the bytes |
+
+`-traceevents` takes `<frame> @udp <port> <ip:port> <hex bytes>`: a datagram from that address arriving at the
+machine's port before the frame, as `@mouse` and `@key` arrive.
+
+**Games between hosts.** The oracle cannot run two engines in one process (its state is the C's globals), and two
+processes on real sockets would not be deterministic. So QuakeSharp's `NetRun` (Diagnostics) runs several engines in
+one process, each its own `VirtualWinsock` on one virtual LAN and one virtual clock, a datagram delivered at the
+receiver's next frame, each host with its own `-traceevents`; it writes each host's trace and an events file with the
+host's input and every datagram it received as `@udp` lines. The oracle replays each host alone from its file. When
+every host's trace matches the oracle's, the oracle's hosts given the same datagrams sent the same ones, so they would
+have played the same game together, frame for frame. A lossy LAN (a datagram dropped by a fixed rule) reaches
+net_dgrm.c's resends, NAKs and timeouts. `quakesharp-tools netrun` writes the files; `Trace-Demos.ps1` replays them;
+`DemoTests` compares every host.
+
+**The dedicated server.** sys_win.c's `-dedicated`: no window, video or sound; the console text on standard output and
+`Sys_ConsoleInput` reading standard input as WinQuake's console window does (line editing, backspace, the echo). The
+traces script it with `<frame> @stdin <text>` lines, typed into `Sys_ConsoleInput` as keys are into the window.
+
+**The real Winsock** (`SocketWinsock`, in the platform project): .NET UDP sockets with Winsock 1.1's semantics, on
+Windows and Linux alike: non-blocking, broadcast, the machine's name and first IPv4 address, `MSG_PEEK`, the errors
+mapped to Winsock's codes. `-recordevents` records every datagram that arrives as an `@udp` line, so a game played over
+a real network replays in the oracle and in `quakesharp-tools trace`. No IPv6 and no NAT traversal: the original
+protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
+
+**Porting order.** Each step builds with the tests green and is committed:
+
+1. **net_wins.c, net_wipx.c and net_win.c over `IWinsock`**: the oracle first (`winsock_oracle.c`, format 7's `U`,
+   `@udp`), then Core, `VirtualWinsock` for one machine with no other host. Every trace is regenerated and matches;
+   the stand-ins go.
+2. **Games between hosts**: `NetRun` and its events files; scripted games, each host traced and replayed: a client
+   joining a listen server through the menus (Join Game's search, the server list) and `connect`; three hosts in a
+   deathmatch with chat (`say`, `say_team`, `tell`), frags, a level change, a client leaving, one timing out, `kick`,
+   `ban`, `status`, `net_stats`, `test` and `test2`; the lossy LAN. What milestone 10's step 2 listed as "another
+   host" is reached or listed with why.
+3. **The dedicated server**: sys_win.c's `-dedicated` in Core and the executable, `@stdin` on both sides; a dedicated
+   server traced with remote clients, `Host_FindMaxClients`' lines, its `say`, `status` and `startdemos`.
+4. **The real Winsock**: `SocketWinsock`, the executable on it, `-recordevents`' `@udp`. CI runs a test of two
+   engines in one process over real sockets on 127.0.0.1 (a connection made and a game played; not traced, real time).
+5. **Other engines**, audited by hand into §3.4 as decision 42's audit: Winquake.exe 1.09 (a scratch copy) and
+   QuakeSharp on one machine and on two, each the server and each the client, through the search and `connect`; a
+   deathmatch with chat, a level change and a disconnect, QuakeSharp's side recorded and replayed in the oracle in
+   sync; the same with the engines of D12.
+
+**Done when** the LAN drivers are ported with no stand-in left; games between hosts, the lossy LAN and the dedicated
+server match the oracle on every frame for every host; the executable plays over a real network with Winquake.exe
+(and D12's engines), as server and as client, and those games replay in sync.
+
 ## 12. Decision log
 
 | # | Topic | Decision | Date |
@@ -1054,6 +1131,9 @@ plays with the mouse, in every mode, and both mission packs.
 
 ## 13. Open decisions
 
-To confirm with the user before the milestones they affect; the proposals are the defaults until then.
+To confirm with the user before the milestones they affect; the proposals are the defaults until then (the
+earlier ones are settled in the decision log, marked "was D<n>"):
 
-None: every question raised here has been settled with the user and moved to the decision log, marked "was D<n>".
+| # | Question | Proposal |
+|---|---|---|
+| D12 | Which NetQuake engines besides Winquake.exe 1.09 to play with (milestone 11, step 5); each is a download | QuakeSpasm's latest Windows release (protocol 15, the engine most NetQuake servers run), run from a scratch folder outside the repository, never committed or copied from |
