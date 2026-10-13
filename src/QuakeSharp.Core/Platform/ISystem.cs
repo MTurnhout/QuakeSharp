@@ -66,6 +66,9 @@ public sealed class VirtualSystem : ISystem
     /// <summary>The virtual clock, in seconds; reading it here does not count as the engine's read.</summary>
     public double Time { get; set; }
 
+    /// <summary>The engine's reads of the clock so far (for the tests' guard of the enhanced mode).</summary>
+    public long Reads { get; private set; }
+
     /// <summary>A step of the clock, in seconds.</summary>
     public double StepSize { get; }
 
@@ -91,6 +94,7 @@ public sealed class VirtualSystem : ISystem
     // sys_oracle.c: Sys_FloatTime
     public double FloatTime()
     {
+        Reads++;
         if (++reads >= WaitReads)
         {
             Waiting?.Invoke();

@@ -14,6 +14,7 @@ public sealed class TraceRun
 {
     private readonly VirtualSystem system;
     private readonly TraceWriter writer;
+    private readonly EnhancedCheck? enhancedCheck;
 
     /// <param name="gameDir">The Quake folder (holding id1/).</param>
     /// <param name="userDir">Where the game writes (config.cfg...): an empty folder, as the oracle's runs start
@@ -22,8 +23,10 @@ public sealed class TraceRun
     /// <param name="width">Mode 0's size (-oraclevid).</param>
     /// <param name="height">Mode 0's size (-oraclevid).</param>
     /// <param name="framesPerSecond">The clock's steps per second (-oraclestep).</param>
+    /// <param name="enhanced">With the enhanced mode's capture switched on and off along the way, every frame taken
+    /// and interpolated, its guard on (design.md §11.6: what EnhancedModeChangesNothing checks).</param>
     public TraceRun(string gameDir, string userDir, IEnumerable<string> args, int width = 320, int height = 240,
-        int framesPerSecond = 64, Action<string>? print = null)
+        int framesPerSecond = 64, Action<string>? print = null, bool enhanced = false)
     {
         system = new VirtualSystem(print, 1.0 / framesPerSecond);
 
@@ -61,6 +64,11 @@ public sealed class TraceRun
             cd: new VirtualCdDrive(),
             winsock: Winsock);
         writer = new TraceWriter(Engine, framesPerSecond);
+        if (enhanced)
+        {
+            enhancedCheck = new EnhancedCheck(Engine, system);
+            enhancedCheck.BeforeFrame(1);
+        }
         if (events != null)
         {
             events.Engine = Engine;
@@ -158,6 +166,7 @@ public sealed class TraceRun
                 time = newtime - oldtime;
             }
 
+            enhancedCheck?.BeforeFrame(writer.Frame + 1);
             try
             {
                 Engine.Host_Frame((float)time);

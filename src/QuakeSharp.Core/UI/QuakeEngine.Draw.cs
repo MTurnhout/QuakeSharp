@@ -159,6 +159,7 @@ public sealed partial class QuakeEngine
                 if (draw_chars[source + i] != 0)
                 {
                     conbuffer[dest + i] = draw_chars[source + i];
+                    enhanced?.Overlay(conbuffer, dest + i);
                 }
             }
 
@@ -200,6 +201,7 @@ public sealed partial class QuakeEngine
         for (v = 0; v < pic.height; v++)
         {
             Array.Copy(pic.data, source, vid.buffer, dest, pic.width);
+            enhanced?.Overlay(vid.buffer, dest, pic.width);
             dest += (int)vid.rowbytes;
             source += pic.width;
         }
@@ -229,6 +231,7 @@ public sealed partial class QuakeEngine
                 if ((tbyte = pic.data[source + u]) != TRANSPARENT_COLOR)
                 {
                     vid.buffer[dest + u] = tbyte;
+                    enhanced?.Overlay(vid.buffer, dest + u);
                 }
             }
 
@@ -261,6 +264,7 @@ public sealed partial class QuakeEngine
                 if ((tbyte = pic.data[source + u]) != TRANSPARENT_COLOR)
                 {
                     vid.buffer[dest + u] = translation[tbyte];
+                    enhanced?.Overlay(vid.buffer, dest + u);
                 }
             }
 
@@ -329,6 +333,7 @@ public sealed partial class QuakeEngine
             if (vid.conwidth == 320)
             {
                 Array.Copy(conback.data, src, conbuffer, dest, vid.conwidth);
+                enhanced?.Overlay(conbuffer, dest, (int)vid.conwidth);
             }
             else
             {
@@ -345,6 +350,8 @@ public sealed partial class QuakeEngine
                     conbuffer[dest + x + 3] = conback.data[src + (f >> 16)];
                     f += fstep;
                 }
+
+                enhanced?.Overlay(conbuffer, dest, (int)vid.conwidth);
             }
         }
     }
@@ -371,6 +378,7 @@ public sealed partial class QuakeEngine
                     if (t != TRANSPARENT_COLOR)
                     {
                         vid.buffer[pdest] = t;
+                        enhanced?.Overlay(vid.buffer, pdest);
                     }
 
                     psrc++;
@@ -386,6 +394,7 @@ public sealed partial class QuakeEngine
             for (i = 0; i < prect.height; i++)
             {
                 Array.Copy(psrcbuf, psrc, vid.buffer, pdest, prect.width);
+                enhanced?.Overlay(vid.buffer, pdest, prect.width);
                 psrc += rowbytes;
                 pdest += (int)vid.rowbytes;
             }
@@ -476,6 +485,8 @@ public sealed partial class QuakeEngine
             {
                 vid.buffer[dest + u] = (byte)c;
             }
+
+            enhanced?.Overlay(vid.buffer, dest, w);
         }
     }
 
@@ -506,6 +517,8 @@ public sealed partial class QuakeEngine
                 }
             }
         }
+
+        enhanced?.Fade();
 
         VID_UnlockBuffer();
         S_ExtraUpdate();

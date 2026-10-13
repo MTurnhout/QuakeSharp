@@ -507,6 +507,7 @@ public sealed partial class QuakeEngine
             newpal += 3;
         }
 
+        enhanced?.PaletteBuilt();
         VID_ShiftPalette(pal);
     }
 

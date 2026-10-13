@@ -79,7 +79,9 @@ public sealed class NetRun
     /// <param name="game">The hosts' command lines (host n is quake&lt;n&gt;: -oraclehost is added), the LAN's loss, the
     /// datagrams from no host of the game.</param>
     /// <param name="print">Each host's Sys_Printf (its number, the text).</param>
-    public NetRun(string gameDir, IReadOnlyList<string> userDirs, NetGame game, Action<int, string>? print = null)
+    /// <param name="enhanced">Each host with the enhanced mode's capture, as <see cref="TraceRun"/>'s.</param>
+    public NetRun(string gameDir, IReadOnlyList<string> userDirs, NetGame game, Action<int, string>? print = null,
+        bool enhanced = false)
     {
         lanLoss = game.LanLoss;
         hosts = new Host[game.Hosts.Count];
@@ -87,7 +89,7 @@ public sealed class NetRun
         {
             int number = i + 1;
             var run = new TraceRun(gameDir, userDirs[i], ["-oraclehost", number.ToString(CultureInfo.InvariantCulture), .. game.Hosts[i]],
-                print: print == null ? null : text => print(number, text));
+                print: print == null ? null : text => print(number, text), enhanced: enhanced);
             hosts[i] = new Host(number, run, game.Hosts[i]);
             int from = i;
             run.Winsock.Sent = (port, addr, addrPort, data) => Route(from, port, addr, addrPort, data);

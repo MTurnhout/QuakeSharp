@@ -232,12 +232,16 @@ public sealed partial class QuakeEngine
         {
             vid.buffer[dest] = 0xff;
             vid.buffer[dest - (int)vid.rowbytes] = 0x30;
+            enhanced?.Overlay(vid.buffer, dest);
+            enhanced?.Overlay(vid.buffer, dest - (int)vid.rowbytes);
         }
 
         for (; i < s; i++, dest -= (int)vid.rowbytes * 2)
         {
             vid.buffer[dest] = 0x30;
             vid.buffer[dest - (int)vid.rowbytes] = 0x30;
+            enhanced?.Overlay(vid.buffer, dest);
+            enhanced?.Overlay(vid.buffer, dest - (int)vid.rowbytes);
         }
     }
 

@@ -20,6 +20,9 @@ public sealed unsafe class SdlWindow : IInputEvents, IMouseCapture, IDisposable
     private float motionX, motionY;
     private int buttons;
 
+    // the window's size in pixels, width in the high half
+    private long pixelSize;
+
     /// <param name="fullscreen">Borderless over the whole screen at the desktop's resolution; otherwise a window of the
     /// given size (fitted to the screen).</param>
     public SdlWindow(string title, int width, int height, bool fullscreen)
@@ -49,6 +52,7 @@ public sealed unsafe class SdlWindow : IInputEvents, IMouseCapture, IDisposable
         }
 
         Minimized = (SDL_GetWindowFlags(Handle) & SDL_WindowFlags.SDL_WINDOW_MINIMIZED) != 0;
+        UpdatePixelSize();
 
         uint count;
         byte** names = SDL_Vulkan_GetInstanceExtensions(&count);
@@ -70,14 +74,22 @@ public sealed unsafe class SdlWindow : IInputEvents, IMouseCapture, IDisposable
     /// </summary>
     public Action<bool, bool>? Activated { get; set; }
 
-    /// <summary>The window's size in pixels.</summary>
+    /// <summary>
+    /// Scroll Lock was pressed (design.md decision 61: it switches the enhanced mode). The key still reaches the game,
+    /// as key 0, as Winquake.exe's MapKey gives it. Raised from <see cref="SendKeyEvents"/>.
+    /// </summary>
+    public Action? ScrollLock { get; set; }
+
+    /// <summary>
+    /// The window's size in pixels, as the last of its events said (so the enhanced renderer's thread can read it: SDL's
+    /// window functions belong to the main thread).
+    /// </summary>
     public (int Width, int Height) PixelSize
     {
         get
         {
-            int w, h;
-            SDL_GetWindowSizeInPixels(Handle, &w, &h);
-            return (w, h);
+            long size = Interlocked.Read(ref pixelSize);
+            return ((int)(size >> 32), (int)size);
         }
     }
 
@@ -123,6 +135,10 @@ public sealed unsafe class SdlWindow : IInputEvents, IMouseCapture, IDisposable
                     open = false;
                     break;
 
+                case SDL_EventType.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    UpdatePixelSize();
+                    break;
+
                 case SDL_EventType.SDL_EVENT_WINDOW_MINIMIZED:
                     Minimized = true;
                     break;
@@ -142,6 +158,11 @@ public sealed unsafe class SdlWindow : IInputEvents, IMouseCapture, IDisposable
                 case SDL_EventType.SDL_EVENT_KEY_DOWN:
                 case SDL_EventType.SDL_EVENT_KEY_UP:
                     window.KeyEvent(KeyTranslation.MapKey(e.key.scancode), e.key.down);
+                    if (e.key.scancode == SDL_Scancode.SDL_SCANCODE_SCROLLLOCK && e.key.down && !e.key.repeat)
+                    {
+                        ScrollLock?.Invoke();
+                    }
+
                     break;
 
                 // WM_MOUSEMOVE: the cursor moved by whole pixels; what is left of the motion waits for more
@@ -215,6 +236,14 @@ public sealed unsafe class SdlWindow : IInputEvents, IMouseCapture, IDisposable
 
         SDL_SetWindowSize(Handle, width, height);
         SDL_SetWindowPosition(Handle, (int)SDL_WINDOWPOS_CENTERED_MASK, (int)SDL_WINDOWPOS_CENTERED_MASK);
+        UpdatePixelSize();
+    }
+
+    private void UpdatePixelSize()
+    {
+        int w, h;
+        SDL_GetWindowSizeInPixels(Handle, &w, &h);
+        Interlocked.Exchange(ref pixelSize, ((long)w << 32) | (uint)h);
     }
 
     // ClipCursor: the window takes the mouse (relative motion, the pointer kept in and hidden) or lets it go

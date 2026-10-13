@@ -1246,8 +1246,9 @@ or a write into its own buffers:
 | Where | What |
 |---|---|
 | `VID_Update` (vid_win.c), before `IVideoOutput.Present` | The frame is final: a snapshot is taken (below) |
-| `R_RenderView` (r_main.c), after `D_WarpScreen` | The view was drawn this frame, its `vrect`; the 2D mask cleared over it |
-| draw.c's functions, `D_BeginDirectRect`, `R_TimeGraph`-like writes to `vid.buffer` | The 2D mask: which pixels the 2D wrote last; `Draw_FadeScreen` marks what it fades |
+| `R_RenderView` (r_main.c), after `D_WarpScreen` | The view was drawn this frame into `scr_vrect`; the 2D mask set to the view's there |
+| draw.c's writes to `vid.buffer` and `vid.conbuffer`, `R_LineGraph`'s (r_misc.c, `r_timegraph`) | The 2D mask: which pixels the 2D wrote last; `Draw_FadeScreen` marks what it fades |
+| `V_UpdatePalette` (view.c), when it builds a palette | The per-channel tables it built it with (the four `cl.cshifts`, then `gammatable`) |
 | `S_Update_` (snd_dma.c), around `S_PaintChannels` | The enhanced mixer follows the channels and paints the same span at its own rate |
 
 The 2D mask is a side buffer of the frame's size that follows the frame as WinQuake's partial updates leave it: a pixel
@@ -1260,7 +1261,8 @@ the static ones included) and the view model as `R_DrawViewModel` decides it, ea
 in `cl_entities`, the static entities, the temporary ones) for interpolation, its model, origin, angles, frame, skin,
 colour translation, `syncbase`, effects, and the lighting r_alias.c would give it; `d_lightstylevalue`, the live
 `cl_dlights`, the live particles (pool slot, origin, colour); the palette shown, and per channel the 256-entry table
-`V_UpdatePalette` applies (the four `cl.cshifts` blended in, then `gammatable`); the 8-bit frame and its mask; the
+`V_UpdatePalette` built it with (the four `cl.cshifts` blended in, then `gammatable`: the palette is rebuilt only when
+they change, so the tables are taken at its build, not at the frame); the 8-bit frame and its mask; the
 renderer cvars that decide what is drawn (`r_drawentities`, `r_drawviewmodel`, `r_fullbright`, `r_waterwarp`,
 `r_clearcolor`). A few hundred kilobytes, copied once per frame.
 
@@ -1280,7 +1282,7 @@ fullbright texels (palette 224-255), alias poses with their normals (`anorms.h`)
 | MSAA | 1, 2, 4 or 8 samples (`enhanced_msaa`, 4); alpha-tested sprites and the sky's front layer by alpha to coverage | GPU only | By eye, validation layer clean |
 | Textures | `enhanced_filter`: nearest, or linear with mipmaps and anisotropy; the BSP's own mips (the software look) or mip chains made from the RGB; fullbright texels unlit in either; animated textures (`+0`-`+9`, the `+a` alternates by the entity's frame) chosen as `R_TextureAnimation` does at `cl.time` | Textures from models already loaded; the animation's choice is a read-only copy | `EnhancedModels`' unit tests: every texture, mip and fullbright mask of e1m1 and the mission packs' first maps as the PAK has it; the comparison |
 | Lighting, overbright | Lightmaps with their four styles at `d_lightstylevalue`, dynamic lights per pixel with r_light.c's falloff, `r_fullbright`; alias models lit as r_alias.c (`R_LightPoint`, the dlights, the view model's minimum, the shade vector against each vertex's normal), per vertex. Two looks (`enhanced_lighting`, decision 62): **colormap**, the light level turned into one of the colormap's 64 rows and looked up as the software does (its overbright, its banding, at any resolution and smooth across a surface), or **true colour**, the texel's RGB times the light, up to twice as bright as the colormap's brightest rows make it, fullbrights unlit | The styles are what `R_AnimateLight` computed for the software frame; `R_LightPoint` and the alias lighting are read-only copies | Unit tests: the light the snapshot gives an alias model equals what the software's `R_AliasDrawModel` computed in the same frame of demo1-3 (read in the test, not a trace line); the comparison at colormap lighting |
-| Palette shifts, gamma | The picture through the same per-channel tables `V_UpdatePalette` uses for the palette: damage, items, contents and bonus flashes and `gamma` exactly as WinQuake shows them, also for true colour | Read from `cl.cshifts` and `gammatable` after `V_UpdatePalette` | The test checks on every frame of every trace that the tables applied to `host_basepal` give the palette shown, byte for byte |
+| Palette shifts, gamma | The picture through the same per-channel tables `V_UpdatePalette` uses for the palette: damage, items, contents and bonus flashes and `gamma` exactly as WinQuake shows them, also for true colour | Taken when `V_UpdatePalette` builds the palette, from what it built it with (switched on in a game, guessed from the shifts as they are until the next build) | The test checks on every frame of every trace that the tables applied to `host_basepal` give the palette shown, byte for byte |
 | Sky | The two layers scrolling as r_sky.c's (`skytime`, speeds 8 and 2, the front layer's index 0 transparent), mapped per pixel by the view's direction as d_sky.c's `D_Sky_uv_To_st` does per span, at interpolated `cl.time` | `cl.time` read | The comparison |
 | Water | Turbulent surfaces (`*` textures) warped per pixel by d_scan.c's sine table at `cl.time`; under water (`r_dowarp`, `r_waterwarp`) the view warped as `D_WarpScreen` at the output's resolution | `cl.time`, the view leaf's contents read | The comparison (the warp's phase identical at the same `cl.time`) |
 | Particles | From `active_particles` after `R_DrawParticles` moved them: square, sized as `D_DrawParticle` sizes them with distance and scaled to the resolution, or round (`enhanced_particles`) | Read after the software frame moved them | The comparison: each particle where the software drew it |
@@ -1309,12 +1311,60 @@ read the clock and draw `rand()` exactly as often as without it.
 
 1. **The seams and the test, nothing drawn yet**: `Core/Enhanced` (`EnhancedCapture`, the mask, `EnhancedFrame`, the
    interpolation on the CPU), `EnhancedModeChangesNothing` over every trace; the executable's switch (decision 61), the
-   settings file, and the enhanced path presenting the 8-bit frame from its own render thread.
+   settings file, and the enhanced path presenting the 8-bit frame from its own render thread. *Done (decision 66): the
+   seams are calls on `engine.enhanced` in draw.c's writes (each pixel or row), `R_LineGraph`, `R_RenderView_` after the
+   warp, `V_UpdatePalette`'s build and `VID_Update`; the mask is a byte per pixel parallel to the screen's buffer (the
+   same offsets, so `lcd_x`'s doubled rows and the console's buffer need nothing of their own), started anew with each
+   new buffer (a mode set). `EnhancedModeChangesNothing` is the trace tests' class run again with
+   `TraceRun(enhanced: true)` (`DemoTests` and it share `TraceTests`): the capture is attached before `Host_Init`,
+   detached for frames 500-519 of every thousand and attached afresh, every frame is taken and the frames between it and
+   the one before built at ¼, ½ and ¾, and a guard counts the engine's clock reads (`VirtualSystem.Reads`) and `rand()`
+   calls across the capture's work, which must not change them; where the tables are known, they must make the palette
+   shown. All 66 traces match on every line and file (7 minutes). A broken table fails it at frame
+   1. The executable: Scroll Lock (`SdlWindow.ScrollLock`, the key still delivered as key 0), `-enhanced` and
+   `-faithful` for a run, `quakesharp.cfg` (`EnhancedSettings`: every setting with its default and what it does,
+   written when the game quits); `EnhancedRenderer` draws on its own thread from the snapshots, through the presenter
+   (now locked, as two threads call it); the loading disc is drawn over the last snapshot as 2D.*
 2. **The enhanced presenter**: the swapchain at the window's size, `enhanced_scale`, MSAA targets, the 2D composite
-   (mask, fade, loading disc), widescreen's layout, the view's area cleared to `r_clearcolor`; resizable windows.
+   (mask, fade, loading disc), widescreen's layout, the view's area cleared to `r_clearcolor`; resizable windows. *Done: `VulkanPresenter`'s frame
+   is split into begin, record and end, shared by the faithful frames and the enhanced ones
+   (`VulkanPresenter.Enhanced.cs`, `PresentEnhanced`). An enhanced frame uploads the snapshot's pixels, mask and the
+   border's tile (`backtile`, now in the snapshot); `enhanced_overlay.slang` writes, at the faithful first pass's integer
+   scale, the 2D's colour (coverage in alpha) and how much of the view shows (1, ¼ where faded, 0 under the 2D); the view
+   is drawn at its rectangle's size times `enhanced_scale` into a multisampled target with depth (`enhanced_msaa`, the
+   device's most if fewer), resolved; for now only cleared to `r_clearcolor` through the frame's palette;
+   `enhanced_composite.slang` puts them together over the window, the 2D filtered linearly as the faithful second pass.
+   Where the view goes is `EnhancedLayout` (Core, unit-tested): the faithful rectangle and scale for the 2D, `scr_vrect`
+   in it for the view, widened across the window when the software view spans the frame (`enhanced_widescreen`); beside
+   the 2D, in the frame's rows, the border's tile in a level (its pixels as the frame's), black elsewhere. A frame
+   without a view shows the frame's own pixels everywhere. The window's pixel size is kept from SDL's events, as the
+   render thread reads it. Windows were already resizable. Checked in a 4:3 and an 1800×700 window under the validation
+   layer.*
 3. **The world**: `EnhancedModels`' BSP data, textures and filtering, lightmaps, styles and dlights, both lightings,
    the palette tables (checked in the test), brush entities, the Hor+ projection; the comparison tool, first numbers on
-   demo1-3.
+   demo1-3. *Done: the capture numbers the models it meets and makes them ready on first sight (`EnhancedModel`;
+   numbered anew with each level, so the render thread drops the last level's): a brush model is `EnhancedBrushModel`
+   (every surface a fan of triangles, indices grouped by submodel and texture; per surface its plane, texture axes,
+   `texturemins`, extents, light data offset and styles; the light data; the textures with the BSP's four mips and
+   `R_TextureAnimation`'s chain as a read-only copy), a world's "*n" its submodel. The snapshot adds the base palette,
+   the colormap, `r_refdef.ambientlight` and `vid.aspect`. `world.slang` lights each texel as the software lights its
+   luxels: `R_BuildLightMap`'s ambient, lightmaps times styles and `R_AddDynamicLights`' lights (in the entity's space,
+   its integer distances) at the four luxels around the texel, bound, inverted and shifted, blended as
+   `R_DrawSurfaceBlock8` blends across a block; then the colormap's row of it for the texel's index (its mip picked
+   from the derivatives), or the base palette's colour times the light (×2 at most; fullbright texels unlit) through the
+   palette tables, read between two entries. One buffer of words per frame (`frame.slang`). `EnhancedCamera`: the
+   software's vertical field from `fov_x`, the view's shape and `vid.aspect` (R_ViewChanged), the horizontal one from
+   the window (Hor+), reversed depth; brush entities by `R_RotateBmodel`'s rotation transposed, plus the origin (unit
+   tests against the software's projection). Textures: palette indices for the colormap look and colours with a full
+   chain (or the BSP's mips) for true colour, the sampler nearest or linear with anisotropy (the device's feature, now
+   switched on). Sky and water are drawn flat for now. `EnhancedModelTests` (fidelity) reads e1m1, start, hip1m1 and
+   r1m1 without model.c: every texture's four mips byte for byte, the fullbright texels, each face's light offset and
+   styles, each submodel's triangles. The comparison (`quakesharp-tools enhanced-shot`, a headless presenter drawing
+   offscreen): at faithful settings, of the view's pixels the same colour / within 24 on each channel, before alias
+   models, sprites and particles are drawn: demo1 frames 300, 900, 1500, 2500, 3500: 61.7/97.4%, 67.0/93.7%,
+   67.1/96.9%, 77.9/97.6%, 68.9/98.3%; demo2 frames 300, 1500, 3000: 75.0/96.9%, 82.4/99.2%, 67.3/97.2%; demo3:
+   70.0/97.3%, 67.8/95.2%, 79.4/92.3%. What differs beyond the missing models is single texels along the software's
+   16-pixel spans and its mip choice per surface.*
 4. **Sky and water**: the sky's layers, turbulent surfaces, the underwater warp.
 5. **Models and particles**: alias models (poses, skins, player colours, lighting, the view model), sprites, particles.
 6. **Interpolation**: frames between snapshots at the display's pace, `enhanced_maxfps`, vsync; pose blending and step
@@ -1401,6 +1451,7 @@ enhancement above, switched at any time, and the comparison's numbers are record
 | 63 | Enhanced sound (was D16) | Confirmed with the user: with enhanced mode the mix is at the device's rate (48 kHz), each sound resampled with Hermite interpolation, volumes ramped; DoomSharp's placement by direction (`enhanced_3d_sfx`) is an option, off by default, so WinQuake's own stereo separation stays unless asked (§11.6) | 2026-10-13 |
 | 64 | Interpolation (was D15) | Confirmed with the user: enhanced mode shows the game's states at the moments the game has them, as the faithful mode does: frames drawn at the display's pace between the last two game frames, on (at each game frame the picture is the game's; between them things move straight from one real state to the next; at most 1/72 s behind). Alias poses blended and step-moving monsters smoothed are options, off: a blended pose is one the game never had and shows a change up to 0.1 s late, and a smoothed monster is drawn up to 0.1 s behind where the server has it (aim goes where it was), found by a guess, since protocol 15 does not say which entities step (§11.6) | 2026-10-13 |
 | 65 | What milestone 12 leaves out (was D17) | Confirmed with the user: translucent water (`r_wateralpha`: the maps are not vised for it, and the server sends nothing it hides), `.lit` files, external textures, skyboxes, fog, GLQuake's planar shadows, screenshots of the enhanced frame, an in-game settings menu; and GPU tests: none in CI or the test projects (a software Vulkan such as lavapipe would be a download), the comparison tool runs by hand (§11.6) | 2026-10-13 |
+| 66 | The enhanced mode's seams (milestone 12, step 1) | `EnhancedCapture` on `engine.enhanced` (null in the faithful mode), called from draw.c's writes and `R_LineGraph` (the 2D mask, parallel to the screen's buffer), `R_RenderView_` after the warp (the view's pixels, `scr_vrect`), `V_UpdatePalette`'s build (the per-channel tables: the palette is rebuilt only when the shifts change) and `VID_Update` (the snapshot, `EnhancedFrame`, immutable, handed to the render thread). `EnhancedModeChangesNothing` runs every trace test again with it attached, switched off and on along the way, a guard on the clock's reads and `rand()`'s calls, the palette tables checked (§11.6) | 2026-10-13 |
 
 ## 13. Open decisions
 

@@ -3,6 +3,7 @@ using System.Globalization;
 using QuakeSharp.Core;
 using QuakeSharp.Core.Common;
 using QuakeSharp.Core.Diagnostics;
+using QuakeSharp.Core.Enhanced;
 using QuakeSharp.Core.Net;
 using QuakeSharp.Core.Platform;
 using QuakeSharp.Platform.Sdl;
@@ -12,7 +13,9 @@ using QuakeSharp.Render.Vulkan;
 // playing its sound and the CD's music from the user's track files (design.md §7.2); closing the window quits. It
 // starts as Winquake.exe does, in the first full-screen mode (design.md decision 50); -window (WinQuake's
 // -startwindowed) starts in a window. -noaspect shows square pixels, -vkvalidation turns on the Vulkan validation
-// layer, -quitafter <seconds> quits by itself.
+// layer, -quitafter <seconds> quits by itself. Scroll Lock switches the enhanced mode (design.md §11.6, decision 61),
+// which only reads the game; quakesharp.cfg in the user folder keeps it and its settings, -enhanced and -faithful set
+// it for a run.
 //
 // -recordevents <file> (design.md decision 34) runs as a trace does instead: a virtual clock of 1/64 s steps, paced to
 // real time; the sound device's position following that clock, as the oracle's; the oracle's virtual CD (the track
@@ -58,14 +61,40 @@ static int Run(CommandLine commandLine)
         SquarePixels = commandLine.CheckParm("-noaspect") != 0,
     };
 
-    int record = commandLine.CheckParm("-recordevents");
-    return record != 0 && record < commandLine.Argc - 1
-        ? Record(commandLine, commandLine.Argv(record + 1), window, presenter, quitTime)
-        : Play(commandLine, window, presenter, quitTime);
+    // the enhanced mode's settings, and its renderer drawing on a thread of its own
+    string settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp", "quakesharp.cfg");
+    EnhancedSettings settings = EnhancedSettings.Load(settingsPath);
+    bool forRun = commandLine.CheckParm("-enhanced") != 0 || commandLine.CheckParm("-faithful") != 0;
+    bool enhanced = commandLine.CheckParm("-enhanced") != 0 || (commandLine.CheckParm("-faithful") == 0 && settings.Enhanced);
+    using var renderer = new EnhancedRenderer(presenter, new EnhancedOptions(
+        settings.Number("enhanced_scale"), (int)settings.Number("enhanced_msaa"), settings.Number("enhanced_widescreen") != 0,
+        (int)settings.Number("enhanced_filter"), (int)settings.Number("enhanced_mipmaps"), settings.Number("enhanced_anisotropy"),
+        (int)settings.Number("enhanced_lighting")));
+    var mode = new EnhancedMode(renderer);
+    window.ScrollLock = mode.Toggle;
+
+    try
+    {
+        int record = commandLine.CheckParm("-recordevents");
+        return record != 0 && record < commandLine.Argc - 1
+            ? Record(commandLine, commandLine.Argv(record + 1), window, presenter, mode, enhanced, quitTime)
+            : Play(commandLine, window, presenter, mode, enhanced, quitTime);
+    }
+    finally
+    {
+        // the switches set it for their run only
+        if (!forRun)
+        {
+            settings.Enhanced = mode.On;
+        }
+
+        settings.Save(settingsPath);
+    }
 }
 
 // sys_win.c: WinMain's loop on the real clock
-static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter presenter, double quitTime)
+static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter presenter, EnhancedMode mode, bool enhanced,
+    double quitTime)
 {
     // what the game writes goes to the user's folder (design.md §9)
     string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
@@ -76,7 +105,8 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     // the real network (design.md §11.5)
     using var winsock = new SocketWinsock();
     var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound,
-        new WindowVideo(window, presenter), cd, mouse: window, joysticks: joysticks, winsock: winsock);
+        new WindowVideo(window, presenter, mode), cd, mouse: window, joysticks: joysticks, winsock: winsock);
+    mode.Attach(engine, enhanced);
 
     // WM_ACTIVATE: DirectSound silences the game while another program has the focus; AppActivate clears the buffer
     window.Activated = (active, minimized) =>
@@ -161,7 +191,8 @@ static int Dedicated(CommandLine commandLine, double quitTime)
 }
 
 // -recordevents: the oracle's run (tools/oracle/src/sys_oracle.c's main), paced to real time, with the keys recorded
-static int Record(CommandLine commandLine, string path, SdlWindow window, VulkanPresenter presenter, double quitTime)
+static int Record(CommandLine commandLine, string path, SdlWindow window, VulkanPresenter presenter, EnhancedMode mode,
+    bool enhanced, double quitTime)
 {
     const int FramesPerSecond = 64;
     const double Step = 1.0 / FramesPerSecond;
@@ -180,7 +211,8 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     network.Winsock = winsock;
     // the window takes the mouse as in a game; no joystick, as the oracle has none
     var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound,
-        new WindowVideo(window, presenter), cd, mouse: window, winsock: winsock);
+        new WindowVideo(window, presenter, mode), cd, mouse: window, winsock: winsock);
+    mode.Attach(engine, enhanced);
 
     // silent while another program has the focus, but without AppActivate's clears: the oracle never loses the focus
     window.Activated = (active, _) => sound.Muted = !active;
@@ -234,8 +266,54 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     }
 }
 
-/// <summary>vid_win.c's screen: the frames through the presenter, the modes on the window.</summary>
-internal sealed class WindowVideo(SdlWindow window, VulkanPresenter presenter) : IVideoOutput
+/// <summary>
+/// The enhanced mode switched on and off (design.md §11.6): on, the engine has a capture whose snapshots go to the
+/// enhanced renderer, and the faithful frames are not shown; off, nothing of it runs.
+/// </summary>
+internal sealed class EnhancedMode(EnhancedRenderer renderer)
+{
+    private QuakeEngine? engine;
+
+    public bool On { get; private set; }
+
+    public EnhancedRenderer Renderer => renderer;
+
+    /// <summary>The engine, before Host_Init, and whether the mode starts on.</summary>
+    public void Attach(QuakeEngine e, bool on)
+    {
+        engine = e;
+        Set(on);
+    }
+
+    /// <summary>Scroll Lock.</summary>
+    public void Toggle() => Set(!On);
+
+    private void Set(bool on)
+    {
+        On = on;
+        if (engine == null)
+        {
+            return;
+        }
+
+        if (on)
+        {
+            var capture = new EnhancedCapture(engine);
+            capture.Captured += renderer.Submit;
+            engine.enhanced = capture;
+        }
+        else
+        {
+            engine.enhanced = null;
+        }
+    }
+}
+
+/// <summary>
+/// vid_win.c's screen: the frames through the presenter, the modes on the window. In the enhanced mode the enhanced
+/// renderer shows the frames instead.
+/// </summary>
+internal sealed class WindowVideo(SdlWindow window, VulkanPresenter presenter, EnhancedMode mode) : IVideoOutput
 {
     // the frame last presented, which a rectangle (the loading disc) is shown over, and when
     private readonly byte[] shownPalette = new byte[768];
@@ -258,7 +336,11 @@ internal sealed class WindowVideo(SdlWindow window, VulkanPresenter presenter) :
         }
 
         palette[..768].CopyTo(shownPalette);
-        presenter.Present(pixels, width, height, rowBytes, palette);
+        if (!mode.On)
+        {
+            presenter.Present(pixels, width, height, rowBytes, palette);
+        }
+
         shownAt = Stopwatch.GetTimestamp();
     }
 
@@ -275,13 +357,20 @@ internal sealed class WindowVideo(SdlWindow window, VulkanPresenter presenter) :
         }
 
         // a file's read is short: shown at most at the display's pace, so loading never waits for its refresh
-        if (Stopwatch.GetElapsedTime(shownAt) < TimeSpan.FromSeconds(1.0 / 60))
+        bool show = Stopwatch.GetElapsedTime(shownAt) >= TimeSpan.FromSeconds(1.0 / 60);
+        if (mode.On)
         {
-            return;
+            mode.Renderer.DirectRect(pixels, rowBytes, x, y, width, height, show);
+        }
+        else if (show)
+        {
+            presenter.Present(shown, shownWidth, shownHeight, shownWidth, shownPalette);
         }
 
-        presenter.Present(shown, shownWidth, shownHeight, shownWidth, shownPalette);
-        shownAt = Stopwatch.GetTimestamp();
+        if (show)
+        {
+            shownAt = Stopwatch.GetTimestamp();
+        }
     }
 
     public void SetMode(int width, int height, bool fullscreen) => window.SetMode(width, height, fullscreen);

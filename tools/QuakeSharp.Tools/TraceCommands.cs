@@ -12,17 +12,23 @@ internal static class TraceCommands
     // -traceshot <frame>); -traceinput <file>[@<path>] (any number of times, not passed on) puts a file into the user
     // folder's game directory (id1, or -rogue's, -hipnotic's), at <path> in it if given (maps/e1m1.pts), before the
     // run, as Trace-Demos.ps1 puts an earlier run's files into the oracle's. What the run leaves there is kept in
-    // <out>.files, as the oracle's run's
+    // <out>.files, as the oracle's run's. -traceenhanced (not passed on) runs it with the enhanced mode's capture, as
+    // EnhancedModeChangesNothing does (design.md §11.6)
     public static int Trace(string baseDir, string output, string[] args)
     {
         Commands.RefuseRepository(output);
         var inputs = new List<string>();
         var rest = new List<string>();
+        bool enhanced = false;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "-traceinput" && i + 1 < args.Length)
             {
                 inputs.Add(args[++i]);
+            }
+            else if (args[i] == "-traceenhanced")
+            {
+                enhanced = true;
             }
             else
             {
@@ -67,7 +73,7 @@ internal static class TraceCommands
                 File.Copy(at < 0 ? input : input[..at], target);
             }
 
-            var run = new TraceRun(baseDir, userDir, args, width, height, fps);
+            var run = new TraceRun(baseDir, userDir, args, width, height, fps, enhanced: enhanced);
             using var writer = new StreamWriter(output);
             writer.NewLine = "\n";
             int count = 0;

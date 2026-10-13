@@ -1190,7 +1190,8 @@ public sealed partial class QuakeEngine
             }
         }
 
-        // We've drawn the frame; copy it to the screen
+        // We've drawn the frame; copy it to the screen (the enhanced mode takes its snapshot first)
+        enhanced?.Frame();
         (byte[] frame, int rowbytes) = VID_Frame();
         video?.Present(frame, (int)vid.width, (int)vid.height, rowbytes, vid_curpal);
 

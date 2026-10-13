@@ -13,13 +13,16 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
 - Shaders (`shaders/*.slang`) are compiled by the `QuakeSharp.Render.Vulkan` build with `slangc`: `SLANGC`, or the
   Vulkan SDK's through `VULKAN_SDK`. CI pins the Slang release and its SHA-256 in `.github/workflows/ci.yml`.
 - Try the executable from a Quake folder (it looks for `id1/` in the current directory) with `-window`,
-  `-vkvalidation` and `-quitafter <seconds>`.
+  `-vkvalidation` and `-quitafter <seconds>`; `-enhanced` / `-faithful` (or Scroll Lock) for the enhanced mode.
 - Fidelity tests need `QUAKESHARP_QUAKE_DIR` (a folder with the original `id1/pak0.pak`, `id1/pak1.pak`; the mission
   packs' tests also `hipnotic/pak0.pak`, `rogue/pak0.pak`) and
   `QUAKESHARP_TRACE_DIR` (traces from the oracle in `tools/oracle`); otherwise they skip. When one fails, write
   QuakeSharp's trace of the same command line with `quakesharp-tools trace <quake-dir> <out> <oracle's args>`, find
   the first differing frame with `quakesharp-tools trace-compare`, then compare detail around it: `-tracedump <frame>`
-  on both sides writes the entities field by field. Run the oracle from its own Quake folder (base directory ".").
+  on both sides writes the entities field by field. `EnhancedModeChangesNothing` runs the same traces with the enhanced mode's
+  capture on; `quakesharp-tools trace ... -traceenhanced` writes such a run's trace. `quakesharp-tools
+  enhanced-shot <quake-dir> <out-dir> <frames> <trace args>` (needs a GPU) compares the enhanced frame with the
+  software frame (design.md §11.6). Run the oracle from its own Quake folder (base directory ".").
 - The oracle (WinQuake 1.09's C, headless; see `tools/oracle/README.md`): `tools/oracle/Build-Oracle.ps1 -WorkDir
   <dir outside the repo>`, then `tools/oracle/Trace-Demos.ps1`. If its sources, `src/` or the patch change, rebuild
   and regenerate the traces. `-traceshot <frame>` and `quakesharp-tools shot2png` show a frame.

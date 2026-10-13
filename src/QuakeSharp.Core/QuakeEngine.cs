@@ -114,6 +114,12 @@ public sealed partial class QuakeEngine
     // the CD drive cd_win.c sends its MCI commands to (null: none, as a machine without one)
     internal readonly ICdDrive? cddrive;
     private readonly IVideoOutput? video;
+
+    /// <summary>
+    /// The enhanced mode's capture while it is on (design.md §11.6): the seams in draw.c, R_RenderView, V_UpdatePalette
+    /// and VID_Update tell it what was drawn; null, the faithful mode, nothing new runs.
+    /// </summary>
+    public Enhanced.EnhancedCapture? enhanced;
     private readonly Net.IWinsock? winsock;
     private readonly Numerics.CRand crand = new();
     private readonly FileSystem fileSystem;

@@ -19,7 +19,8 @@ internal sealed unsafe class HostBuffer : IDisposable
         VmaAllocationCreateInfo allocationInfo = new()
         {
             usage = VmaMemoryUsage.Auto,
-            flags = VmaAllocationCreateFlags.HostAccessSequentialWrite | VmaAllocationCreateFlags.Mapped,
+            flags = ((usage & VkBufferUsageFlags.TransferDst) != 0 ? VmaAllocationCreateFlags.HostAccessRandom : VmaAllocationCreateFlags.HostAccessSequentialWrite)
+                | VmaAllocationCreateFlags.Mapped,
         };
         VmaAllocationInfo info;
         VkBuffer buffer;
@@ -38,6 +39,9 @@ internal sealed unsafe class HostBuffer : IDisposable
 
     /// <summary>Makes the CPU's writes visible to the GPU (nothing to do on host-coherent memory).</summary>
     public void Flush() => vmaFlushAllocation(context.Allocator, allocation, 0, Vortice.Vulkan.Vulkan.VK_WHOLE_SIZE);
+
+    /// <summary>Makes the GPU's writes visible to the CPU (nothing to do on host-coherent memory).</summary>
+    public void Invalidate() => vmaInvalidateAllocation(context.Allocator, allocation, 0, Vortice.Vulkan.Vulkan.VK_WHOLE_SIZE);
 
     public void Dispose() => vmaDestroyBuffer(context.Allocator, Buffer, allocation);
 }

@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\QuakeSharp.Core\QuakeSharp.Core.csproj" />
+    <ProjectReference Include="..\..\src\QuakeSharp.Render.Vulkan\QuakeSharp.Render.Vulkan.csproj" />
   </ItemGroup>
 
 </Project>

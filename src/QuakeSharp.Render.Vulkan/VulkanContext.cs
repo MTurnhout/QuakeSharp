@@ -15,7 +15,10 @@ public sealed record VulkanSurfaceSource(
     Func<nint, ulong> CreateSurface,
     Func<(int Width, int Height)> PixelSize);
 
-/// <summary>The Vulkan 1.3 instance, the window's surface, the device and its queue (after Contrail's).</summary>
+/// <summary>
+/// The Vulkan 1.3 instance, the window's surface, the device and its queue (after Contrail's). Without a surface source
+/// it is headless: no surface, no swapchain, any queue that draws (the tools' offscreen pictures).
+/// </summary>
 internal sealed unsafe class VulkanContext : IDisposable
 {
     private const string ValidationLayer = "VK_LAYER_KHRONOS_validation";
@@ -23,11 +26,13 @@ internal sealed unsafe class VulkanContext : IDisposable
     private static readonly string[] RequiredDeviceExtensions = ["VK_KHR_swapchain"];
 
     private readonly VkDebugUtilsMessengerEXT messenger;
+    private readonly string[] requiredDeviceExtensions;
     private readonly Action<string> log;
 
-    public VulkanContext(VulkanSurfaceSource surfaceSource, bool enableValidation, Action<string> log)
+    public VulkanContext(VulkanSurfaceSource? surfaceSource, bool enableValidation, Action<string> log)
     {
         this.log = log;
+        requiredDeviceExtensions = surfaceSource == null ? [] : RequiredDeviceExtensions;
 
         // Overlay layers (Steam and the like) inject themselves and alter the calls, which gives false validation
         // errors: keep them out of validated runs.
@@ -47,7 +52,7 @@ internal sealed unsafe class VulkanContext : IDisposable
             log("Vulkan validation requested, but the layer is not installed (it comes with the Vulkan SDK).");
         }
 
-        var extensions = new List<string>(surfaceSource.InstanceExtensions);
+        var extensions = new List<string>(surfaceSource?.InstanceExtensions ?? []);
         if (validation)
         {
             extensions.Add("VK_EXT_debug_utils");
@@ -96,7 +101,7 @@ internal sealed unsafe class VulkanContext : IDisposable
             log("Vulkan validation enabled.");
         }
 
-        Surface = new VkSurfaceKHR(surfaceSource.CreateSurface(Instance.Handle));
+        Surface = surfaceSource == null ? VkSurfaceKHR.Null : new VkSurfaceKHR(surfaceSource.CreateSurface(Instance.Handle));
 
         PickPhysicalDevice();
         CreateDevice();
@@ -131,6 +136,9 @@ internal sealed unsafe class VulkanContext : IDisposable
 
     public string DeviceName { get; private set; } = "";
 
+    /// <summary>The most anisotropic filtering the device's samplers have (0: none).</summary>
+    public float MaxAnisotropy { get; private set; }
+
     public static void Check(VkResult result, string what)
     {
         if (result != VkResult.Success)
@@ -145,7 +153,10 @@ internal sealed unsafe class VulkanContext : IDisposable
     {
         vmaDestroyAllocator(Allocator);
         Api.vkDestroyDevice();
-        InstanceApi.vkDestroySurfaceKHR(Surface);
+        if (Surface != VkSurfaceKHR.Null)
+        {
+            InstanceApi.vkDestroySurfaceKHR(Surface);
+        }
         if (messenger != VkDebugUtilsMessengerEXT.Null)
         {
             InstanceApi.vkDestroyDebugUtilsMessengerEXT(messenger);
@@ -220,7 +231,7 @@ internal sealed unsafe class VulkanContext : IDisposable
                 continue;
             }
 
-            if (!RequiredDeviceExtensions.All(DeviceExtensions(device).Contains))
+            if (!requiredDeviceExtensions.All(DeviceExtensions(device).Contains))
             {
                 skipped.Add($"{name}: cannot show images in a window");
                 continue;
@@ -264,8 +275,12 @@ internal sealed unsafe class VulkanContext : IDisposable
                 continue;
             }
 
-            VkBool32 present;
-            InstanceApi.vkGetPhysicalDeviceSurfaceSupportKHR(device, i, Surface, &present);
+            VkBool32 present = true;
+            if (Surface != VkSurfaceKHR.Null)
+            {
+                InstanceApi.vkGetPhysicalDeviceSurfaceSupportKHR(device, i, Surface, &present);
+            }
+
             if (present)
             {
                 return i;
@@ -292,7 +307,15 @@ internal sealed unsafe class VulkanContext : IDisposable
         };
         VkPhysicalDeviceFeatures2 features = new() { pNext = &features13 };
 
-        using var extensionNames = new NativeStringArray(RequiredDeviceExtensions);
+        // anisotropic filtering for the enhanced mode's textures, where the device has it
+        InstanceApi.vkGetPhysicalDeviceFeatures(PhysicalDevice, out VkPhysicalDeviceFeatures available);
+        if (available.samplerAnisotropy)
+        {
+            features.features.samplerAnisotropy = true;
+            MaxAnisotropy = InstanceApi.vkGetPhysicalDeviceProperties(PhysicalDevice).limits.maxSamplerAnisotropy;
+        }
+
+        using var extensionNames = new NativeStringArray(requiredDeviceExtensions);
         VkDeviceCreateInfo deviceInfo = new()
         {
             pNext = &features,

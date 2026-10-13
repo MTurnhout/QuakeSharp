@@ -527,6 +527,8 @@ public sealed partial class QuakeEngine
             D_WarpScreen();
         }
 
+        enhanced?.ViewDrawn();
+
         V_SetContentsColor(r_viewleaf!.contents);
 
         if (r_timegraph.value != 0)
