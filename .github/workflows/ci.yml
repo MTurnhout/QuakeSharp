@@ -1,5 +1,6 @@
-# Builds and tests QuakeSharp on Windows and Linux. CI has no game data and no reference traces, so the fidelity
-# tests skip there (design.md §10); they run locally with QUAKESHARP_QUAKE_DIR and QUAKESHARP_TRACE_DIR.
+# Builds and tests QuakeSharp on Windows and Linux. CI has no registered game data and no reference traces, so the
+# fidelity tests skip there (design.md §10); they run locally with QUAKESHARP_QUAKE_DIR and QUAKESHARP_TRACE_DIR. Only
+# the shareware smoke test runs, from the shareware's pak0.pak that CI downloads (decision 48).
 name: CI
 
 on:
@@ -29,6 +30,9 @@ jobs:
       SLANG_VERSION: 2026.18
       SLANG_SHA256_WINDOWS: 6ffa4827b519fd0a85b38407049d87ab0c1f045fe2289cb1e6831f965169f8a1
       SLANG_SHA256_LINUX: 03acde8d19ad17f7b94312078ed945bed554a220feff084898a1bc94a9c998f5
+      SHAREWARE_URL: https://archive.org/download/Quake_802/quake106.zip
+      SHAREWARE_MD5: 8cee4d03ee092909fdb6a4f84f0c1357
+      SHAREWARE_PAK0_MD5: 5906e5998fc3d896ddaf5e6a62e03abb
     steps:
       - uses: actions/checkout@v7
         with:
@@ -62,6 +66,54 @@ jobs:
           fi
           "$dir/$slangc" -version
           echo "SLANGC=$dir/$slangc" >> "$GITHUB_ENV"
+
+      # The shareware smoke test (design.md §10, decision 53): quake106.zip (9,094,045 bytes) from the Internet Archive,
+      # checked by its MD5; its pak0.pak, in the LHA archive resource.1, extracted (7-Zip on Windows, lhasa on Linux),
+      # checked and cached, never committed. If it cannot be downloaded the smoke test skips with a warning.
+      - name: Restore shareware
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/shareware
+          key: shareware-${{ env.SHAREWARE_MD5 }}-${{ runner.os }}
+
+      - name: Fetch shareware
+        id: shareware
+        shell: bash
+        run: |
+          dir="$RUNNER_TEMP/shareware"
+          if [ ! -f "$dir/id1/pak0.pak" ]; then
+            zip="$RUNNER_TEMP/quake106.zip"
+            if ! curl -fsSL --retry 5 --retry-all-errors -o "$zip" "$SHAREWARE_URL"; then
+              echo "::warning::quake106.zip could not be downloaded; the shareware smoke test skips"
+              exit 0
+            fi
+            if ! echo "$SHAREWARE_MD5  $zip" | md5sum -c --status -; then
+              echo "::warning::quake106.zip's MD5 is not $SHAREWARE_MD5; the shareware smoke test skips"
+              exit 0
+            fi
+            unzip -q "$zip" resource.1 -d "$RUNNER_TEMP/quake106"
+            out="$RUNNER_TEMP/quake106/resource"
+            mkdir -p "$out"
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              7z x -y -bso0 "-o$out" "$RUNNER_TEMP/quake106/resource.1"
+            else
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq lhasa
+              (cd "$out" && lhasa -xq "$RUNNER_TEMP/quake106/resource.1")
+            fi
+            mkdir -p "$dir/id1"
+            mv "$(find "$out" -iname pak0.pak)" "$dir/id1/pak0.pak"
+            echo "$SHAREWARE_PAK0_MD5  $dir/id1/pak0.pak" | md5sum -c -
+            echo "fetched=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "QUAKESHARP_QUAKE_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Cache shareware
+        if: steps.shareware.outputs.fetched == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/shareware
+          key: shareware-${{ env.SHAREWARE_MD5 }}-${{ runner.os }}
 
       - name: Build
         run: dotnet build QuakeSharp.slnx -c Release

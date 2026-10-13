@@ -31,6 +31,9 @@ modernised.**
 
 ### Non-goals (v1)
 
+v1 is Quake and both mission packs (hipnotic, rogue) on the WinQuake engine (decision 54).
+
+- GLQuake and QuakeWorld (`QW/`): they come after v1.
 - Source-port features: mouselook beyond the original's `+mlook`, higher limits, new protocol versions, fog,
   skyboxes, coloured lighting, `.lit` files, external textures, interpolated models. Hardware-rendered and
   higher-fidelity pictures exist only in an optional enhanced mode (§6.6) that only reads the game.
@@ -71,8 +74,9 @@ discs they were read from: Steam's hipnotic PAK is the Scourge of Armagon CD's, 
 both packs. Dissolution of Eternity shipped in three builds of the same size; all three are original releases (not the
 rerelease), and the traces are made from whichever the user has (decision 51).
 
-The shareware `pak0.pak` (1.06, freely distributable as part of `quake106.zip`) will be added when CI fetches it
-(§10).
+The shareware's `pak0.pak` (1.06, freely distributable as `quake106.zip`, inside the LHA archive `resource.1`) is
+the registered `id1/pak0.pak`, the same MD5: alone it is the shareware (`Playing shareware version.`, the file count
+and CRC common.c checks). CI downloads it for the smoke test (§10, decision 53).
 
 **Rerelease data is not original.** The 2021 rerelease ("KEX", the Steam install's `rerelease/` folder) ships
 modified maps, models and progs. It is *not* valid for fidelity tests. QuakeSharp may load it with a warning, with no
@@ -526,10 +530,11 @@ Faithfulness is measured, not assumed.
 | Server | **Scenario traces** | Scripted games (`-traceevents`: per-frame key events and console commands, with the virtual clock): per frame, hashes of `sv` state, every edict's memory (strings by content), the QuakeC globals and the `rand()` seed; the network messages sent |
 | Sound | **Mix traces** | The traces hash the sound channels (`S`), the device's whole buffer (`P`) and the CD's state (`A`) every frame |
 | Persistence | **Files** | What each run writes (`config.cfg`, savegames, demos, screenshots, `qconsole.log`) compares byte for byte with what the oracle's run wrote; saves and demos read back in fresh runs play on in sync (§11.3) |
-| Smoke | Shareware in CI | CI fetches the shareware `pak0.pak` (`quake106.zip`, checked by MD5, never committed) and checks the shareware demos against the last lines of their traces, kept in the test |
+| Smoke | Shareware in CI | CI fetches the shareware `pak0.pak` (`quake106.zip`, checked by MD5, cached, never committed) and plays demo1-3 from it alone against the last frame of the oracle's traces, every line, kept in the test (`SharewareTests`, decision 53) |
 
 Fidelity tests find game data through `QUAKESHARP_QUAKE_DIR` (a folder with `id1/`, matched by MD5) and traces
-through `QUAKESHARP_TRACE_DIR`; they skip without them.
+through `QUAKESHARP_TRACE_DIR`; they skip without them. The smoke test needs only an original `id1/pak0.pak` there,
+the shareware's or the registered (it copies it alone into a folder of its own), and no traces.
 
 **The oracle** (`tools/oracle`, its README has the details and the trace format): WinQuake 1.09's C sources,
 copied from `reference/Quake` and patched only so `id386` is 0 (`quake-oracle.patch`), built locally with clang-cl
@@ -565,7 +570,9 @@ each demo played back and as a timedemo. With milestone 10 the mission packs are
 `-hipnotic` and `-rogue` from folders holding only their original PAKs: their seven demos, their attract loops, a tour
 of each pack's maps (18 and 17, 35,000 frames, with the packs' items picked up and weapons fired) whose 37 saves are
 compared and then loaded in fresh runs, the menus' episodes and levels and the games they start (rogue's four team
-modes), and each pack's end through its finale: every line of all 128,276 frames matches, and every file.
+modes), and each pack's end through its finale: every line of all 128,276 frames matches, and every file. In CI,
+demo1-3 played from the shareware's `pak0.pak` alone end on the oracle's last frames (the shareware's traces are the
+registered data's, byte for byte).
 
 ## 11. Milestones
 
@@ -581,7 +588,7 @@ modes), and each pack's end through its finale: every line of all 128,276 frames
 | 7 ✅ | QuakeC & server | VM, builtins, `sv_*`, `world`, `host_cmd`; **scripted games in sync with the oracle on every frame**, through the episodes' maps; playable. *Plan: §11.1. Ported: pr_edict.c, pr_exec.c, pr_cmds.c, world.c, sv_main.c, sv_phys.c, sv_move.c, sv_user.c, host.c's and host_cmd.c's server parts (save and load included), net_main.c, net_loop.c, net_dgrm.c with the virtual LAN driver, and menu.c's network menus. Trace format 4 adds the server's lines; the scripted games (`events/`: start, commands, intermission, finale, netmenus, tour) and a game played by hand (`e1`: recorded with `-recordevents`, from the menu through e1m1 into e1m2) match the oracle on every line of every frame, 60,500 frames of play in all, every map of the four episodes included; the recording matched on its first replay. The executable shows and plays the game (milestone 6's Program.cs still drew `gfx/conback.lmp` and never handed the engine its video output) and records games with `-recordevents`. More playthroughs are added as they are recorded (decision 35)* |
 | 8 ✅ | Sound | Mixer sample-exact against the oracle; SDL3 output; CD tracks from files. *Plan: §11.2. Trace format 5 adds `P` (the sound device's whole buffer) and `A` (the CD); every trace (demo1-3 at three sizes, the attract loop, the menus, the scripted games, the playthrough, and `sound.events` with and without a sound device and CD) matches with them on every frame: the mixer ported with milestone 5 was already sample-exact. Ported: cd_win.c over an MCI-like `ICdDrive` (the oracle compiles it unchanged over a virtual disc), snd_win.c's start-up messages (as Winquake.exe 1.09 prints them), `AppActivate`'s sound part. The executable plays the CD's tracks from the user's files (the rerelease's Ogg Vorbis through NVorbis, or WAV) on their own SDL3 stream, is silent without the focus, and under `-recordevents` plays the virtual disc's tracks for listening only* |
 | 9 ✅ | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync. *Plan: §11.3. Each oracle run keeps the files it writes (`<name>.files`), and every trace test compares QuakeSharp's with them byte for byte: config.cfg after every run (it already matched), the 41 saves of `saves.events` (a save on every map, the menus' slots, the refusals) and `commands`' save, three demos (through a level change and an intermission, with a forced CD track, one cut by the end of the run), two screenshots and `qconsole.log`. Read back in fresh runs, in sync on every frame: the menus' config.cfg, every save (`loads.events`), every demo played back and as a timedemo. Fixed on the way: reading a savegame as the C runtime's `fscanf` does (hex floats, exponents without digits, 64-bit `%i`, a 0xff byte taken for EOF; checked on 20,000 inputs of each against the oracle), `qconsole.log` in text mode (CR LF), `CL_GetMessage`'s uninitialised `f` at a demo's end (§3.3, the oracle patched alike), and the demo file still open at the end. Winquake.exe 1.09 loads QuakeSharp's saves, and QuakeSharp loads Winquake.exe's saves and plays its demos* |
-| 10 | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios. *Plan: §11.4* |
+| 10 ✅ | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios. *Plan: §11.4. Winquake.exe 1.09 audited (§3.4): its start-up lines, `joystick` cvar and seven modes emulated, its real-time `rand()` and x87 rounding documented, quake.exe 1.08 documented from the source. Ported: in_win.c over a virtual Win32 on both sides (trace format 6's `I`; `QuakeEngine.Pending.cs` gone) and vid_win.c's modes and Video menu; the executable starts as Winquake.exe, in mode 3 full screen, and plays with the mouse in every mode. Both mission packs traced from their original PAKs (MD5s confirmed): their demos, attract loops, tours, saves read back, menus and endings, every line and file in sync. The rest of the UI in six scripted runs; the fidelity tests reach 84.3% of Core's lines, what none reaches listed with why. CI's shareware smoke test plays demo1-3 from `quake106.zip`'s `pak0.pak` to the oracle's last frames* |
 | 11 | Networking | UDP play with other NetQuake engines; net game tests |
 | Later | | Enhanced mode (Vulkan hardware renderer), QuakeWorld, release builds (single file, NativeAOT) |
 
@@ -916,9 +923,9 @@ first and QuakeSharp follows them.
    in sync with the oracle on every line and every file: `console.events` (3,300 frames: completion, editing, the
    history past both ends, the line's limit, scrolling back past both ends, auto-repeat, `wait`, `unbind`, `clear`,
    the console in a game, `messagemode`, `messagemode2` and `con_notifytime`), `screen.events` (4,980, also at
-   640�480: `sizeup` and `sizedown` past their bounds, the field of view's bounds, `showpause`, the turtle on
+   640×480: `sizeup` and `sizedown` past their bounds, the field of view's bounds, `showpause`, the turtle on
    `host_framerate`'s long frames, `lcd_x`'s two views, a level that fails to load, "load failed." a minute later and
-   `Host_Error`), `sbar.events` (5,013, also at 640�480: the faces with the ring, the pentagram and both, the quad,
+   `Host_Error`), `sbar.events` (5,013, also at 640×480: the faces with the ring, the pentagram and both, the quad,
    their flashes and the time they wear off, numbers past three digits and negative, e1m7's rune, a deathmatch's scores
    at each size, dead, its intermission, the mini overlay, coop's frags), `menuwalk.events` (4,899: every menu's
    cursor past both ends, the sliders past their bounds, Go to console, Reset to defaults, Use Mouse skipped in a
@@ -931,9 +938,9 @@ first and QuakeSharp follows them.
    i<svs.maxclients ; i++, host_client++)` leave `host_client` one past the last client and QuakeSharp's ports left it
    on the last, so `kick` typed at the console, which WinQuake lets kick the local player (its check against kicking
    yourself compares with that pointer), did nothing here (`svs.Client(i)` now stands for `&svs.clients[i]`);
-   `mcache` and `r_drawflat` show addresses, given stand-ins on both sides (�3.3); the scripted input is now taken
+   `mcache` and `r_drawflat` show addresses, given stand-ins on both sides (§3.3); the scripted input is now taken
    before it is delivered, so `SCR_ModalMessage`'s question is answered within its frame; loops that wait for real
-   time never end on the virtual clock (�6.3). Step 2's gap is closed: `D_BeginDirectRect` and `D_EndDirectRect` are
+   time never end on the virtual clock (§6.3). Step 2's gap is closed: `D_BeginDirectRect` and `D_EndDirectRect` are
    ported on both sides, the loading disc drawn into the frame and taken out again around every file's read (the frame
    unchanged), and the executable shows it. The fidelity tests reach 17,686 of Core's 20,984 lines (84.3%) and 73.9%
    of its branches (step 2: 77.3% and 65.2%). What they do not reach, and why:*
@@ -968,7 +975,17 @@ first and QuakeSharp follows them.
      text (nothing the game prints has one), `-listen` (a command line no run uses: it starts a deathmatch), and the
      fatal paths (`Sys_Error`).*
 7. **The shareware smoke test** (§10's last row, decision 48): CI fetches `quake106.zip`, extracts its `pak0.pak` (the
-   registered one, same MD5), and plays demo1-3 against the last lines of their traces, kept in the test.
+   registered one, same MD5), and plays demo1-3 against the last lines of their traces, kept in the test. *Done
+   (decision 53): CI downloads `quake106.zip` from the Internet Archive (item `Quake_802`, its only URL, with retries:
+   the first download here got an HTTP 500), checks its MD5, takes `resource.1` out of it (an LHA self-extracting
+   archive, "LHA's SFX 2.x": 7-Zip on the Windows runner, Debian's `lhasa` on Linux, both checked on it here),
+   checks the extracted `pak0.pak`'s MD5 and caches it per runner; if the download fails and nothing is cached, the
+   test skips with a warning. `Trace-Demos.ps1` writes `shareware.demo1`-`3.trace` from a Quake folder of the
+   oracle's holding only `id1/pak0.pak`: they are `demo1`-`3.trace`, byte for byte (what differs, common.c's
+   "Playing shareware version." and the `registered` cvar, is printed before the console exists and is not in a demo's
+   trace lines). `SharewareTests` keeps the 17 lines of each one's last frame (its `F` line holds the frame count)
+   and runs from any original `id1/pak0.pak` in `QUAKESHARP_QUAKE_DIR`, copied alone; QuakeSharp matched at the first
+   run, from the shareware's PAK and the registered's, in 12 seconds for the three.*
 
 **Done when** §3.4 holds the audit (each difference emulated or documented); in_win.c and vid_win.c's modes are ported
 and no stand-in is left (`QuakeEngine.Pending.cs` gone); the
@@ -1031,12 +1048,12 @@ plays with the mouse, in every mode, and both mission packs.
 | 49 | Fidelity target version (was D4) | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`. Audited (§3.4): Winquake.exe's start-up lines (IPX, the joystick), its `joystick` cvar and its seven modes are emulated; its real-time `rand()` and its x87 and assembly rounding are documented; DOS quake.exe 1.08's differences (DJGPP's `rand()`, VGA's palette, its drivers) are documented, not emulated | 2026-10-12 |
 | 50 | Default video mode (was D7) | As Winquake.exe 1.09 on the audited machine: the game starts in mode 3, 320×240 full screen (vid_win.c's `vid_default` once DirectDraw offers modes), where the mouse is taken; `-window` is WinQuake's `-startwindowed` (mode 1, a 640×480 window showing 320×240 doubled). The oracle's runs, the traces and `-recordevents` start with `-startwindowed -noautostretch`: mode 0, a 320×240 window (`-oraclevid` its size), so the existing traces keep their frames and the recorded playthrough its windowed mouse (§6.4) | 2026-10-13 |
 | 51 | Mission packs' data and disc | The packs' MD5s are confirmed with Debian's game-data-packager: hipnotic's is the Scourge of Armagon CD's; Dissolution of Eternity has three original builds of one size (its CD, the 1998 mission packs CD that Steam ships, GOG's), all valid, the traces made from the user's. The fidelity tests copy the original PAKs into a folder of their own, as the oracle's holds only them. A pack plays its own CD's tracks (`rerelease/hipnotic/music`, `rerelease/rogue/music`), never id1's (§2, §7.2) | 2026-10-13 |
-| 52 | The rest of the UI (milestone 10, step 6) | Six scripted runs trace what no other run reached; what none reaches is listed in �11.4 with why, not emulated. The scripted input is taken before it is delivered, so a modal question's key comes in the same frame; scripts keep clear of the loops that wait for real time (�6.3); build-dependent addresses (`mcache`, `r_drawflat`) get stand-ins on both sides (�3.3); a run may start with a synthetic file of the repository's beside the map (`events/e1m1.pts`, not game data); the loading disc is ported on both sides and shown by the executable | 2026-10-13 |
+| 52 | The rest of the UI (milestone 10, step 6) | Six scripted runs trace what no other run reached; what none reaches is listed in §11.4 with why, not emulated. The scripted input is taken before it is delivered, so a modal question's key comes in the same frame; scripts keep clear of the loops that wait for real time (§6.3); build-dependent addresses (`mcache`, `r_drawflat`) get stand-ins on both sides (§3.3); a run may start with a synthetic file of the repository's beside the map (`events/e1m1.pts`, not game data); the loading disc is ported on both sides and shown by the executable | 2026-10-13 |
+| 53 | The shareware smoke test (milestone 10, step 7) | Chosen with the user, as decision 48 asked: the one URL is the Internet Archive's item `Quake_802`, file `quake106.zip` (MD5 `8cee4d03ee092909fdb6a4f84f0c1357`, 9,094,045 bytes); CI checks it, extracts `pak0.pak` from the LHA archive `resource.1` with 7-Zip on Windows and `lhasa` from apt on Linux, checks that and caches it; a failed download with nothing cached skips the test with a warning, not failing CI. The test keeps every trace line of the last frame of demo1-3, played from `pak0.pak` alone (§10, §11.4) | 2026-10-13 |
+| 54 | Scope of v1 (was D8) | Confirmed with the user: v1 is Quake and both mission packs (hipnotic, rogue) on the WinQuake engine; GLQuake and QuakeWorld come after v1 (§1, §11) | 2026-10-13 |
 
 ## 13. Open decisions
 
-To confirm with the user before the milestones they affect; the proposals are the defaults until then:
+To confirm with the user before the milestones they affect; the proposals are the defaults until then.
 
-| # | Question | Proposal |
-|---|---|---|
-| D8 | Scope of v1 | Quake and both mission packs on the WinQuake engine; GLQuake and QuakeWorld after v1 |
+None: every question raised here has been settled with the user and moved to the decision log, marked "was D<n>".

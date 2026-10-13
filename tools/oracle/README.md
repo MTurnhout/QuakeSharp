@@ -65,6 +65,10 @@ setup, LAN and game options' bounds, the quit menu, ending in its yes: 4,899 fra
 other run uses, their usage lines and refusals, a deathmatch's refused cheats: 8,880 frames) and `rdebug.trace` (the
 renderer's debug cvars and commands with `-surfcachesize 160`, `pointfile` reading `events/e1m1.pts`, put in the
 run's `maps`, `chase_active`, quad rockets: 1,787 frames).
+The shareware (milestone 10, step 7): `shareware.demo1-3.trace`, demo1-3 from a second Quake folder beside the
+executable, `quake-shareware`, whose `id1` holds only `pak0.pak` (the shareware's is that file, design.md decision 48).
+They are `demo1-3.trace` byte for byte; `SharewareTests` keeps the lines of their last frames (`tail -17`), for CI,
+which has no traces: if they change, copy the new ones into the test.
 
 With the mission packs in `-QuakeDir` (`hipnotic/pak0.pak`, `rogue/pak0.pak`; only those PAKs are copied, never the
 packs' loose `config.cfg`, design.md decision 45), it also runs `-hipnotic` and `-rogue`, in their own game folders,

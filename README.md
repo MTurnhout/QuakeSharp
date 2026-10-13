@@ -9,24 +9,27 @@ A faithful C# port of id Software's Quake, translated from the original source r
 
 See [design.md](design.md) for the full design and milestones.
 
-> **Status:** milestone 10 (milestones 0-9 done): the Quake file system, the C library's maths functions (from musl)
+> **Status:** milestone 11 (milestones 0-10 done): the Quake file system, the C library's maths functions (from musl)
 > and `rand()`, the host, the commands, cvars, console text and keys, the client (demo playback, models, particles,
 > the view, the sound mixer), the software renderer, the console, the status bar and the menus, the QuakeC VM and its
 > builtins, the server (physics, monsters, the world), the host's server commands and the network layer (loopback, and
-> the datagram protocol over a virtual TCP/IP driver), the sound and the CD, savegames, demo recording and
-> `config.cfg` are ported and checked against WinQuake 1.09's own C, built
+> the datagram protocol over a virtual TCP/IP driver), the sound and the CD, savegames, demo recording,
+> `config.cfg`, the mouse and joystick, WinQuake's video modes and both mission packs are ported and checked against
+> WinQuake 1.09's own C, built
 > headless as a reference oracle that traces every frame: the three demos at three video modes, the attract loop, a
 > scripted tour of the menus and scripted games (a new game through the start map, the server's commands and fights,
 > an intermission, an episode's finale, the network menus starting a deathmatch, a tour of every map) and a game
 > played by hand and recorded in QuakeSharp match it on every frame, pixel for pixel and edict for edict, sample for
 > sample; the files the game writes (config.cfg, savegames, demos, screenshots) are the oracle's byte for byte, and
-> load back in sync. The executable plays, with the keyboard.
+> load back in sync. The mission packs' demos, tours, saves and endings match the same way, and so does the rest of
+> the UI. The executable plays with the keyboard and the mouse, in every mode, with either mission pack.
 
 ## Game data
 
 QuakeSharp contains no game data. You need your own Quake: `id1/pak0.pak` and `id1/pak1.pak` from an original
-release (1.06 or later). The 2021 rerelease ships modified data in its `rerelease/` folder; the Steam install keeps
-the original PAKs in `id1/`.
+release (1.06 or later), or the shareware's `id1/pak0.pak` alone (`quake106.zip`, the first episode). The mission
+packs need their `hipnotic/pak0.pak` or `rogue/pak0.pak` too (`-hipnotic`, `-rogue`). The 2021 rerelease ships
+modified data in its `rerelease/` folder; the Steam install keeps the original PAKs in `id1/`.
 
 ## Building
 
@@ -53,8 +56,8 @@ screen, `-noaspect` shows square pixels instead of a 4:3 picture,
 `-recordevents <file>` records a game for the fidelity tests: QuakeSharp then runs as the oracle's traces do (a
 virtual clock of 1/64 s steps paced to real time, no `config.cfg`) and writes every key as a `-traceevents` line; on
 quitting it prints the frame count. The oracle (`quake-oracle.exe -traceevents <file> -oracleframes <n>`, from its
-Quake folder) and `quakesharp-tools trace` then replay the same game, so it can be compared frame by frame. The mouse
-is not recorded (the oracle has none).
+Quake folder) and `quakesharp-tools trace` then replay the same game, so it can be compared frame by frame. The
+mouse's motion and buttons are recorded too.
 
 ## Developer tools
 
@@ -88,7 +91,8 @@ dotnet test --solution QuakeSharp.slnx
 ```
 
 Fidelity tests need the original game data in `QUAKESHARP_QUAKE_DIR` and reference traces in
-`QUAKESHARP_TRACE_DIR`; without them they skip.
+`QUAKESHARP_TRACE_DIR`; without them they skip. The shareware smoke test needs only an original `id1/pak0.pak` there
+(the shareware's, which CI downloads, or the registered one) and no traces.
 
 ## License
 

@@ -11,6 +11,8 @@ when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.fi
   <demo>.320x200.trace  the same at 320x200 (DOS Quake's mode 0)
   <demo>.640x480.trace  the same at 640x480
   attract.trace         the attract loop (no command line), for -AttractFrames frames
+  shareware.<demo>.trace  demo1-3 from a Quake folder of its own holding only id1/pak0.pak, the shareware's (the
+                        shareware smoke test keeps their last frames)
   menus.trace           the attract loop with the scripted input of events/menus.events (menus, console, scores,
                         renderer cvars), at 320x240; menus.640x480.trace the same at 640x480
   attract.config.trace  600 frames of the attract loop with the config.cfg menus.trace's run wrote
@@ -94,16 +96,22 @@ foreach ($pak in 'pak0.pak', 'pak1.pak') {
 }
 $packs = @('hipnotic', 'rogue' | Where-Object { CopyPak $_ 'pak0.pak' })
 $gameDirs = @('id1') + $packs
+# The shareware's Quake folder, beside it: id1's pak0.pak alone, the shareware's (the same file, design.md decision 48)
+$shareware = Join-Path (Split-Path $Oracle) 'quake-shareware'
+New-Item -ItemType Directory -Force (Join-Path $shareware 'id1') | Out-Null
+Copy-Item (Join-Path $base 'id1\pak0.pak') (Join-Path $shareware 'id1\pak0.pak')
 
 # A run of the oracle: from game folders holding only the PAKs (and the files of earlier runs named in $inputs, as
 # "<run>/<file>", in the run's game folder $game; and $place's files, path in the game folder = file), writing
-# <name>.trace; what the run's game folder holds afterwards, but the PAKs, is kept in <name>.files
-function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), [string] $game = 'id1', [hashtable] $place = @{}) {
+# <name>.trace; what the run's game folder holds afterwards, but the PAKs, is kept in <name>.files. $root is the Quake
+# folder it runs from: $base, or $shareware
+function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), [string] $game = 'id1', [hashtable] $place = @{}, [string] $root = $base) {
     if ($Only -and $Only -notcontains $name) { return }
     foreach ($g in $gameDirs) {
         Get-ChildItem (Join-Path $base $g) | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' } | Remove-Item -Recurse
     }
-    $gamedir = Join-Path $base $game
+    Get-ChildItem (Join-Path $shareware 'id1') | Where-Object { $_.Name -ne 'pak0.pak' } | Remove-Item -Recurse
+    $gamedir = Join-Path $root $game
     foreach ($earlier in $inputs) {
         Copy-Item (Join-Path $OutDir ($earlier -replace '^([^/]+)/', '$1.files/')) $gamedir
     }
@@ -115,7 +123,7 @@ function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), 
     $trace = Join-Path $OutDir "$name.trace"
     # from the Quake folder with WinQuake's base directory ".": the console shows "./id1/pak0.pak", as QuakeSharp's
     # traces do wherever the game data is; in a window, mode 0 (design.md decision 50)
-    Push-Location $base
+    Push-Location $root
     try { & $Oracle -startwindowed -noautostretch -trace $trace @arguments | Out-Null } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "the oracle failed on $name" }
     $frames = (Select-String -Path $trace -Pattern '^F ' | Measure-Object).Count
@@ -134,6 +142,11 @@ foreach ($demo in 'demo1', 'demo2', 'demo3') {
     Trace "$demo.640x480" @('-oraclevid', '640', '480', '-tracequitafterdemo', '+playdemo', $demo)
 }
 Trace 'attract' @('-oracleframes', "$AttractFrames")
+# the shareware smoke test's demos (design.md §11.4, step 7), from pak0.pak alone: SharewareTests keeps their last
+# frames
+foreach ($demo in 'demo1', 'demo2', 'demo3') {
+    Trace "shareware.$demo" @('-tracequitafterdemo', '+playdemo', $demo) @() 'id1' @{} $shareware
+}
 
 # the menus, the console and the renderer's cvars, played over the attract loop
 $events = Join-Path $PSScriptRoot 'events\menus.events'

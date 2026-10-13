@@ -14,6 +14,8 @@ internal static class GameDataLocator
 
     private static readonly ConcurrentDictionary<string, Lazy<string?>> PackDirs = new(StringComparer.Ordinal);
 
+    private static readonly Lazy<string?> SharewareDir = new(() => CopyOriginals("paks-shareware", ["id1/pak0.pak"]));
+
     /// <summary>The Quake folder whose id1/pak0.pak and id1/pak1.pak are the original registered 1.06 files.</summary>
     public static string RequireBaseDir()
     {
@@ -36,6 +38,19 @@ internal static class GameDataLocator
         return dir!;
     }
 
+    /// <summary>
+    /// A Quake folder holding only the original id1/pak0.pak: the shareware's, which is the registered one's first PAK
+    /// (design.md decision 48), from quake106.zip in CI or from a registered installation. It is copied once into a
+    /// folder under the temporary folder.
+    /// </summary>
+    public static string RequireSharewareBaseDir()
+    {
+        string? dir = SharewareDir.Value;
+        Assert.SkipUnless(dir != null,
+            "Set QUAKESHARP_QUAKE_DIR to a Quake folder with the original id1/pak0.pak (the shareware's or the registered).");
+        return dir!;
+    }
+
     private static IEnumerable<string> Settings()
     {
         string? setting = Environment.GetEnvironmentVariable("QUAKESHARP_QUAKE_DIR");
@@ -45,16 +60,19 @@ internal static class GameDataLocator
     private static string? Find() =>
         Settings().FirstOrDefault(dir => IsOriginal(dir, "id1/pak0.pak") && IsOriginal(dir, "id1/pak1.pak"));
 
-    private static string? FindPack(string pack)
+    private static string? FindPack(string pack) =>
+        CopyOriginals("paks-" + pack, ["id1/pak0.pak", "id1/pak1.pak", $"{pack}/pak0.pak"]);
+
+    // The original paks of the first setting that holds them all, copied alone into a folder under the temporary folder
+    private static string? CopyOriginals(string name, string[] paks)
     {
-        string[] paks = ["id1/pak0.pak", "id1/pak1.pak", $"{pack}/pak0.pak"];
         string? source = Settings().FirstOrDefault(dir => paks.All(pak => IsOriginal(dir, pak)));
         if (source == null)
         {
             return null;
         }
 
-        string target = Path.Combine(Path.GetTempPath(), "quakesharp-tests", "paks-" + pack);
+        string target = Path.Combine(Path.GetTempPath(), "quakesharp-tests", name);
         foreach (string pak in paks)
         {
             var from = new FileInfo(HostPath.Resolve(Path.Combine(source, pak))!);
