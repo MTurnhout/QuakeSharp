@@ -323,6 +323,7 @@ internal sealed class EnhancedMode(EnhancedRenderer renderer, SdlSoundDma? sound
         else
         {
             engine.enhanced = null;
+            renderer.Deactivate();
         }
 
         // the device plays the enhanced mixer's ring while the mode has the sound

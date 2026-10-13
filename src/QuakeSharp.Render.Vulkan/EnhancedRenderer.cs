@@ -25,6 +25,9 @@ public sealed class EnhancedRenderer : IDisposable
     private EnhancedFrame? previous, latest;
     private long latestAt;
     private bool fresh;
+
+    // snapshots come (the mode is on), and a frame is being drawn
+    private bool active, drawing;
     private Exception? failure;
     private bool stopping;
 
@@ -48,7 +51,28 @@ public sealed class EnhancedRenderer : IDisposable
             latestAt = Stopwatch.GetTimestamp();
             smoothing.Observe(frame);
             fresh = true;
-            Monitor.Pulse(gate);
+            active = true;
+            Monitor.PulseAll(gate);
+        }
+    }
+
+    /// <summary>
+    /// The mode switched off: nothing more is drawn until the next snapshot, and a frame being drawn is finished
+    /// first. So no enhanced frame follows the faithful ones the game thread presents next: each would make the
+    /// swapchain again for its own presentation (FIFO or immediate, then the faithful mode's mailbox), and while the
+    /// two took turns the window showed nothing new.
+    /// </summary>
+    public void Deactivate()
+    {
+        lock (gate)
+        {
+            active = false;
+            previous = latest = null;
+            fresh = false;
+            while (drawing && failure == null)
+            {
+                Monitor.Wait(gate);
+            }
         }
     }
 
@@ -71,7 +95,7 @@ public sealed class EnhancedRenderer : IDisposable
             if (show)
             {
                 fresh = true;
-                Monitor.Pulse(gate);
+                Monitor.PulseAll(gate);
             }
         }
     }
@@ -86,7 +110,7 @@ public sealed class EnhancedRenderer : IDisposable
         lock (gate)
         {
             stopping = true;
-            Monitor.Pulse(gate);
+            Monitor.PulseAll(gate);
         }
 
         thread.Join();
@@ -101,8 +125,8 @@ public sealed class EnhancedRenderer : IDisposable
             EnhancedFrame frame;
             lock (gate)
             {
-                // nothing new and the last one reached: wait for the game
-                while (!fresh && caughtUp && !stopping)
+                // switched off, or nothing new and the last one reached: wait for the game
+                while (!stopping && (!active || (!fresh && caughtUp)))
                 {
                     Monitor.Wait(gate);
                 }
@@ -115,12 +139,19 @@ public sealed class EnhancedRenderer : IDisposable
                 fresh = false;
                 (frame, caughtUp) = Interpolated();
                 frame = smoothing.Apply(frame);
+                drawing = true;
             }
 
             try
             {
                 long started = Stopwatch.GetTimestamp();
                 presenter.PresentEnhanced(frame, options);
+                lock (gate)
+                {
+                    drawing = false;
+                    Monitor.PulseAll(gate);
+                }
+
                 DrawingTime += Stopwatch.GetElapsedTime(started);
                 FramesDrawn++;
             }
@@ -129,6 +160,8 @@ public sealed class EnhancedRenderer : IDisposable
                 lock (gate)
                 {
                     failure = e;
+                    drawing = false;
+                    Monitor.PulseAll(gate);
                 }
 
                 return;

@@ -1463,6 +1463,19 @@ match the software's (every 500th frame to 12000: 94.1-99.9% of the view within 
 collision. In the executable: the build before left the world out after the first switch in demo1; with the fix, 27
 switches off and on over the attract loop and 17 in a game on e1m1 each drew the level right.
 
+Then a black window after a switch at the start of e1m4, which more switches did not end and a change of focus away
+from the game did; not seen again. Not reproduced, but the switch had a fault that fits: the two modes present
+differently (the faithful frames by mailbox, the enhanced ones by FIFO or immediate), so the swapchain is made again
+at each switch, and when the mode went off while the render thread was between two snapshots, it went on drawing
+the rest of its interpolation: each of its frames made the swapchain again as FIFO, the game thread's next as mailbox,
+about 120 ms each on the test machine (the first present to a new swapchain), the game waiting on the presenter's
+lock and the window showing nothing new while they took turns. A change of the window's state (the focus) makes the
+compositor look at the window again, which may be what ended it. `EnhancedRenderer.Deactivate`, called when the mode
+goes off, now drops its snapshots and waits for a frame it is drawing, so no enhanced frame follows: 60 switches a
+quarter of a second apart at e1m4's start made the swapchain 61 times (once per switch); without it, 75. No test: the
+renderer needs the GPU (decision 65). Found on the way: `SendKeys`' `{SCROLLLOCK}` presses the key twice (it puts the
+toggle back), so the checks above switched the mode off and on with each press; one press is `keybd_event`'s.
+
 No package is needed (Vortice.Vulkan, its allocator, SDL3 and Slang cover it; the mesh building and the resampler are
 QuakeSharp's own); one would be asked for first.
 
