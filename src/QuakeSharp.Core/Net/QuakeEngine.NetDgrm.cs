@@ -5,12 +5,13 @@ using QuakeSharp.Core.Server;
 using QuakeSharp.Core.UI;
 using static QuakeSharp.Core.Common.QString;
 using static QuakeSharp.Core.Net.NetDef;
+using static QuakeSharp.Core.Net.Winsock;
 using static QuakeSharp.Core.QuakeDef;
 
 namespace QuakeSharp.Core;
 
-// net_dgrm.c: the datagram driver, Quake's protocol over a LAN driver (net_landrivers: the virtual TCP/IP driver,
-// decision 33). BAN_TEST is defined, as in WinQuake.
+// net_dgrm.c: the datagram driver, Quake's protocol over a LAN driver (net_win.c's net_landrivers: net_wins.c's TCP/IP
+// and net_wipx.c's IPX). BAN_TEST is defined, as in WinQuake.
 public sealed partial class QuakeEngine
 {
     /// <summary>net_win.c: net_landrivers</summary>
@@ -55,77 +56,6 @@ public sealed partial class QuakeEngine
 
     // control = BigLong(*((int *)net_message.data))
     private int ControlHeader() => BinaryPrimitives.ReadInt32BigEndian(net_message.data);
-
-    // winsock's inet_addr: "a.b.c.d" (each part decimal, octal with 0 or hexadecimal with 0x; fewer parts fill the last
-    // one's low bytes, as the BSD function does) to the address's bytes in memory order, INADDR_NONE when invalid
-    private static uint inet_addr(string cp)
-    {
-        const uint INADDR_NONE = 0xffffffff;
-        var parts = new List<uint>();
-        int i = 0;
-
-        while (true)
-        {
-            if (i >= cp.Length || !char.IsAsciiDigit(cp[i]))
-            {
-                return INADDR_NONE;
-            }
-
-            uint value = 0;
-            uint radix = 10;
-            if (cp[i] == '0')
-            {
-                radix = 8;
-                i++;
-                if (i < cp.Length && (cp[i] == 'x' || cp[i] == 'X'))
-                {
-                    radix = 16;
-                    i++;
-                }
-            }
-
-            while (i < cp.Length)
-            {
-                int d = char.IsAsciiDigit(cp[i]) ? cp[i] - '0'
-                    : radix == 16 && char.IsAsciiHexDigit(cp[i]) ? (cp[i] | 0x20) - 'a' + 10 : -1;
-                if (d < 0 || d >= radix)
-                {
-                    break;
-                }
-
-                value = unchecked((value * radix) + (uint)d);
-                i++;
-            }
-
-            parts.Add(value);
-            if (i < cp.Length && cp[i] == '.' && parts.Count < 4)
-            {
-                i++;
-                continue;
-            }
-
-            break;
-        }
-
-        if (i < cp.Length && cp[i] != ' ')
-        {
-            return INADDR_NONE;
-        }
-
-        uint host = parts.Count switch
-        {
-            1 => parts[0],
-            2 when parts[0] <= 0xff && parts[1] <= 0xffffff => (parts[0] << 24) | parts[1],
-            3 when parts[0] <= 0xff && parts[1] <= 0xff && parts[2] <= 0xffff => (parts[0] << 24) | (parts[1] << 16) | parts[2],
-            4 when parts.TrueForAll(p => p <= 0xff) => (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3],
-            _ => INADDR_NONE,
-        };
-        return host == INADDR_NONE ? INADDR_NONE : BinaryPrimitives.ReverseEndianness(host);
-    }
-
-    // winsock's inet_ntoa: an address (its bytes in memory order) as "a.b.c.d"
-    private static string inet_ntoa(uint addr) =>
-        CFormat.Sprintf("%d.%d.%d.%d", (int)(addr & 0xff), (int)((addr >> 8) & 0xff), (int)((addr >> 16) & 0xff), (int)(addr >> 24));
 
     // net_dgrm.c: NET_Ban_f
     public void NET_Ban_f()

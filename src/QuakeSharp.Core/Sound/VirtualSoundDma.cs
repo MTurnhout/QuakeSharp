@@ -12,10 +12,10 @@ public sealed class VirtualSoundDma : ISoundDma
 {
     private const int SecondaryBufferSize = 0x10000;
 
-    private readonly ISystem system;
+    private readonly VirtualSystem system;
     private Dma? shm;
 
-    public VirtualSoundDma(ISystem system)
+    public VirtualSoundDma(VirtualSystem system)
     {
         this.system = system;
     }
@@ -38,12 +38,13 @@ public sealed class VirtualSoundDma : ISoundDma
         return shm;
     }
 
-    // snd_oracle.c: SNDDMA_GetDMAPos: one sample frame per 1/speed s of the clock, wrapping in the buffer
+    // snd_oracle.c: SNDDMA_GetDMAPos: one sample frame per 1/speed s of the clock (read as the oracle reads
+    // oracle_time, not as the engine reads it), wrapping in the buffer
     public int GetDMAPos()
     {
         int s;
 
-        s = (int)(system.FloatTime() * shm!.speed) * shm.channels;
+        s = (int)(system.Time * shm!.speed) * shm.channels;
         s &= shm.samples - 1;
         return s;
     }

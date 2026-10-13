@@ -1,4 +1,5 @@
 using QuakeSharp.Core.Common;
+using QuakeSharp.Core.Net;
 using QuakeSharp.Core.Platform;
 using QuakeSharp.Core.Sound;
 
@@ -12,7 +13,6 @@ namespace QuakeSharp.Core.Diagnostics;
 public sealed class TraceRun
 {
     private readonly VirtualSystem system;
-    private readonly double step;
     private readonly TraceWriter writer;
 
     /// <param name="gameDir">The Quake folder (holding id1/).</param>
@@ -25,8 +25,7 @@ public sealed class TraceRun
     public TraceRun(string gameDir, string userDir, IEnumerable<string> args, int width = 320, int height = 240,
         int framesPerSecond = 64, Action<string>? print = null)
     {
-        system = new VirtualSystem(print);
-        step = 1.0 / framesPerSecond;
+        system = new VirtualSystem(print, 1.0 / framesPerSecond);
 
         // in a window, in mode 0, as Trace-Demos.ps1 runs the oracle (design.md decision 50)
         var commandLine = new CommandLine(["quake", "-startwindowed", "-noautostretch", .. args]);
@@ -36,6 +35,17 @@ public sealed class TraceRun
         TraceEvents? events = e != 0 && e < commandLine.Argc - 1
             ? new TraceEvents(commandLine.Argv(e + 1), () => writer!.Frame)
             : null;
+
+        // the virtual machine's Winsock (winsock_oracle.c): -oraclehost <n>, and the other hosts' datagrams from
+        // -tracedatagrams <file>
+        int h = commandLine.CheckParm("-oraclehost");
+        Winsock = new VirtualWinsock(h != 0 && h < commandLine.Argc - 1 ? Common.QString.Q_atoi(commandLine.Argv(h + 1)) : 1,
+            () => system.Steps);
+        int d = commandLine.CheckParm("-tracedatagrams");
+        if (d != 0 && d < commandLine.Argc - 1)
+        {
+            Winsock.ArriveFromFile(commandLine.Argv(d + 1));
+        }
 
         Engine = new QuakeEngine(
             new QuakeParms(".", commandLine)
@@ -48,7 +58,8 @@ public sealed class TraceRun
             system,
             input: events,
             sound: new VirtualSoundDma(system),
-            cd: new VirtualCdDrive());
+            cd: new VirtualCdDrive(),
+            winsock: Winsock);
         writer = new TraceWriter(Engine, framesPerSecond);
         if (events != null)
         {
@@ -57,6 +68,12 @@ public sealed class TraceRun
     }
 
     public QuakeEngine Engine { get; }
+
+    /// <summary>The virtual machine's Winsock: its number on the virtual LAN, what it sends and receives.</summary>
+    public VirtualWinsock Winsock { get; }
+
+    /// <summary>The virtual clock (its steps run ahead of the frames after a frame that waited).</summary>
+    public VirtualSystem System => system;
 
     /// <summary>
     /// The game directory a run with <paramref name="args"/> writes into, as COM_InitFilesystem picks com_gamedir: id1,
@@ -99,6 +116,7 @@ public sealed class TraceRun
         bool wasPlaying = false;
 
         Engine.Host_Init();
+        double oldtime = system.Time;
         while (true)
         {
             if (writer.Frame >= maxFrames)
@@ -107,16 +125,19 @@ public sealed class TraceRun
                 yield break;
             }
 
-            system.Time += step;
+            // sys_win.c's loop: the time since the last frame began, a step, or more after a frame that waited
+            system.Step();
+            double newtime = system.Time;
             try
             {
-                Engine.Host_Frame((float)step);
+                Engine.Host_Frame((float)(newtime - oldtime));
             }
             catch (QuitException)
             {
                 yield break;
             }
 
+            oldtime = newtime;
             yield return writer.FrameLines();
 
             if (Engine.cls.demoplayback)

@@ -17,7 +17,7 @@ namespace QuakeSharp.Core.Diagnostics;
 public sealed class TraceWriter
 {
     /// <summary>The trace format's version (the H line).</summary>
-    public const int Version = 6;
+    public const int Version = 7;
 
     private const ulong FNV_OFFSET = 0xcbf29ce484222325UL;
     private const ulong FNV_PRIME = 0x100000001b3UL;
@@ -79,12 +79,27 @@ public sealed class TraceWriter
         lines.Add(Invariant($"P {Paint():x16}"));
         lines.Add(Invariant($"A {CD():x16}"));
         lines.Add(Invariant($"I {Input():x16}"));
+        ulong u = Datagrams(out int datagrams);
+        lines.Add(Invariant($"U {u:x16} {datagrams}"));
         lastFramePaintedtime = framePaintedtime;
         framePaintedtime = e.paintedtime;
         return lines;
     }
 
     private static string Invariant(FormattableString s) => s.ToString(CultureInfo.InvariantCulture);
+
+    // U: the datagrams the virtual machine's Winsock sent and received during the frame (winsock_oracle.c's
+    // Oracle_Datagrams)
+    private ulong Datagrams(out int count)
+    {
+        if (engine.WinsockLibrary is Net.VirtualWinsock winsock)
+        {
+            return winsock.Datagrams(out count);
+        }
+
+        count = 0;
+        return FNV_OFFSET;
+    }
 
     /// <summary>The oracle's -tracedump: the entities field by field (floats as their bits), as trace.c writes them.</summary>
     public string Dump()

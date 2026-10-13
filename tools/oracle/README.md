@@ -143,11 +143,17 @@ hooks for the traces that change nothing:
   to `ClipCursor`'s rectangle (its right and bottom edges excluded); winmm's 16 joystick slots, each unplugged, so the
   console says "joystick not found -- no valid joysticks (a7)" as on Windows without one; the system's mouse
   parameters, Windows' defaults. DirectInput (`-dinput`) is not part of it.
-- `net_oracle.c`: WinQuake's network drivers (`net_win.c`'s list: loopback, then datagram, `net_dgrm.c`) over its two
-  LAN drivers: net_wins.c without sockets (design.md decision 33): TCP/IP is available (the menus offer it and a game
-  started from them runs over loopback), the address is 127.0.0.1 once listening, the console says "Winsock TCP/IP
-  Initialized", no name or address resolves and no packet arrives; and net_wipx.c as today's Windows starts it, without
-  IPX: "WIPX_Init: Unable to open control socket" (design.md §3.4).
+- `winsock_oracle.c`: WinQuake's network drivers are `net_win.c`'s, compiled unchanged with `net_wins.c` and
+  `net_wipx.c` (design.md §11.5); their Winsock is a virtual machine's instead of wsock32 (`LoadLibrary` and
+  `GetProcAddress`, renamed for those files, answer with its functions): the machine `quake<n>` at 10.0.0.<n>
+  (`-oraclehost`) on a virtual LAN of `quake1`-`quake254`, UDP sockets bound to ports (the next free one from 49152 for
+  port 0), what it sends itself (its address, the loopback, a broadcast) arriving at the next step of the clock, the
+  ICMP answer to a port nobody has as `WSAECONNRESET`, and the other hosts' datagrams from `-tracedatagrams`. IPX's
+  family is refused, so net_wipx.c fails as on today's Windows ("WIPX_Init: Unable to open control socket", §3.4).
+  `net_errno.h` lets their local named `errno` compile with today's C runtime, where `errno` is a macro.
+- `sys_oracle.c`'s clock waits: a frame that reads it 1,000 times without it moving (WinQuake's loops that wait for a
+  network answer within a frame: `NET_Connect`'s search, `_Datagram_Connect`, `NET_SendToAll`, `Host_ShutdownServer`'s
+  flush) moves it a step at that read, and the next frame's time is what passed, as `sys_win.c` computes it.
 - `trace.c`: the traces and the scripted input.
 
 ## Switches
@@ -160,13 +166,15 @@ hooks for the traces that change nothing:
 | `-traceshot <frame>` | Also write that frame (any number of times) as `<trace>.<frame>.shot`: width, height (32-bit), the palette, the pixels; `quakesharp-tools shot2png` makes a PNG of it |
 | `-tracedump <frame>` | Also write that frame's state (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits: the client's entities, then the server (`server` line), the QuakeC globals and every edict's header and fields by name (`global`, `edict` lines, strings quoted with `\xHH` escapes), the messages sent during the frame in hexadecimal (`message <sender> <reliable> <result> <size> <bytes>`), the sound (`sound`: the mixer's times, `channel` lines, `painted <from> <to> <bytes>`: the samples painted during the frame from the device's buffer, in hexadecimal) and the CD (`cd`: cd_win.c's state, `cdvolume` as its bits, the remap table, the drive's) and the mouse and joystick (`input`: the `I` line's fields by name); `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing line |
 | `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it), `<frame> @mouse <dx> <dy>`, the mouse moved (the virtual cursor, then `IN_MouseEvent` as for `WM_MOUSEMOVE`), or `<frame> @buttons <state>`, the mouse buttons held (1 left, 2 right, 4 middle; `IN_MouseEvent`). Each line is taken before it is delivered, so a key that waits for the next (`SCR_ModalMessage`'s loop calls `Sys_SendKeyEvents`) gets the lines after it of the same frame: the answer must be in the frame of the key that asks |
+| `-tracedatagrams <file>` | The other hosts' datagrams: lines of `<step> <port> <a.b.c.d:port> <hex bytes>`, a datagram from that address arriving at the machine's port at that step of the clock (frame n runs at step n until a frame waits: then the clock runs ahead), or `<step> <port> <a.b.c.d:port> reset`, the ICMP answer to what that port's socket sent there; at each step they arrive before the machine's own |
+| `-oraclehost <n>` | The machine's number on the virtual LAN: name `quake<n>`, address 10.0.0.<n> (1 by default) |
 | `-oraclevid <w> <h>` | Mode 0's size, the first windowed mode (320x200 to 1280x1024; 320x240 by default) |
 | `-oraclestep <n>` | Frames of 1/n s |
 | `-oracleverbose` | Print `Sys_Printf` (the console) to stdout |
 
 ## The trace format
 
-One line `H 6 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
+One line `H 7 <width> <height> <frames per second>`, then for every frame, after `Host_Frame`:
 
 | Line | Fields |
 |---|---|
@@ -187,11 +195,12 @@ One line `H 6 <width> <height> <frames per second>`, then for every frame, after
 | `P <hash>` | The sound device's buffer, all of it (`shm->buffer`, 64 KB): the samples painted, `S_ClearBuffer`'s clears and what stays from the laps before; nothing without a started sound system |
 | `A <hash>` | The CD: cd_win.c's `initialized`, `enabled`, `cdValid`, `playing`, `wasPlaying`, `playLooping`, `cdvolume`, `playTrack`, `maxTrack` and `remap`, then the virtual drive's state (open, door open, stopped, playing or paused, track) |
 | `I <hash>` | The mouse and the joystick: in_win.c's state (`mouseactive`, `mouseinitialized`, `mouseactivatetoggle`, `mouseshowtoggle`, `mouseparmsvalid`, `restore_spi`, `dinput`, `dinput_acquired`, `mstate_di`, `mouse_buttons`, `mouse_oldbuttonstate`, `current_pos`, `mx_accum`, `my_accum`, `mouse_x`, `mouse_y`, `old_mouse_x`, `old_mouse_y`, `joy_avail`, `joy_advancedinit`, `joy_haspov`, `joy_id`, `joy_flags`, `joy_numbuttons`, `joy_oldbuttonstate`, `joy_oldpovstate`, `dwAxisMap`, `dwControlMap`), vid_win.c's `windowed_mouse`, then the virtual machine's (the cursor, the clip rectangle, the buttons, the display counter, the capture, the mouse parameters) |
+| `U <hash> <datagrams>` | The datagrams the virtual machine's Winsock sent and received during the frame, in order: 0 sent, 1 received, 2 the ICMP answer received; the socket's port, the other end's address and port (host byte order), the size and the bytes |
 | `Err <text>` | `Sys_Error`'s message, last |
 
 The client's lines (`F`, `C`, `E`, `X`, `S`, `T`, `R` and the palette) do not depend on the renderer; `D` and the frame
 are the renderer's; `G`, `Q`, `N` and `W` the server's (without an active server `G` hashes the flags and `svs`, the
-others nothing), `M` both; `P` the mixer's and `A` the CD's (trace format 5, milestone 8), `I` the mouse's and the joystick's (trace format 6, milestone 10). `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
+others nothing), `M` both; `P` the mixer's and `A` the CD's (trace format 5, milestone 8), `I` the mouse's and the joystick's (trace format 6, milestone 10), `U` the LAN drivers' (trace format 7, milestone 11). `Trace-Demos.ps1` runs the oracle from its Quake folder with WinQuake's base directory "." (the
 console shows `./id1/pak0.pak`), as QuakeSharp's traces run wherever the game data is.
 
 Hashes are 64-bit FNV-1a over the fields' bytes: `int` and `float` as 4 little-endian bytes, `double` 8, vectors three

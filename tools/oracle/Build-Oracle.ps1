@@ -50,10 +50,10 @@ function Compile([string] $source, [string] $objDir, [string[]] $extra = @()) {
     return $obj
 }
 
-function Link([string] $exe, [string[]] $objects) {
-    # 4217: cd_win.c and in_win.c import functions from winmm and user32 that src/cd_oracle.c and src/in_oracle.c define
-    # instead, as intended
-    & $clang --target=i686-pc-windows-msvc -fuse-ld=lld -MT @objects "-Fe$exe" -nologo /link /ignore:4217
+function Link([string] $exe, [string[]] $objects, [string[]] $options = @()) {
+    # 4217: cd_win.c, in_win.c and the network drivers import functions from winmm, user32, kernel32 and wsock32 that
+    # src/cd_oracle.c, src/in_oracle.c and src/winsock_oracle.c define instead, as intended
+    & $clang --target=i686-pc-windows-msvc -fuse-ld=lld -MT @objects "-Fe$exe" -nologo /link /ignore:4217 @options
     if ($LASTEXITCODE -ne 0) { throw "linking $exe failed" }
     Write-Host "built $exe"
 }
@@ -75,10 +75,11 @@ Link (Join-Path $WorkDir 'numerics.exe') (@($numerics) + $muslObjects)
 # quake-oracle.exe: WinQuake 1.09's C with the oracle's platform layer (src/) instead of the Windows drivers. The
 # sources are copied into the work folder and quake-oracle.patch applied: with ORACLE defined, quakedef.h and
 # quakeasm.h leave __i386__ undefined, so id386 is 0 (the C code, never the assembly). The network drivers are
-# src/net_oracle.c's (loopback and datagram over a virtual LAN driver) instead of net_win.c's; cd_win.c's MCI commands
-# go to src/cd_oracle.c's virtual drive instead of winmm, and in_win.c's mouse and joystick calls to src/in_oracle.c's
-# virtual screen without a joystick instead of user32 and winmm (DirectInput's headers as DirectX 3's, which in_win.c
-# was written for).
+# net_win.c's, their Winsock src/winsock_oracle.c's virtual machine instead of wsock32 (net_wins.c and net_wipx.c load
+# it with LoadLibrary and GetProcAddress, renamed for the three files so the rest of the program keeps kernel32's);
+# cd_win.c's MCI commands go to src/cd_oracle.c's virtual drive instead of winmm, and in_win.c's mouse and joystick
+# calls to src/in_oracle.c's virtual screen without a joystick instead of user32 and winmm (DirectInput's headers as
+# DirectX 3's, which in_win.c was written for).
 $quake = Join-Path $WorkDir 'quake-src'
 if (Test-Path $quake) { Remove-Item -Recurse -Force $quake }
 Copy-Item -Recurse (Join-Path $repo 'reference\Quake\WinQuake') $quake
@@ -103,10 +104,17 @@ $quakeSources = @(
 $quakeObjects = foreach ($s in $quakeSources) {
     Compile (Join-Path $quake $s) (Join-Path $WorkDir 'obj\quake') $quakeFlags
 }
+$quakeObjects += foreach ($s in 'net_win.c', 'net_wins.c', 'net_wipx.c') {
+    # net_errno.h: their local named errno
+    Compile (Join-Path $quake $s) (Join-Path $WorkDir 'obj\quake') ($quakeFlags + '-FInet_errno.h' +
+        '-DLoadLibraryA=Oracle_LoadLibraryA' + '-DGetProcAddress=Oracle_GetProcAddress')
+}
 $quakeObjects += foreach ($s in (Get-ChildItem (Join-Path $oracleSrc '*.c'))) {
     # the oracle's own files must declare what they call: a float argument to an undeclared function is passed as a double
     Compile $s.FullName (Join-Path $WorkDir 'obj\oracle') ($quakeFlags + '/clang:-Werror=implicit-function-declaration')
 }
-# wsock32.lib: net_dgrm.c's ban command converts addresses with inet_addr and inet_ntoa; dxguid.lib: the DirectInput
-# GUIDs in in_win.c's mouse data format
-Link (Join-Path $WorkDir 'quake-oracle.exe') ($quakeObjects + $muslObjects + 'wsock32.lib' + 'dxguid.lib')
+# no wsock32.lib: what the network code takes from it (net_dgrm.c's inet_addr and inet_ntoa too) is the virtual
+# machine's; dxguid.lib: the DirectInput GUIDs in in_win.c's mouse data format. /include: lld drops a function that
+# only its synthesized import (4217) refers to, so the renamed LoadLibraryA and GetProcAddress are kept by name
+Link (Join-Path $WorkDir 'quake-oracle.exe') ($quakeObjects + $muslObjects + 'dxguid.lib') @(
+    '/include:_Oracle_LoadLibraryA@4', '/include:_Oracle_GetProcAddress@8')

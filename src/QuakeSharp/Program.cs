@@ -3,6 +3,7 @@ using System.Globalization;
 using QuakeSharp.Core;
 using QuakeSharp.Core.Common;
 using QuakeSharp.Core.Diagnostics;
+using QuakeSharp.Core.Net;
 using QuakeSharp.Core.Platform;
 using QuakeSharp.Platform.Sdl;
 using QuakeSharp.Render.Vulkan;
@@ -66,8 +67,10 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     using var sound = new SdlSoundDma();
     using var cd = new FileCdDrive(CdTracks.Find(".", commandLine));
     using var joysticks = new SdlJoysticks();
+    // the virtual machine's Winsock, alone on its LAN, until the real network's comes (design.md §11.5, step 4)
+    var winsock = new VirtualWinsock(1, () => (long)(system.FloatTime() * 64));
     var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound,
-        new WindowVideo(window, presenter), cd, mouse: window, joysticks: joysticks);
+        new WindowVideo(window, presenter), cd, mouse: window, joysticks: joysticks, winsock: winsock);
 
     // WM_ACTIVATE: DirectSound silences the game while another program has the focus; AppActivate clears the buffer
     window.Activated = (active, minimized) =>
@@ -109,14 +112,14 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     const double Step = 1.0 / FramesPerSecond;
 
     string userdir = Path.Combine(Path.GetTempPath(), "quakesharp-record", Guid.NewGuid().ToString("N"));
-    var system = new VirtualSystem(Console.Write);
+    var system = new VirtualSystem(Console.Write, Step);
     int frames = 0;
     using var recorder = new EventRecorder(window, path, () => frames);
     using var sound = new SdlSoundDma(clock: () => system.Time);
     using var cd = new ListeningCdDrive(CdTracks.Find(".", commandLine));
     // the window takes the mouse as in a game; no joystick, as the oracle has none
     var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound,
-        new WindowVideo(window, presenter), cd, mouse: window);
+        new WindowVideo(window, presenter), cd, mouse: window, winsock: new VirtualWinsock(1, () => system.Steps));
 
     // silent while another program has the focus, but without AppActivate's clears: the oracle never loses the focus
     window.Activated = (active, _) => sound.Muted = !active;
@@ -125,17 +128,21 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     try
     {
         engine.Host_Init();
+        double oldtime = system.Time;
         while (true)
         {
-            // the next frame's time on the virtual clock, when the real one gets there
-            double wait = ((frames + 1) * Step) - clock.Elapsed.TotalSeconds;
+            // the next frame's time on the virtual clock, when the real one gets there (after a frame that waited for
+            // the network, the clock is ahead: design.md §11.5)
+            double wait = (system.Time + Step) - clock.Elapsed.TotalSeconds;
             if (wait > 0)
             {
                 Thread.Sleep(TimeSpan.FromSeconds(wait));
             }
 
-            system.Time += Step;
-            engine.Host_Frame((float)Step);
+            system.Step();
+            double newtime = system.Time;
+            engine.Host_Frame((float)(newtime - oldtime));
+            oldtime = newtime;
             frames++;
 
             if (system.Time > quitTime)

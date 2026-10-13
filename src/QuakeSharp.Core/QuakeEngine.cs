@@ -50,8 +50,10 @@ public sealed partial class QuakeEngine
 {
     /// <param name="mouse">The platform's part of the mouse while in_win.c has it (none: the traces').</param>
     /// <param name="joysticks">The platform's joysticks (none: winmm without any, as the oracle's).</param>
+    /// <param name="winsock">The Winsock net_wins.c and net_wipx.c load (none: a machine without wsock32.dll).</param>
     public QuakeEngine(QuakeParms parms, ISystem system, IInputEvents? input = null, ISoundDma? sound = null,
-        IVideoOutput? video = null, ICdDrive? cd = null, IMouseCapture? mouse = null, IJoystickDevice? joysticks = null)
+        IVideoOutput? video = null, ICdDrive? cd = null, IMouseCapture? mouse = null, IJoystickDevice? joysticks = null,
+        Net.IWinsock? winsock = null)
     {
         host_parms = parms;
         this.system = system;
@@ -61,6 +63,7 @@ public sealed partial class QuakeEngine
         sounddma = sound;
         cddrive = cd;
         this.video = video;
+        this.winsock = winsock;
         com_argv = parms.argv;
         edgetables =
         [
@@ -77,31 +80,8 @@ public sealed partial class QuakeEngine
             new(true, 1, r_p1, r_p0, null, 1, r_p2, r_p0, null),
             new(false, 1, r_p0, r_p2, null, 1, r_p0, r_p1, null),
         ];
-        // net_win.c's drivers (the datagram driver over the virtual TCP/IP and IPX drivers, decision 33, §3.4) and
-        // net_main.c's and net_dgrm.c's poll procedures, which the C initializes statically
-        net_drivers =
-        [
-            new()
-            {
-                name = "Loopback", Init = Loop_Init, Listen = Loop_Listen, SearchForHosts = Loop_SearchForHosts,
-                Connect = Loop_Connect, CheckNewConnections = Loop_CheckNewConnections, QGetMessage = Loop_GetMessage,
-                QSendMessage = Loop_SendMessage, SendUnreliableMessage = Loop_SendUnreliableMessage,
-                CanSendMessage = Loop_CanSendMessage, CanSendUnreliableMessage = Loop_CanSendUnreliableMessage,
-                Close = Loop_Close, Shutdown = Loop_Shutdown,
-            },
-            new()
-            {
-                name = "Datagram", Init = Datagram_Init, Listen = Datagram_Listen, SearchForHosts = Datagram_SearchForHosts,
-                Connect = Datagram_Connect, CheckNewConnections = Datagram_CheckNewConnections,
-                QGetMessage = Datagram_GetMessage, QSendMessage = Datagram_SendMessage,
-                SendUnreliableMessage = Datagram_SendUnreliableMessage, CanSendMessage = Datagram_CanSendMessage,
-                CanSendUnreliableMessage = Datagram_CanSendUnreliableMessage, Close = Datagram_Close,
-                Shutdown = Datagram_Shutdown,
-            },
-        ];
-        net_numdrivers = net_drivers.Length;
-        net_landrivers = [new Net.VirtualLanDriver(this), new Net.VirtualIpxDriver(this)];
-        net_numlandrivers = net_landrivers.Length;
+        // net_win.c's drivers, and net_main.c's and net_dgrm.c's poll procedures, which the C initializes statically
+        NetWin_Drivers();
         pr_builtins = PR_Builtins();
         pr_numbuiltins = pr_builtins.Length;
         slistSendProcedure = new(Slist_Send);
@@ -131,6 +111,7 @@ public sealed partial class QuakeEngine
     // the CD drive cd_win.c sends its MCI commands to (null: none, as a machine without one)
     internal readonly ICdDrive? cddrive;
     private readonly IVideoOutput? video;
+    private readonly Net.IWinsock? winsock;
     private readonly Numerics.CRand crand = new();
     private readonly FileSystem fileSystem;
 

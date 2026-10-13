@@ -17,7 +17,7 @@ namespace QuakeSharp.Fidelity.Tests;
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
-    private const string Lines = "FCEDXSTRVGQNWMPAI";
+    private const string Lines = "FCEDXSTRVGQNWMPAIU";
 
     private readonly string userdir = Path.Combine(Path.GetTempPath(), "quakesharp-tests", Guid.NewGuid().ToString("N"));
 

@@ -7,6 +7,7 @@
 #include "quakedef.h"
 #include "r_local.h"
 #include "trace.h"
+#include "winsock_oracle.h"
 
 extern double oracle_time;
 extern double oracle_step;
@@ -1041,7 +1042,7 @@ void Trace_Frame (void)
 	if (trace)
 	{
 		if (trace_frame == 1)
-			fprintf (trace, "H 6 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
+			fprintf (trace, "H 7 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
 		fprintf (trace, "F %d %d %016llx %08x %u\n", trace_frame, host_framecount,
 			*(unsigned long long *)&realtime, oracle_rand_seed (), oracle_rand_calls);
 		fprintf (trace, "C %016llx\n", Client ());
@@ -1067,6 +1068,16 @@ void Trace_Frame (void)
 		fprintf (trace, "P %016llx\n", Paint ());
 		fprintf (trace, "A %016llx\n", CD ());
 		fprintf (trace, "I %016llx\n", Input ());
+		{
+			int datagrams;
+			hash_t u = Oracle_Datagrams (&datagrams);
+			fprintf (trace, "U %016llx %d\n", u, datagrams);
+		}
+	}
+	else
+	{
+		int datagrams;
+		Oracle_Datagrams (&datagrams);
 	}
 
 	for (i = 0; i < num_shots; i++)

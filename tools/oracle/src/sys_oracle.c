@@ -7,11 +7,35 @@
 #include <errno.h>
 #include <direct.h>
 #include "trace.h"
+#include "winsock_oracle.h"
 
 qboolean isDedicated;
 
 double oracle_time;
 double oracle_step = 1.0 / 64.0;
+static unsigned int oracle_steps;	// the clock's steps so far: frame 1 runs at step 1, a frame that waits takes more
+static int oracle_reads;			// Sys_FloatTime's calls since the clock last moved
+
+/*
+ * Waiting (design.md §11.5): WinQuake waits within a frame in loops that read the clock until an answer comes or a
+ * time has passed (NET_Connect's server search, _Datagram_Connect, NET_SendToAll, Host_ShutdownServer's flush). On a
+ * clock that moves only between frames they would never end, so a frame that reads the clock ORACLE_WAIT_READS times
+ * without it moving is waiting: that read moves the clock one step first, the time a real machine spends there. An
+ * ordinary frame reads it a few dozen times.
+ */
+#define ORACLE_WAIT_READS	1000
+
+unsigned int Oracle_Steps (void)
+{
+	return oracle_steps;
+}
+
+static void Oracle_Step (void)
+{
+	oracle_time += oracle_step;
+	oracle_steps++;
+	oracle_reads = 0;
+}
 
 /*
 ===============================================================================
@@ -220,6 +244,8 @@ void Sys_Quit (void)
 
 double Sys_FloatTime (void)
 {
+	if (++oracle_reads >= ORACLE_WAIT_READS)
+		Oracle_Step ();
 	return oracle_time;
 }
 
@@ -258,6 +284,7 @@ int main (int argc, char **argv)
 {
 	static quakeparms_t    parms;
 	int t;
+	double oldtime, newtime;
 
 	COM_InitArgv (argc, argv);
 
@@ -300,12 +327,17 @@ int main (int argc, char **argv)
 	oracle_verbose = COM_CheckParm ("-oracleverbose") != 0;
 
 	Trace_Init ();
+	Oracle_WinsockInit ();
 
 	Host_Init (&parms);
+	oldtime = oracle_time;
 	while (1)
 	{
-		oracle_time += oracle_step;
-		Host_Frame (oracle_step);
+		// sys_win.c's loop: the time since the last frame began, a step, or more after a frame that waited
+		Oracle_Step ();
+		newtime = oracle_time;
+		Host_Frame (newtime - oldtime);
+		oldtime = newtime;
 		Trace_Frame ();
 	}
 }

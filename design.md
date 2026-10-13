@@ -422,9 +422,10 @@ window size (fitted to the screen) in the windowed modes, borderless over the wh
 ### 6.5 Networking
 
 NetQuake is client-server even in single player (a listen server and a client joined by `net_loop`). Ported as is:
-`net_main.c`, `net_dgrm.c` (the datagram protocol, reliable messages, server queries) and `net_loop.c`, with
-`net_udp.c`'s role on .NET UDP sockets, so QuakeSharp and other NetQuake engines (protocol 15) play together. Until
-the UDP driver comes (milestone 11), the datagram driver runs on a virtual LAN driver with no sockets (decision 33).
+`net_main.c`, `net_dgrm.c` (the datagram protocol, reliable messages, server queries), `net_loop.c` and WinQuake's
+LAN drivers, `net_wins.c` (TCP/IP) and `net_wipx.c` (IPX, which today's Windows lacks), over a Winsock: the virtual
+machine's in the traces, .NET UDP sockets in the executable, so QuakeSharp and other NetQuake engines (protocol 15)
+play together (milestone 11, §11.5, decision 55).
 
 ### 6.6 Enhanced mode (later)
 
@@ -540,7 +541,8 @@ the shareware's or the registered (it copies it alone into a folder of its own),
 copied from `reference/Quake` and patched only so `id386` is 0 (`quake-oracle.patch`), built locally with clang-cl
 for 32-bit x86 with SSE2 arithmetic and musl's libm, as a headless program. Its own platform layer replaces the Windows
 drivers: `vid_win.c`'s behaviour in one windowed mode rendered in memory, the virtual sound device, no input or CD,
-the loopback network driver, and a system driver with the virtual clock. It writes per-frame trace lines (time and
+the loopback network driver, and a system driver with the virtual clock; cd_win.c, in_win.c, vid_win.c's modes and the
+LAN drivers came later (milestones 8-11), compiled unchanged or copied over virtual devices and a virtual Winsock. It writes per-frame trace lines (time and
 `rand()` state, client state, entities, effects, view, frame and palette), plays scripted input (`-traceevents`)
 and dumps frames (`-traceshot`) and entities (`-tracedump`). Runs are deterministic: the same command line gives the
 same trace. It changes the game's behaviour only where §6.2 rule 11 needs a shared substitute for undefined memory.
@@ -983,7 +985,7 @@ first and QuakeSharp follows them.
    test skips with a warning. `Trace-Demos.ps1` writes `shareware.demo1`-`3.trace` from a Quake folder of the
    oracle's holding only `id1/pak0.pak`: they are `demo1`-`3.trace`, byte for byte (what differs, common.c's
    "Playing shareware version." and the `registered` cvar, is printed before the console exists and is not in a demo's
-   trace lines). `SharewareTests` keeps the 17 lines of each one's last frame (its `F` line holds the frame count)
+   trace lines). `SharewareTests` keeps every line of each one's last frame (18 since format 7; its `F` line holds the frame count)
    and runs from any original `id1/pak0.pak` in `QUAKESHARP_QUAKE_DIR`, copied alone; QuakeSharp matched at the first
    run, from the shareware's PAK and the registered's, in 12 seconds for the three.*
 
@@ -1012,36 +1014,41 @@ oracle compiles the three files unchanged over `winsock_oracle.c` (`LoadLibrary(
 answered with its functions, as `in_oracle.c` answers user32's); `VirtualLanDriver`, `VirtualIpxDriver` and
 `net_oracle.c` go. IPX stays a socket family the machine refuses, so net_wipx.c fails as on today's Windows.
 
-**The virtual network** (`VirtualWinsock`, `winsock_oracle.c`). A machine with a fixed name and IPv4 address on a
-virtual LAN (proposal: `quake1` at 10.0.0.1, other hosts 10.0.0.2 and up), ports as wsock32 hands them out, datagrams
-queued per socket, broadcast to the LAN, and the error codes Windows gives (`WSAEWOULDBLOCK` on an empty socket,
-`WSAECONNRESET` after a datagram to a closed port, as today's Windows reports the ICMP answer: to be audited). The
-machine now has a name, so net_wins.c sets `hostname` to it and every trace changes once and is regenerated.
+**The virtual network** (`VirtualWinsock`, `winsock_oracle.c`). A machine with a name and an IPv4 address on a
+virtual LAN (`quake<n>` at 10.0.0.<n>, `-oraclehost <n>`, 1 by default; localhost is 127.0.0.1), ports as wsock32
+hands them out (port 0: the next free one from 49152), datagrams queued per socket, what the machine sends itself
+(its address, the loopback, a broadcast) arriving at the next step of the clock, and the error codes Windows gives
+(`WSAEWOULDBLOCK` on an empty socket; `WSAECONNRESET` at the next step after a datagram to a port nobody has, as
+today's Windows reports the ICMP answer: to be audited in step 5). The machine now has a name, so net_wins.c sets
+`hostname` to it and the traces that show it (`status`, the setup menu, the LAN menu's address) change.
 
-**Waiting.** WinQuake waits for the network inside a frame, in loops that end on an answer or a time limit:
-`_Datagram_Connect` (2.5 s, three tries), `NET_SendToAll` (a level change, the end of a game) and
-`Host_ShutdownServer`'s flush (3 s). On a clock that only moves between frames they never end (§6.3), and no other
-host could answer during them. The virtual machine's rule, the same on both sides: a `recvfrom` that finds nothing on
-a socket that already found nothing since the clock last moved moves the clock one step (1/64 s) before it answers,
-the time a real machine spends waiting; datagrams due by then arrive first. A frame that waits so lasts several steps;
-`@udp` lines are keyed by the clock's step, which runs ahead of the frame number after a wait. An ordinary frame reads
-each socket until it is empty once, so it never waits.
+**Waiting** (decision 55). WinQuake waits for the network inside a frame, in loops that read the clock until an answer
+comes or a time has passed: `NET_Connect`'s server search (`while (slistInProgress) NET_Poll ()`, 1.5 s, before every
+`connect` to a name it has not found), `_Datagram_Connect` (2.5 s, three tries), `NET_SendToAll` (a level change, the
+end of a game) and `Host_ShutdownServer`'s flush (3 s). On a clock that only moves between frames they never end
+(§6.3), and no other host could answer during them. The virtual clock's rule, the same on both sides: a frame that
+reads the clock (`Sys_FloatTime`) 1,000 times without it moving is waiting, and that read moves it one step (1/64 s),
+the time a real machine spends there; datagrams due by then arrive while it waits. An ordinary frame reads the clock a
+few dozen times. The next frame's time is then what passed since the waiting frame began, as sys_win.c's loop computes
+it, so a frame that waits takes several steps and the clock's step runs ahead of the frame number.
 
-**Trace format 7** adds a line after `I`, and scripted input takes datagrams:
+**Trace format 7** adds a line after `I`, and the other hosts' datagrams come from a file of their own (`-traceevents`
+is ordered by frame, they by the clock's step):
 
 | Line | Fields |
 |---|---|
-| `U <hash> <datagrams>` | The datagrams the LAN drivers sent and received during the frame, in order: the socket's port, the other end's address, the bytes |
+| `U <hash> <datagrams>` | The datagrams the virtual machine's Winsock sent and received during the frame, in order: sent, received or the ICMP answer received; the socket's port, the other end's address and port, the bytes |
 
-`-traceevents` takes `<frame> @udp <port> <ip:port> <hex bytes>`: a datagram from that address arriving at the
-machine's port before the frame, as `@mouse` and `@key` arrive.
+`-tracedatagrams <file>` takes lines `<step> <port> <a.b.c.d:port> <hex bytes>`, a datagram from that address arriving
+at the machine's port at that step of the clock, or `... reset`, the ICMP answer to what that socket sent there; at
+each step they arrive before the machine's own.
 
 **Games between hosts.** The oracle cannot run two engines in one process (its state is the C's globals), and two
 processes on real sockets would not be deterministic. So QuakeSharp's `NetRun` (Diagnostics) runs several engines in
 one process, each its own `VirtualWinsock` on one virtual LAN, in lockstep on one virtual clock: at each step every
 host runs a frame or, when waiting, one step of its wait; a datagram sent during a step arrives at the next. Each host
-has its own `-traceevents`; it writes each host's trace and an events file with the
-host's input and every datagram it received as `@udp` lines. The oracle replays each host alone from its file. When
+has its own `-traceevents`; it writes each host's trace and a datagrams file of every datagram it received. The oracle
+replays each host alone from its events and its datagrams. When
 every host's trace matches the oracle's, the oracle's hosts given the same datagrams sent the same ones, so they would
 have played the same game together, frame for frame. A lossy LAN (a datagram dropped by a fixed rule) reaches
 net_dgrm.c's resends, NAKs and timeouts. `quakesharp-tools netrun` writes the files; `Trace-Demos.ps1` replays them;
@@ -1049,20 +1056,32 @@ net_dgrm.c's resends, NAKs and timeouts. `quakesharp-tools netrun` writes the fi
 
 **The dedicated server.** sys_win.c's `-dedicated`: no window, video or sound; the console text on standard output and
 `Sys_ConsoleInput` reading standard input as WinQuake's console window does (line editing, backspace, the echo). The
-traces script it with `<frame> @stdin <text>` lines, typed into `Sys_ConsoleInput` as keys are into the window.
+traces script it with `<frame> @stdin <text>` lines in `-traceevents`, typed into `Sys_ConsoleInput` as keys are into
+the window.
 
 **The real Winsock** (`SocketWinsock`, in the platform project): .NET UDP sockets with Winsock 1.1's semantics, on
 Windows and Linux alike: non-blocking, broadcast, the machine's name and first IPv4 address, `MSG_PEEK`, the errors
-mapped to Winsock's codes. `-recordevents` keeps the waiting rule on its virtual clock (a step waited is a step of real time), takes what
-the real sockets received at each step and records it as `@udp` lines, so a game played over
-a real network replays in the oracle and in `quakesharp-tools trace`. No IPv6 and no NAT traversal: the original
+mapped to Winsock's codes. `-recordevents` keeps the waiting rule on its virtual clock (a step waited is a step of
+real time), takes what the real sockets received at each step and writes it to a datagrams file beside the events, so
+a game played over a real network replays in the oracle and in `quakesharp-tools trace`. No IPv6 and no NAT traversal: the original
 protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
 
 **Porting order.** Each step builds with the tests green and is committed:
 
 1. **net_wins.c, net_wipx.c and net_win.c over `IWinsock`**: the oracle first (`winsock_oracle.c`, format 7's `U`,
-   `@udp`), then Core, `VirtualWinsock` for one machine with no other host. Every trace is regenerated and matches;
-   the stand-ins go.
+   `-tracedatagrams`), then Core, `VirtualWinsock` for one machine with no other host. Every trace is regenerated and
+   matches; the stand-ins go. *Done (decision 55): the oracle compiles the three files unchanged and links no wsock32
+   (two build details: today's C runtime makes `errno` a macro, which `net_errno.h` takes away for those files; lld
+   drops a function only its synthesized import refers to, so the renamed `LoadLibraryA` and `GetProcAddress` are
+   kept with `/include`). In Core, `QuakeEngine.NetWin.cs`, `NetWins.cs` and `NetWipx.cs` over `IWinsock`;
+   `NetLanDriver` is the C's table of function pointers; `VirtualWinsock` is the oracle's machine; the executable runs
+   on one alone until step 4. The waiting rule was first tied to `recvfrom`, but `connect` to a name not in the host
+   cache waits in `NET_Connect`'s search loop, which reads no socket, so it counts the clock's reads instead (the
+   virtual sound device reads the time directly on both sides, so only the engine's reads count). A `connect` to an
+   absent host now waits 9 s of the clock and fails as WinQuake does ("No Response", then the Host_Error), and a
+   listen server answers scripted datagrams (a server query and a connection), both in sync. All 60 traces
+   regenerated; those that show the machine's name or address (`status`, the setup menu's hostname, the LAN menu's
+   address) changed, and every one matches with its `U` line.*
 2. **Games between hosts**: `NetRun` and its events files; scripted games, each host traced and replayed: a client
    joining a listen server through the menus (Join Game's search, the server list) and `connect`; three hosts in a
    deathmatch with chat (`say`, `say_team`, `tell`), frags, a level change, a client leaving, one timing out, `kick`,
@@ -1070,7 +1089,7 @@ protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
    host" is reached or listed with why.
 3. **The dedicated server**: sys_win.c's `-dedicated` in Core and the executable, `@stdin` on both sides; a dedicated
    server traced with remote clients, `Host_FindMaxClients`' lines, its `say`, `status` and `startdemos`.
-4. **The real Winsock**: `SocketWinsock`, the executable on it, `-recordevents`' `@udp`. CI runs a test of two
+4. **The real Winsock**: `SocketWinsock`, the executable on it, `-recordevents`' datagrams. CI runs a test of two
    engines in one process over real sockets on 127.0.0.1 (a connection made and a game played; not traced, real time).
 5. **Other engines**, audited by hand into §3.4 as decision 42's audit: Winquake.exe 1.09 (a scratch copy) and
    QuakeSharp on one machine and on two, each the server and each the client, through the search and `connect`; a
@@ -1117,7 +1136,7 @@ server match the oracle on every frame for every host; the executable plays over
 | 31 | Scripted keys | `-traceevents` lines may be `<frame> @key <key> <down>`, a key event, so menus and the console are driven as a player does; QuakeSharp's `TraceRun` reads the same files | 2026-10-12 |
 | 28 | Base directory "." | The oracle's traces and QuakeSharp's run with WinQuake's base directory "." (the console shows `./id1/pak0.pak` wherever the data is); `QuakeParms.workdir` is the folder "." means, the process's current folder by default | 2026-10-12 |
 | 32 | Server verification (was D5) | Scripted games: `-traceevents` files of console commands and key events on the virtual clock, written by hand or recorded from play (decision 34), run by the oracle and QuakeSharp and compared every frame with trace format 4's server lines (`G`, `Q`, `N`, `W`, `M`) besides the client's and the renderer's. Demos the oracle records wait for milestone 9, where `.dem` files are compared byte for byte (§11.1) | 2026-10-12 |
-| 33 | Virtual LAN driver | net_dgrm.c comes with milestone 7, and both sides get a virtual LAN driver: net_wins.c without sockets (TCP/IP available at a fixed address, its console message, no name resolves and no packet arrives). The oracle runs WinQuake's driver list (loopback, datagram), so the network menus can be played and traced and a game they start runs over loopback; the executable uses it until milestone 11 adds the UDP driver | 2026-10-12 |
+| 33 | Virtual LAN driver | net_dgrm.c comes with milestone 7, and both sides get a virtual LAN driver: net_wins.c without sockets (TCP/IP available at a fixed address, its console message, no name resolves and no packet arrives). The oracle runs WinQuake's driver list (loopback, datagram), so the network menus can be played and traced and a game they start runs over loopback; the executable uses it until milestone 11 adds the UDP driver (superseded by decision 55) | 2026-10-12 |
 | 34 | Recorded play | `-recordevents <file>` makes the executable run as a trace does (the virtual clock, paced to real time; the virtual sound device; no `config.cfg` read) and write the key events per frame as `-traceevents` lines, keys and mouse buttons only (the oracle has no mouse motion), so a game played in QuakeSharp replays the same in the oracle | 2026-10-12 |
 | 35 | Milestone 7 closed | Closed with one playthrough, `e1.events` (24,500 frames from the menu through e1m1 into e1m2), in sync on every frame with the scripted games' coverage of every map; playthroughs of more episodes are added to `Trace-Demos.ps1` and `GameTests` as they are recorded, without holding up milestone 8 | 2026-10-12 |
 | 36 | Mix trace | Trace format 5's `P` hashes the sound device's whole 64 KB buffer every frame (what the device plays: the painted samples, the clears, where they went), not the paint buffer or only the frame's new samples; `-tracedump` shows the bytes painted during the frame (§11.2) | 2026-10-12 |
@@ -1139,6 +1158,7 @@ server match the oracle on every frame for every host; the executable plays over
 | 52 | The rest of the UI (milestone 10, step 6) | Six scripted runs trace what no other run reached; what none reaches is listed in §11.4 with why, not emulated. The scripted input is taken before it is delivered, so a modal question's key comes in the same frame; scripts keep clear of the loops that wait for real time (§6.3); build-dependent addresses (`mcache`, `r_drawflat`) get stand-ins on both sides (§3.3); a run may start with a synthetic file of the repository's beside the map (`events/e1m1.pts`, not game data); the loading disc is ported on both sides and shown by the executable | 2026-10-13 |
 | 53 | The shareware smoke test (milestone 10, step 7) | Chosen with the user, as decision 48 asked: the one URL is the Internet Archive's item `Quake_802`, file `quake106.zip` (MD5 `8cee4d03ee092909fdb6a4f84f0c1357`, 9,094,045 bytes); CI checks it, extracts `pak0.pak` from the LHA archive `resource.1` with 7-Zip on Windows and `lhasa` from apt on Linux, checks that and caches it; a failed download with nothing cached skips the test with a warning, not failing CI. The test keeps every trace line of the last frame of demo1-3, played from `pak0.pak` alone (§10, §11.4) | 2026-10-13 |
 | 54 | Scope of v1 (was D8) | Confirmed with the user: v1 is Quake and both mission packs (hipnotic, rogue) on the WinQuake engine; GLQuake and QuakeWorld come after v1 (§1, §11) | 2026-10-13 |
+| 55 | The virtual network (milestone 11, step 1) | net_win.c, net_wins.c and net_wipx.c are ported in Core over `IWinsock` and compiled unchanged in the oracle over `winsock_oracle.c` (no wsock32 linked; LoadLibrary and GetProcAddress renamed for those files); the virtual machine is `quake<n>` at 10.0.0.<n> on a LAN of 254 hosts (`-oraclehost`), the other hosts' datagrams come from `-tracedatagrams` keyed by the clock's step, trace format 7's `U` hashes what was sent and received. Waiting: a frame that reads the clock 1,000 times without it moving moves it a step at that read, on both sides, and the next frame's time is what passed, as sys_win.c computes it. Supersedes decision 33 (§6.5, §11.5) | 2026-10-13 |
 
 ## 13. Open decisions
 

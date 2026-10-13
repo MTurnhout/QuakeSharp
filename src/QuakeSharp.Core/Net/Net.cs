@@ -114,55 +114,52 @@ public sealed class NetDriver
 }
 
 /// <summary>
-/// net.h: net_landriver_t, a LAN driver under the datagram driver (net_wins.c's TCP/IP in WinQuake). Its functions
-/// are the C's pointers, in the C's order; buffers are a byte array and a length.
+/// net.h: net_landriver_t, a LAN driver under the datagram driver (net_win.c's: net_wins.c's TCP/IP and net_wipx.c's
+/// IPX). Its functions are the C's pointers, in the C's order; buffers are a byte array and a length.
 /// </summary>
-public abstract class NetLanDriver
+public sealed class NetLanDriver
 {
-    protected NetLanDriver(string name)
-    {
-        this.name = name;
-    }
+    public delegate int SocketAddrFn(int socket, in QSockAddr addr);
 
-    public string name;
+    public delegate int ReadFn(int socket, byte[] buf, int len, ref QSockAddr addr);
+
+    public delegate int WriteFn(int socket, byte[] buf, int len, in QSockAddr addr);
+
+    public delegate string AddrToStringFn(in QSockAddr addr);
+
+    public delegate int StringToAddrFn(string @string, ref QSockAddr addr);
+
+    public delegate int GetSocketAddrFn(int socket, ref QSockAddr addr);
+
+    public delegate int GetNameFromAddrFn(in QSockAddr addr, out string name);
+
+    public delegate int AddrCompareFn(in QSockAddr addr1, in QSockAddr addr2);
+
+    public delegate int GetSocketPortFn(in QSockAddr addr);
+
+    public delegate int SetSocketPortFn(ref QSockAddr addr, int port);
+
+    public required string name;
     public bool initialized;
     public int controlSock;
-
-    public abstract int Init();
-
-    public abstract void Shutdown();
-
-    public abstract void Listen(bool state);
-
-    public abstract int OpenSocket(int port);
-
-    public abstract int CloseSocket(int socket);
-
-    public abstract int Connect(int socket, in QSockAddr addr);
-
-    public abstract int CheckNewConnections();
-
-    public abstract int Read(int socket, byte[] buf, int len, ref QSockAddr addr);
-
-    public abstract int Write(int socket, byte[] buf, int len, in QSockAddr addr);
-
-    public abstract int Broadcast(int socket, byte[] buf, int len);
-
-    public abstract string AddrToString(in QSockAddr addr);
-
-    public abstract int StringToAddr(string @string, ref QSockAddr addr);
-
-    public abstract int GetSocketAddr(int socket, ref QSockAddr addr);
-
-    public abstract int GetNameFromAddr(in QSockAddr addr, out string name);
-
-    public abstract int GetAddrFromName(string name, ref QSockAddr addr);
-
-    public abstract int AddrCompare(in QSockAddr addr1, in QSockAddr addr2);
-
-    public abstract int GetSocketPort(in QSockAddr addr);
-
-    public abstract int SetSocketPort(ref QSockAddr addr, int port);
+    public required Func<int> Init;
+    public required Action Shutdown;
+    public required Action<bool> Listen;
+    public required Func<int, int> OpenSocket;
+    public required Func<int, int> CloseSocket;
+    public required SocketAddrFn Connect;
+    public required Func<int> CheckNewConnections;
+    public required ReadFn Read;
+    public required WriteFn Write;
+    public required Func<int, byte[], int, int> Broadcast;
+    public required AddrToStringFn AddrToString;
+    public required StringToAddrFn StringToAddr;
+    public required GetSocketAddrFn GetSocketAddr;
+    public required GetNameFromAddrFn GetNameFromAddr;
+    public required StringToAddrFn GetAddrFromName;
+    public required AddrCompareFn AddrCompare;
+    public required GetSocketPortFn GetSocketPort;
+    public required SetSocketPortFn SetSocketPort;
 }
 
 /// <summary>net.h: hostcache_t, a server the search found.</summary>
