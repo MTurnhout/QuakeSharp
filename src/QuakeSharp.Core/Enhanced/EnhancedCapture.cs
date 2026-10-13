@@ -20,7 +20,7 @@ public sealed class EnhancedCapture
     // the models made ready, by number (0 is none), for the level whose world is worldOf; a new level starts anew
     private EnhancedModel?[] models = [null];
     private Model.Model? worldOf;
-    private int generation;
+    private EnhancedModelNumbering numbering = new();
     private readonly byte[] channelTables = new byte[3 * 256];
 
     // the 2D mask, parallel to the screen's buffer (the same offsets), and the buffer it belongs to
@@ -209,7 +209,7 @@ public sealed class EnhancedCapture
             worldOf = e.cl.worldmodel;
             modelIds.Clear();
             models = [null];
-            generation++;
+            numbering = new();
         }
 
         // the entities only with a view drawn in a level (the screen is also updated while a level loads, from
@@ -298,7 +298,7 @@ public sealed class EnhancedCapture
             InLevel = inLevel,
             World = inLevel ? ModelId(e.cl.worldmodel) : 0,
             Models = models,
-            ModelGeneration = generation,
+            ModelNumbering = numbering,
             AmbientLight = r.ambientlight,
             Warp = viewDrawn && e.r_dowarp,
             PixelAspect = e.vid.aspect,

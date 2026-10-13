@@ -132,8 +132,11 @@ public sealed class EnhancedFrame
     /// <summary>The models by the capture's numbers (<see cref="EnhancedEntity.Model"/>, <see cref="World"/>; 0 is none).</summary>
     public IReadOnlyList<EnhancedModel?> Models { get; init; } = [null];
 
-    /// <summary>Changes when the numbers start anew (a new level, or another capture): what was made of the models before goes.</summary>
-    public int ModelGeneration { get; init; }
+    /// <summary>
+    /// The numbering <see cref="Models"/> and the entities' model numbers belong to: another one (a new level, or
+    /// another capture) means the numbers start anew, and what was made of the models before goes.
+    /// </summary>
+    public EnhancedModelNumbering? ModelNumbering { get; init; }
 
     /// <summary>r_dowarp: the view was warped as under water (D_WarpScreen).</summary>
     public bool Warp { get; init; }
@@ -167,10 +170,10 @@ public sealed class EnhancedFrame
 
     /// <summary>
     /// The frame <paramref name="fraction"/> of the way from <paramref name="previous"/> to <paramref name="next"/>:
-    /// the view, the entities found in both (by their slot and model), the particles found in both (by their slot and
-    /// death) and the lights found in both (by their slot and key) part way, cl.time part way; what moved more than
-    /// <see cref="MaxMove"/>, appeared or went, and everything else (the 2D, the palette, the light styles) as
-    /// <paramref name="next"/> has it.
+    /// the view, the entities found in both (by their slot and model, of the same <see cref="ModelNumbering"/>), the
+    /// particles found in both (by their slot and death) and the lights found in both (by their slot and key) part way,
+    /// cl.time part way; what moved more than <see cref="MaxMove"/>, appeared or went, and everything else (the 2D, the
+    /// palette, the light styles) as <paramref name="next"/> has it.
     /// </summary>
     public static EnhancedFrame Lerp(EnhancedFrame previous, EnhancedFrame next, float fraction)
     {
@@ -195,7 +198,8 @@ public sealed class EnhancedFrame
         Dictionary<int, EnhancedEntity> before = [];
         foreach (EnhancedEntity e in previous.Entities)
         {
-            if (e.Id != EnhancedEntity.Other)
+            // another numbering's model numbers are not this one's (the mode switched off and on)
+            if (e.Id != EnhancedEntity.Other && ReferenceEquals(previous.ModelNumbering, next.ModelNumbering))
             {
                 before[e.Id] = e;
             }
@@ -255,7 +259,7 @@ public sealed class EnhancedFrame
             InLevel = next.InLevel,
             World = next.World,
             Models = next.Models,
-            ModelGeneration = next.ModelGeneration,
+            ModelNumbering = next.ModelNumbering,
             AmbientLight = next.AmbientLight,
             Warp = next.Warp,
             PixelAspect = next.PixelAspect,
@@ -308,7 +312,7 @@ public sealed class EnhancedFrame
             InLevel = InLevel,
             World = World,
             Models = Models,
-            ModelGeneration = ModelGeneration,
+            ModelNumbering = ModelNumbering,
             AmbientLight = AmbientLight,
             Warp = Warp,
             PixelAspect = PixelAspect,
@@ -347,7 +351,7 @@ public sealed class EnhancedFrame
             InLevel = copy.InLevel,
             World = copy.World,
             Models = copy.Models,
-            ModelGeneration = copy.ModelGeneration,
+            ModelNumbering = copy.ModelNumbering,
             AmbientLight = copy.AmbientLight,
             Warp = copy.Warp,
             PixelAspect = copy.PixelAspect,

@@ -44,6 +44,16 @@ public class EnhancedFrameTests
         Assert.Equal(8, EnhancedFrame.Lerp(before, after, 0.5f).Entities[0].Origin[0]);
     }
 
+    // the mode switched off and on: the new capture numbers the models anew, so model 1 may be another model
+    [Fact]
+    public void AnEntityOfAnotherNumberingIsNotInterpolated()
+    {
+        EnhancedFrame before = Frame(0, [Entity(5, 1, new Vec3(0, 0, 0), default)], numbering: new EnhancedModelNumbering());
+        EnhancedFrame after = Frame(1, [Entity(5, 1, new Vec3(8, 0, 0), default)], numbering: new EnhancedModelNumbering());
+
+        Assert.Equal(8, EnhancedFrame.Lerp(before, after, 0.5f).Entities[0].Origin[0]);
+    }
+
     [Fact]
     public void WhatAppearedOrHasNoSlotIsWhereTheLaterFrameHasIt()
     {
@@ -113,7 +123,7 @@ public class EnhancedFrameTests
         new(id, model, origin, angles, 0, 0, 0, 0, 0);
 
     private static EnhancedFrame Frame(double time, EnhancedEntity[] entities, EnhancedParticle[]? particles = null,
-        Vec3 view = default) => new()
+        Vec3 view = default, EnhancedModelNumbering? numbering = null) => new()
     {
         Width = 4,
         Height = 4,
@@ -126,6 +136,7 @@ public class EnhancedFrameTests
         View = new EnhancedView(0, 0, 4, 4, view, default, 90, 73.74f, 0),
         InLevel = true,
         World = 1,
+        ModelNumbering = numbering,
         Entities = entities,
         Particles = particles ?? [],
         Dlights = [],

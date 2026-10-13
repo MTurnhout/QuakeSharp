@@ -116,6 +116,56 @@ public sealed class EnhancedModelTests : IDisposable
         Assert.Contains(frame.Entities, e => e.Id == EnhancedEntity.ViewModel && frame.Models[e.Model]?.Alias != null);
     }
 
+    // Scroll Lock switches the mode off and on in a game: the new capture numbers the level's models anew, from 1, in
+    // the order it meets them, so its numbers name other models than the first capture's; its frames carry a
+    // numbering of their own, or the render thread keeps what it made under the first one's numbers (models drawn as
+    // others, the world's number a monster's) and interpolates entities across them
+    [Fact]
+    public void ACaptureMadeAgainHasANumberingOfItsOwn()
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        var run = new TraceRun(baseDir, userdir, ["+playdemo", "demo1", "-oracleframes", "1700"]);
+        var first = new EnhancedCapture(run.Engine);
+        EnhancedCapture? second = null;
+        EnhancedFrame? secondFirst = null;
+        run.Engine.enhanced = first;
+        int frame = 0;
+        foreach (IReadOnlyList<string> _ in run.Frames(quitAfterDemo: false, maxFrames: 1700))
+        {
+            frame++;
+            if (frame == 1500)
+            {
+                run.Engine.enhanced = null;
+            }
+            else if (frame == 1501)
+            {
+                second = new EnhancedCapture(run.Engine);
+                second.Captured += f => secondFirst ??= f;
+                run.Engine.enhanced = second;
+            }
+        }
+
+        EnhancedFrame a = first.Latest ?? throw new InvalidOperationException("no frame");
+        EnhancedFrame b = second?.Latest ?? throw new InvalidOperationException("no frame");
+        Assert.True(a.InLevel && b.InLevel);
+
+        // the same numbers, other models: the collision the numberings tell apart
+        Assert.Contains(Enumerable.Range(1, Math.Min(a.Models.Count, b.Models.Count) - 1),
+            n => a.Models[n]?.Name != b.Models[n]?.Name);
+        Assert.NotNull(b.ModelNumbering);
+        Assert.NotSame(a.ModelNumbering, b.ModelNumbering);
+        Assert.Equal(run.Engine.cl.worldmodel!.name, b.Models[b.World]!.Name);
+
+        // and no entity is interpolated from the first capture's last frame to the second's first
+        EnhancedFrame next = secondFirst ?? throw new InvalidOperationException("no frame");
+        EnhancedEntity[] between = EnhancedFrame.Lerp(a, next, 0.5f).Entities;
+        for (int i = 0; i < next.Entities.Length; i++)
+        {
+            Assert.Equal((next.Entities[i].Origin[0], next.Entities[i].Origin[1], next.Entities[i].Origin[2]),
+                (between[i].Origin[0], between[i].Origin[1], between[i].Origin[2]));
+        }
+    }
+
     private static (int Offset, int Length) Lump(byte[] bsp, int lump) =>
         (BinaryPrimitives.ReadInt32LittleEndian(bsp.AsSpan(4 + (lump * 8))),
          BinaryPrimitives.ReadInt32LittleEndian(bsp.AsSpan(8 + (lump * 8))));

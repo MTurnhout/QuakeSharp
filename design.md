@@ -1443,6 +1443,26 @@ read the clock and draw `rand()` exactly as often as without it.
    `EnhancedModeChangesNothing` with it on and switched. The enhanced sound was not listened to by the one who built
    it; the unit tests and the unchanged `P` line are what checks it.*
 
+**Found after the milestone: switching in a game.** Playing with Scroll Lock pressed now and then drew models as
+others: a dog turning on itself, a white figure standing in several places, the view as if inside a head, a dead monster
+on the ground in the faithful mode floating in the enhanced one, models on the clear colour with no world, the world
+seen through on stairs. Each switch on makes a new `EnhancedCapture`, which numbers the level's models from 1 in the
+order it meets them; its generation counter started at 0 again, so its first level had the last capture's generation,
+and the render thread, which drops its GPU models only when the generation changes, kept them under numbers that now
+named other models (the world's number a monster's). A frame now carries the numbering itself
+(`EnhancedModelNumbering`, compared by reference: a capture makes one when it is made and with each new level), so two
+captures' never collide and no counter is shared. Two more holes of the same kind: `EnhancedFrame.Lerp` interpolates
+entities only within one numbering, and `EnhancedSmoothing` starts anew with a numbering and for a slot that was empty
+in the snapshot before (an entity freed and its slot taken by another with the same model, which cl_parse.c's
+`CL_ParseUpdate` does not lerp either: no previous message, `forcelink`). `EnhancedModelTests` switches demo1 off and
+on at frame 1500 (the second capture's numbers name other models than the first's: the collision) and checks that the
+numberings differ, the world's number names the world, and no entity is interpolated from one capture's frame to the
+other's; unit tests for `Lerp` and the smoothing. The stairs were not reproduced on their own: the near plane (1 unit)
+cannot be it, as the eye stays at least 10 units from any surface, and the e1 playthrough's frames, stairs among them,
+match the software's (every 500th frame to 12000: 94.1-99.9% of the view within 24), so they were most likely the same
+collision. In the executable: the build before left the world out after the first switch in demo1; with the fix, 27
+switches off and on over the attract loop and 17 in a game on e1m1 each drew the level right.
+
 No package is needed (Vortice.Vulkan, its allocator, SDL3 and Slang cover it; the mesh building and the resampler are
 QuakeSharp's own); one would be asked for first.
 

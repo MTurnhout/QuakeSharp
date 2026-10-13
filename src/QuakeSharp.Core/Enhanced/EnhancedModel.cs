@@ -20,3 +20,11 @@ public sealed class EnhancedModel
 
     public int Submodel { get; init; }
 }
+
+/// <summary>
+/// One numbering of the models (<see cref="EnhancedFrame.Models"/>): a capture starts one when it is made and with each
+/// new level. Compared by reference, so two numberings are never the same, though each counts from 1: a capture made
+/// when the mode is switched on again numbers the same level's models in another order, and what the render thread
+/// made of the last capture's numbers must go.
+/// </summary>
+public sealed class EnhancedModelNumbering;

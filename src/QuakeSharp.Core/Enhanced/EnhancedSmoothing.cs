@@ -7,7 +7,8 @@ namespace QuakeSharp.Core.Enhanced;
 /// a pose change blended from the pose before over the time since the change before it (at most 0.1 s, QuakeC's
 /// animation rate), and a monster that moves in steps (its origin unchanged for a frame or more, then moved: a
 /// MOVETYPE_STEP's 10 Hz thinks) drawn moving along the step over the time between its steps (at most 0.1 s). It keeps
-/// its own history of each entity (by its slot, anew when the slot's model changes), never anything of the game's, and
+/// its own history of each entity (by its slot, anew when the slot's model changes or the slot was empty in the snapshot
+/// before: an entity freed and its slot reused by another with the same model), never anything of the game's, and
 /// shows the game's states late by up to that 0.1 s, which is why it is off by default.
 /// </summary>
 public sealed class EnhancedSmoothing
@@ -16,7 +17,10 @@ public sealed class EnhancedSmoothing
     public const double MaxInterval = 0.1;
 
     private readonly Dictionary<int, State> states = [];
-    private int generation = -1;
+    private EnhancedModelNumbering? numbering;
+
+    // the snapshots observed, to tell whether an entity was in the one before
+    private long observed;
 
     /// <summary>Blend alias models' poses.</summary>
     public bool Poses { get; set; }
@@ -27,12 +31,13 @@ public sealed class EnhancedSmoothing
     /// <summary>A snapshot as it arrives, every one in order: the poses and origins its entities have.</summary>
     public void Observe(EnhancedFrame frame)
     {
-        if (frame.ModelGeneration != generation)
+        if (!ReferenceEquals(frame.ModelNumbering, numbering))
         {
             states.Clear();
-            generation = frame.ModelGeneration;
+            numbering = frame.ModelNumbering;
         }
 
+        observed++;
         var seen = new HashSet<int>();
         foreach (EnhancedEntity e in frame.Entities)
         {
@@ -43,7 +48,8 @@ public sealed class EnhancedSmoothing
             }
 
             int pose = alias.Pose(e.Frame, frame.Time + e.Syncbase);
-            if (!states.TryGetValue(e.Id, out State? s) || s.Model != e.Model || frame.Time < s.Seen)
+            if (!states.TryGetValue(e.Id, out State? s) || s.Model != e.Model || frame.Time < s.Seen
+                || s.Observed != observed - 1)
             {
                 states[e.Id] = new State
                 {
@@ -55,6 +61,7 @@ public sealed class EnhancedSmoothing
                     StepFrom = e.Origin,
                     Moved = frame.Time,
                     Seen = frame.Time,
+                    Observed = observed,
                 };
                 continue;
             }
@@ -83,6 +90,7 @@ public sealed class EnhancedSmoothing
             }
 
             s.Seen = frame.Time;
+            s.Observed = observed;
         }
     }
 
@@ -149,5 +157,6 @@ public sealed class EnhancedSmoothing
         public double Moved, StepInterval;
         public double StillSince = double.MaxValue;
         public double Seen;
+        public long Observed;
     }
 }

@@ -66,7 +66,7 @@ public sealed unsafe partial class VulkanPresenter
         private (int Filter, float Anisotropy) samplerFor = (-1, -1);
         private VkPipeline pipeline;
         private VkSampleCountFlags pipelineSamples;
-        private int generation = -1;
+        private EnhancedModelNumbering? numbering;
 
         public WorldRenderer(VulkanPresenter presenter)
         {
@@ -127,7 +127,7 @@ public sealed unsafe partial class VulkanPresenter
         public void Prepare(int f, EnhancedFrame frame, EnhancedLayout layout, EnhancedOptions options, VkSampleCountFlags samples,
             int targetWidth, int targetHeight)
         {
-            if (frame.ModelGeneration != generation)
+            if (!ReferenceEquals(frame.ModelNumbering, numbering))
             {
                 context.WaitIdle();
                 foreach (GpuBrushModel m in models.Values)
@@ -137,7 +137,7 @@ public sealed unsafe partial class VulkanPresenter
 
                 models.Clear();
                 DisposeModelParts(all: false);
-                generation = frame.ModelGeneration;
+                numbering = frame.ModelNumbering;
             }
 
             float anisotropy = Math.Min(Math.Max(1, options.Anisotropy), context.MaxAnisotropy);

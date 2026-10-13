@@ -59,6 +59,34 @@ public class EnhancedSmoothingTests
         Assert.Equal(4, smoothing.Apply(Frame(0.0313, frame: 0, new Vec3(4, 0, 0))).Entities[0].Origin[0]);
     }
 
+    // an entity freed and its slot reused by another with the same model (a rocket after a rocket): the slot was empty
+    // in a snapshot between, and the newcomer is neither blended from the other's pose nor stepped from where it was
+    [Fact]
+    public void ASlotEmptyInBetweenStartsAnew()
+    {
+        var smoothing = new EnhancedSmoothing { Poses = true, Steps = true };
+        smoothing.Observe(Frame(0.0, frame: 0, new Vec3(0, 0, 0)));
+        smoothing.Observe(Frame(0.05, frame: 0, new Vec3(0, 0, 0)));
+        smoothing.Observe(Without(Frame(0.1, frame: 0, new Vec3(0, 0, 0))));
+        smoothing.Observe(Frame(0.15, frame: 1, new Vec3(8, 0, 0)));
+
+        EnhancedEntity e = smoothing.Apply(Frame(0.17, frame: 1, new Vec3(8, 0, 0))).Entities[0];
+
+        Assert.Equal(-1, e.PoseFrom);
+        Assert.Equal(8, e.Origin[0]);
+    }
+
+    // the mode switched off and on: the new capture's numbering, its model 1 perhaps another model
+    [Fact]
+    public void ANewNumberingStartsAnew()
+    {
+        var smoothing = new EnhancedSmoothing { Poses = true };
+        smoothing.Observe(Frame(0.0, frame: 0, new Vec3(0, 0, 0)));
+        smoothing.Observe(Frame(0.1, frame: 1, new Vec3(0, 0, 0), new EnhancedModelNumbering()));
+
+        Assert.Equal(-1, smoothing.Apply(Frame(0.15, frame: 1, new Vec3(0, 0, 0))).Entities[0].PoseFrom);
+    }
+
     [Fact]
     public void OffChangesNothing()
     {
@@ -70,7 +98,9 @@ public class EnhancedSmoothingTests
         Assert.Same(frame, smoothing.Apply(frame));
     }
 
-    private static EnhancedFrame Frame(double time, int frame, Vec3 origin) => new()
+    private static EnhancedFrame Without(EnhancedFrame frame) => frame.WithEntities([]);
+
+    private static EnhancedFrame Frame(double time, int frame, Vec3 origin, EnhancedModelNumbering? numbering = null) => new()
     {
         Width = 4,
         Height = 4,
@@ -84,6 +114,7 @@ public class EnhancedSmoothingTests
         InLevel = true,
         World = 0,
         Models = [null, new EnhancedModel { Name = Monster.Name, Alias = Monster }],
+        ModelNumbering = numbering,
         Entities = [new EnhancedEntity(5, 1, origin, default, frame, 0, 0, 0, 0)],
         Particles = [],
         Dlights = [],
