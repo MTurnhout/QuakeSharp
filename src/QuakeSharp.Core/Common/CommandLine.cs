@@ -91,12 +91,13 @@ public sealed class CommandLine
     /// <summary>com_argc</summary>
     public int Argc { get; }
 
-    // the traces' harness switches and how many values each takes (the oracle's Oracle_HarnessSwitch)
+    // the traces' harness switches and how many values each takes (the oracle's Oracle_HarnessSwitch), and the
+    // executable's for a recorded game (-recordevents, -quitafter), so its replay's cmdline is the same
     private static readonly (string Name, int Values)[] harnessSwitches =
     [
         ("-trace", 1), ("-traceevents", 1), ("-tracedatagrams", 1), ("-tracedump", 1), ("-traceshot", 1),
         ("-tracequitafterdemo", 0), ("-oracleframes", 1), ("-oraclevid", 2), ("-oraclestep", 1), ("-oraclehost", 1),
-        ("-oracleverbose", 0), ("-netunplug", 0),
+        ("-oracleverbose", 0), ("-netunplug", 0), ("-recordevents", 1), ("-quitafter", 1),
     ];
 
     // how many arguments from argv[j] are a harness switch with its values, 0 for one of the game's

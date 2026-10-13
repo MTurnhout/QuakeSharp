@@ -56,9 +56,14 @@ screen, `-noaspect` shows square pixels instead of a 4:3 picture,
 `-dedicated [<players>]` runs a dedicated server, as WinQuake's: no window, video or sound, its console on standard
 output, and commands typed at it on standard input (8 players by default, 16 at most).
 
+Multiplayer is WinQuake's TCP/IP over UDP (NetQuake's protocol 15, port 26000, `-udpport` for another), on Windows and
+Linux alike. As WinQuake, a server on the same machine is not listed by the search and is joined by the machine's
+address, not 127.0.0.1.
+
 `-recordevents <file>` records a game for the fidelity tests: QuakeSharp then runs as the oracle's traces do (a
 virtual clock of 1/64 s steps paced to real time, no `config.cfg`) and writes every key as a `-traceevents` line; on
-quitting it prints the frame count. The oracle (`quake-oracle.exe -traceevents <file> -oracleframes <n>`, from its
+quitting it prints the frame count. A network game is recorded too: what arrived from the network goes to
+`<file>.dgrams` beside it, for the replay's `-tracedatagrams`. The oracle (`quake-oracle.exe -traceevents <file> -oracleframes <n>`, from its
 Quake folder) and `quakesharp-tools trace` then replay the same game, so it can be compared frame by frame. The
 mouse's motion and buttons are recorded too.
 

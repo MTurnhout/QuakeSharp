@@ -1142,6 +1142,30 @@ protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
    `-recordevents` for a dedicated server.*
 4. **The real Winsock**: `SocketWinsock`, the executable on it, `-recordevents`' datagrams. CI runs a test of two
    engines in one process over real sockets on 127.0.0.1 (a connection made and a game played; not traced, real time).
+   *Done (decision 59): `SocketWinsock` (the platform project) answers net_wins.c with .NET's UDP sockets: Winsock's
+   error codes are .NET's `SocketError` values; a dotted address resolves without a lookup, and on Windows a name is
+   resolved by ws2_32's own `gethostbyname` (its first address, which WinQuake takes for the machine's, need not be
+   .NET's first: here it is the WSL adapter's, as Winquake.exe takes it); Windows reports the ICMP answer as
+   `WSAECONNRESET`, Linux reports nothing on an unconnected socket. The executable plays and serves (`-dedicated`) on
+   it. `-recordevents` runs the traces' virtual machine instead, made a recorded machine: this machine's name and first
+   IPv4 address, its binds, lookups and outgoing datagrams through real sockets and the real name service
+   (`NetworkRecorder`), and what the real network delivered taken before each step of the clock (a frame's, or one
+   waited within a frame, each paced to real time) and arriving at that step, as a replay delivers it. What it sends to
+   itself stays on it where one of its sockets has the port (a broadcast's echo is passed over) and leaves otherwise,
+   for another program of the machine. The datagrams file beside the events (`<events>.dgrams`) holds the arrivals and
+   the machine's lines (`machine`, `bind`, `resolve`, `reverse`), which `VirtualWinsock` and `winsock_oracle.c` read:
+   a recorded game replays in the oracle and in `quakesharp-tools trace` with `-tracedatagrams`, without
+   `-oraclehost`. `RealNetworkTests` (Platform.Tests) runs a dedicated server and a client, each on its own thread on
+   the real clock, over `SocketWinsock` on this machine from any `id1/pak0.pak` (CI's shareware): the client connects,
+   enters the game and talks, which the server prints; it passes on Windows and on Linux (WSL). Found on the way:
+   .NET's peek (`SocketFlags.Peek`) takes the datagram on Windows, so `SocketWinsock` holds a peeked datagram for the
+   next read; and WinQuake's own two limits on one machine (§3.4): once it has broadcast (the server search before a
+   `connect`), its sockets bind to the machine's address, from which today's Windows refuses to send to 127.0.0.1
+   (`WSAEADDRNOTAVAIL`, so `connect 127.0.0.1` fails), and the search never lists a server of its own address
+   (`_Datagram_SearchForHosts` takes any answer from its address as its own, whatever the port). A game recorded on
+   this machine (QuakeSharp's dedicated server, a recorded client joining it, talking, a level change, leaving)
+   replays in the oracle and in QuakeSharp in sync on every line of its 2,461 frames, and the replay's console is the
+   recording's, line for line.*
 5. **Other engines**, audited by hand into §3.4 as decision 42's audit: Winquake.exe 1.09 (a scratch copy) and
    QuakeSharp on one machine and on two, each the server and each the client, through the search and `connect`; a
    deathmatch with chat, a level change and a disconnect, QuakeSharp's side recorded and replayed in the oracle in
@@ -1213,6 +1237,7 @@ server match the oracle on every frame for every host; the executable plays over
 | 56 | Games between hosts (milestone 11, step 2) | `NetRun` plays a game's hosts together in one process, in lockstep on one virtual clock (each host on its own thread, holding the turn for a frame or a step of its wait; a datagram sent during a step arrives at the next); a game is `events/<game>.net` (hosts' command lines, `lanloss`, `-netunplug`, `datagram` lines from no host of the game). The oracle replays each host alone from the datagrams QuakeSharp's run gave it (derived from game data: kept with the traces, never committed); every host matching, the `U` line included, means the oracle's hosts would have played the same game. The `cmdline` cvar gets a shared stand-in (§3.3) (§11.5) | 2026-10-13 |
 | 57 | Other engines (was D12) | Confirmed with the user, who approved the download: besides Winquake.exe 1.09, QuakeSpasm's latest Windows release (protocol 15, the engine most NetQuake servers run), downloaded into a scratch folder outside the repository, run only, never committed or copied from (milestone 11, step 5; §11.5) | 2026-10-13 |
 | 58 | The dedicated server (milestone 11, step 3) | sys_win.c's dedicated parts are ported in Core and copied into `sys_oracle.c`; on the virtual clock `Sys_Sleep` moves a step, so sys_win.c's loop runs a dedicated server's frame once `sys_ticrate` has passed (every 4 steps); `-traceevents`' `@stdin <text>` lines type into a virtual console; trace format 8's `O` line hashes what the console is given; the executable's console is standard output and input (§11.5) | 2026-10-13 |
+| 59 | The real network (milestone 11, step 4) | `SocketWinsock` over .NET's UDP sockets in the platform project, for the executable and its dedicated server; `-recordevents` keeps the virtual machine, given the real machine's name and address and bridged to real sockets, taking what arrives before each step of the clock and writing it, with the machine's binds and lookups, to a datagrams file the oracle and `quakesharp-tools trace` replay (§11.5) | 2026-10-13 |
 
 ## 13. Open decisions
 

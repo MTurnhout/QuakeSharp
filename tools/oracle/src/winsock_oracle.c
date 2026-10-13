@@ -16,6 +16,11 @@
  *   datagram arriving at the machine's port at that step of the clock, or "<step> <port> <a.b.c.d:port> reset", the ICMP
  *   answer to what that socket sent there; at each step the file's arrivals come before the machine's own. A frame
  *   that waits for an answer moves the clock (sys_oracle.c), so what is due arrives while it waits.
+ * - a recorded machine (design.md §11.5, step 4: a game played on a real network with QuakeSharp's -recordevents),
+ *   when the file has a "machine <name> <a.b.c.d>" line: the real machine's name and address; its binds get the ports
+ *   the recording's got ("bind <port> <result>": the port, or a negative Winsock error), its lookups the answers it got
+ *   ("resolve <name> <a.b.c.d>|none", "reverse <a.b.c.d> <name>|none"), each in turn; what it sends to itself where
+ *   none of its sockets is leaves, without an ICMP answer of its own (the file holds the real one).
  *
  * QuakeSharp's VirtualWinsock is the same.
  */
@@ -68,8 +73,22 @@ typedef struct pending_s
 } pending_t;
 
 static int host_number = 1;
-static char host_name[16];
+static char host_name[256];
 static unsigned int host_addr;		// network byte order
+
+// a recorded machine: the file's binds and lookups, in the order they happened
+#define MAX_RECORDED	1024
+static int recorded;
+static int recorded_binds[MAX_RECORDED], num_binds, next_bind;
+typedef struct
+{
+	int				used;
+	int				found;
+	char			name[256];
+	unsigned int	addr;		// network byte order
+} lookup_t;
+static lookup_t resolves[MAX_RECORDED], reverses[MAX_RECORDED];
+static int num_resolves, num_reverses;
 
 static vsocket_t sockets[MAX_SOCKETS];
 static int next_socket_number = FIRST_SOCKET;
@@ -226,7 +245,7 @@ THE HOSTS
 */
 
 static struct hostent host_entry;
-static char host_entry_name[32];
+static char host_entry_name[256];
 static unsigned int host_entry_addr;
 static char *host_entry_addrs[2];
 static char *host_entry_aliases[1];
@@ -265,6 +284,21 @@ static struct hostent FAR * PASCAL FAR V_gethostbyname (const char FAR *name)
 	unsigned int addr;
 	int n;
 
+	if (recorded)
+	{
+		// the first answer not yet given for the name
+		for (n = 0; n < num_resolves; n++)
+			if (!resolves[n].used && !strcmp (resolves[n].name, name))
+			{
+				resolves[n].used = 1;
+				if (resolves[n].found)
+					return HostEntry (name, resolves[n].addr);
+				break;
+			}
+		last_error = WSAHOST_NOT_FOUND;
+		return NULL;
+	}
+
 	if (!_stricmp (name, "localhost"))
 		return HostEntry ("localhost", MakeAddr (127, 0, 0, 1));
 	// quake<n>, the whole name ("quake1:26001" resolves no more than on Windows)
@@ -296,6 +330,21 @@ static struct hostent FAR * PASCAL FAR V_gethostbyaddr (const char FAR *addr, in
 		return NULL;
 	}
 	memcpy (&a, addr, 4);
+	if (recorded)
+	{
+		int n;
+
+		for (n = 0; n < num_reverses; n++)
+			if (!reverses[n].used && reverses[n].addr == a)
+			{
+				reverses[n].used = 1;
+				if (reverses[n].found)
+					return HostEntry (reverses[n].name, a);
+				break;
+			}
+		last_error = WSAHOST_NOT_FOUND;
+		return NULL;
+	}
 	if (LanHost (a))
 	{
 		sprintf (name, "quake%d", LanHost (a));
@@ -690,7 +739,17 @@ int PASCAL FAR bind (SOCKET s, const struct sockaddr FAR *addr, int namelen)
 		return SOCKET_ERROR;
 	}
 	port = ntohs (in->sin_port);
-	if (port == 0)
+	if (recorded)
+	{
+		// a recorded machine's ports are those the recording's binds got
+		port = next_bind < num_binds ? recorded_binds[next_bind++] : -WSAEADDRNOTAVAIL;
+		if (port < 0)
+		{
+			last_error = -port;
+			return SOCKET_ERROR;
+		}
+	}
+	else if (port == 0)
 	{
 		while (SocketByPort (next_ephemeral))
 			next_ephemeral = next_ephemeral == 65535 ? FIRST_EPHEMERAL : next_ephemeral + 1;
@@ -829,7 +888,7 @@ static int PASCAL FAR V_sendto (SOCKET s, const char FAR *buf, int len, int flag
 		from_addr = IsLoopback (addr) ? MakeAddr (127, 0, 0, 1) : host_addr;
 		if (SocketByPort (port))
 			SendOwn (port, NewDatagram (from_addr, htons ((unsigned short)v->port), (const unsigned char *)buf, len));
-		else if (addr != INADDR_BROADCAST)
+		else if (addr != INADDR_BROADCAST && !recorded)
 		{
 			// no socket there: the ICMP answer
 			d = NewDatagram (addr, in->sin_port, (const unsigned char *)"", 0);
@@ -963,6 +1022,45 @@ FARPROC WINAPI Oracle_GetProcAddress (HMODULE module, LPCSTR name)
 	return NULL;
 }
 
+// a recorded machine's lines (the datagram lines are read as their steps come)
+static void ReadMachine (void)
+{
+	static char line[2 * MAX_DATAGRAM_SIZE + 64];
+	char word[16], first[256], second[256];
+	lookup_t *l;
+
+	while (fgets (line, sizeof(line), datagram_file))
+	{
+		if (sscanf (line, "%15s %255s %255s", word, first, second) != 3)
+			continue;
+		if (!strcmp (word, "machine") && inet_addr (second) != INADDR_NONE)
+		{
+			recorded = 1;
+			strcpy (host_name, first);
+			host_addr = inet_addr (second);
+		}
+		else if (!recorded)
+			continue;
+		else if (!strcmp (word, "bind") && num_binds < MAX_RECORDED)
+			recorded_binds[num_binds++] = atoi (second);
+		else if (!strcmp (word, "resolve") && num_resolves < MAX_RECORDED)
+		{
+			l = &resolves[num_resolves++];
+			strcpy (l->name, first);
+			l->addr = inet_addr (second);
+			l->found = strcmp (second, "none") && l->addr != INADDR_NONE;
+		}
+		else if (!strcmp (word, "reverse") && num_reverses < MAX_RECORDED && inet_addr (first) != INADDR_NONE)
+		{
+			l = &reverses[num_reverses++];
+			strcpy (l->name, second);
+			l->addr = inet_addr (first);
+			l->found = strcmp (second, "none") != 0;
+		}
+	}
+	rewind (datagram_file);
+}
+
 // the machine (-oraclehost) and the other hosts' datagrams (-tracedatagrams), before Host_Init
 void Oracle_WinsockInit (void)
 {
@@ -982,6 +1080,7 @@ void Oracle_WinsockInit (void)
 		datagram_file = fopen (com_argv[t + 1], "r");
 		if (!datagram_file)
 			Sys_Error ("can't read the datagrams %s", com_argv[t + 1]);
+		ReadMachine ();
 		ReadFileLine ();
 	}
 }

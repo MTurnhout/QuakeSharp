@@ -20,6 +20,11 @@ namespace QuakeSharp.Core.Net;
 /// own. A frame that waits for an answer moves the clock (<see cref="Platform.VirtualSystem"/>), so what is due
 /// arrives while it waits.</item>
 /// </list>
+/// A recorded machine (design.md §11.5, step 4) has a real machine's name and address and goes out through an
+/// <see cref="IMachineNetwork"/>: recording a game on a real network (-recordevents), the real one, whose datagrams the
+/// recorder makes arrive at each step; replaying it, the answers its datagrams file holds (a "machine" line,
+/// <see cref="RecordedNetwork"/>). Its binds and lookups are the network's; what it sends to itself stays when one of its
+/// sockets has the port, and leaves otherwise, without an ICMP answer of its own (the network gives the real one).
 /// </summary>
 public sealed class VirtualWinsock : IWinsock
 {
@@ -31,8 +36,9 @@ public sealed class VirtualWinsock : IWinsock
     private const ulong FNV_PRIME = 0x100000001b3UL;
 
     private readonly Func<long> steps;
-    private readonly string hostName;
-    private readonly uint hostAddr;
+    private string hostName;
+    private uint hostAddr;
+    private IMachineNetwork? network;
     private readonly VSocket?[] sockets = new VSocket?[MaxSockets];
     private readonly LinkedList<Pending> remote = new();
     private readonly Queue<Pending> own = new();
@@ -63,6 +69,20 @@ public sealed class VirtualWinsock : IWinsock
         hostName = HostName(host);
         hostAddr = HostAddr(host);
     }
+
+    /// <summary>A recorded machine: a real one's name and address, going out through <paramref name="network"/>.</summary>
+    public VirtualWinsock(string name, uint addr, Func<long> steps, IMachineNetwork network)
+    {
+        this.steps = steps;
+        hostName = name;
+        hostAddr = addr;
+        this.network = network;
+    }
+
+    /// <summary>The machine's name and address (its bytes in memory order).</summary>
+    public string MachineName => hostName;
+
+    public uint MachineAddr => hostAddr;
 
     /// <summary>The machine's number on the virtual LAN.</summary>
     public int Host { get; }
@@ -116,10 +136,18 @@ public sealed class VirtualWinsock : IWinsock
 
     /// <summary>
     /// -tracedatagrams' file: lines "&lt;step&gt; &lt;port&gt; &lt;a.b.c.d:port&gt; &lt;hex bytes&gt;" or "... reset", as
-    /// winsock_oracle.c reads them (lines it cannot read are skipped).
+    /// winsock_oracle.c reads them (lines it cannot read are skipped); with a "machine" line, a recorded machine
+    /// replayed (<see cref="MachineLines"/>).
     /// </summary>
     public void ArriveFromFile(string path)
     {
+        if (RecordedNetwork.Read(path) is { } recorded)
+        {
+            hostName = recorded.Name;
+            hostAddr = recorded.Addr;
+            network = recorded;
+        }
+
         foreach (string line in File.ReadLines(path, Encoding.Latin1))
         {
             string[] fields = line.Split([' ', '\t'], 4, StringSplitOptions.RemoveEmptyEntries);
@@ -185,6 +213,17 @@ public sealed class VirtualWinsock : IWinsock
 
     public HostEnt? gethostbyname(string name)
     {
+        if (network != null)
+        {
+            HostEnt? entry = network.Resolve(name);
+            if (entry == null)
+            {
+                lastError = WSAHOST_NOT_FOUND;
+            }
+
+            return entry;
+        }
+
         if (string.Equals(name, "localhost", StringComparison.OrdinalIgnoreCase))
         {
             return new HostEnt("localhost", [MakeAddr(127, 0, 0, 1)]);
@@ -213,6 +252,17 @@ public sealed class VirtualWinsock : IWinsock
 
     public HostEnt? gethostbyaddr(uint addr)
     {
+        if (network != null)
+        {
+            HostEnt? entry = network.ResolveAddress(addr);
+            if (entry == null)
+            {
+                lastError = WSAHOST_NOT_FOUND;
+            }
+
+            return entry;
+        }
+
         if (LanHost(addr) != 0)
         {
             return new HostEnt(HostName(LanHost(addr)), [addr]);
@@ -447,7 +497,19 @@ public sealed class VirtualWinsock : IWinsock
         }
 
         int port = ntohs(SinPort(name));
-        if (port == 0)
+        if (network != null)
+        {
+            // a recorded machine's ports are the network's
+            int result = network.Bind(addr, port);
+            if (result < 0)
+            {
+                lastError = -result;
+                return SOCKET_ERROR;
+            }
+
+            port = result;
+        }
+        else if (port == 0)
         {
             while (SocketByPort(nextEphemeral) != null)
             {
@@ -568,21 +630,33 @@ public sealed class VirtualWinsock : IWinsock
         HashDatagram(0, v.Port, addr, toPort, data);
 
         // to the machine itself: from its address, or from 127.0.0.1 when sent to the loopback
-        if (addr == hostAddr || addr == INADDR_BROADCAST || IsLoopback(addr))
+        bool own = addr == hostAddr || IsLoopback(addr);
+        bool stays = false;
+        if (own || addr == INADDR_BROADCAST)
         {
             uint fromAddr = IsLoopback(addr) ? MakeAddr(127, 0, 0, 1) : hostAddr;
             if (SocketByPort(port) != null)
             {
                 SendOwn(port, new Datagram(false, fromAddr, htons((ushort)v.Port), data));
+                stays = own;
             }
-            else if (addr != INADDR_BROADCAST)
+            else if (own && network == null)
             {
                 // no socket there: the ICMP answer
                 SendOwn(v.Port, new Datagram(true, addr, toPort, []));
+                stays = true;
             }
         }
 
-        if (addr != hostAddr && !IsLoopback(addr))
+        if (network != null)
+        {
+            // a recorded machine: what is not for one of its own sockets leaves (another program may have the port)
+            if (!stays)
+            {
+                network.Send(v.Port, addr, toPort, data);
+            }
+        }
+        else if (!own)
         {
             Sent?.Invoke(v.Port, addr, toPort, data);
         }
@@ -597,6 +671,11 @@ public sealed class VirtualWinsock : IWinsock
         {
             lastError = WSAENOTSOCK;
             return SOCKET_ERROR;
+        }
+
+        if (sockets[i]!.Bound)
+        {
+            network?.Close(sockets[i]!.Port);
         }
 
         sockets[i] = null;

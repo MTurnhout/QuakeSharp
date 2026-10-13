@@ -19,7 +19,8 @@ using QuakeSharp.Render.Vulkan;
 // files only heard); no joystick; no config.cfg (a fresh user folder, thrown away); in a window in mode 0
 // (-startwindowed -noautostretch, as the traces); and writes the keys and the mouse as -traceevents lines, so the game
 // replays the same in the oracle and in quakesharp-tools trace (with -traceevents <file> -oracleframes <the frames it
-// reports>, from the same command line).
+// reports>, from the same command line). Its network is the traces' virtual machine with this one's name and address,
+// out through the real network; what arrives is written beside the events (<file>.dgrams, for -tracedatagrams).
 string[] switches = args.Contains("-recordevents") ? ["-startwindowed", "-noautostretch"]
     : args.Contains("-window") ? ["-startwindowed"]
     : [];
@@ -72,8 +73,8 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     using var sound = new SdlSoundDma();
     using var cd = new FileCdDrive(CdTracks.Find(".", commandLine));
     using var joysticks = new SdlJoysticks();
-    // the virtual machine's Winsock, alone on its LAN, until the real network's comes (design.md §11.5, step 4)
-    var winsock = new VirtualWinsock(1, () => (long)(system.FloatTime() * 64));
+    // the real network (design.md §11.5)
+    using var winsock = new SocketWinsock();
     var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound,
         new WindowVideo(window, presenter), cd, mouse: window, joysticks: joysticks, winsock: winsock);
 
@@ -118,8 +119,7 @@ static int Dedicated(CommandLine commandLine, double quitTime)
     string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
     using var console = new DedicatedConsole();
     var system = new RealSystem(console);
-    // the virtual machine's Winsock, alone on its LAN, until the real network's comes (design.md §11.5, step 4)
-    var winsock = new VirtualWinsock(1, () => (long)(system.FloatTime() * 64));
+    using var winsock = new SocketWinsock();
     var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, winsock: winsock);
 
     try
@@ -172,28 +172,41 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     using var recorder = new EventRecorder(window, path, () => frames);
     using var sound = new SdlSoundDma(clock: () => system.Time);
     using var cd = new ListeningCdDrive(CdTracks.Find(".", commandLine));
+    // the machine as the traces' virtual one, out through the real network: what arrives at each step is written to
+    // the datagrams file beside the events, with the machine's name, address, ports and lookups (design.md §11.5)
+    string datagrams = Path.ChangeExtension(path, ".dgrams");
+    using var network = new NetworkRecorder(datagrams);
+    var winsock = new VirtualWinsock(network.Name, network.Addr, () => system.Steps, network);
+    network.Winsock = winsock;
     // the window takes the mouse as in a game; no joystick, as the oracle has none
     var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound,
-        new WindowVideo(window, presenter), cd, mouse: window, winsock: new VirtualWinsock(1, () => system.Steps));
+        new WindowVideo(window, presenter), cd, mouse: window, winsock: winsock);
 
     // silent while another program has the focus, but without AppActivate's clears: the oracle never loses the focus
     window.Activated = (active, _) => sound.Muted = !active;
     var clock = Stopwatch.StartNew();
 
+    // before every step of the clock, a frame's or one waited within a frame: the real clock gets there, and what the
+    // real network delivered meanwhile arrives at that step
+    system.Waiting = () =>
+    {
+        double wait = (system.Time + Step) - clock.Elapsed.TotalSeconds;
+        if (wait > 0)
+        {
+            Thread.Sleep(TimeSpan.FromSeconds(wait));
+        }
+
+        network.Poll(system.Steps + 1);
+    };
+
     try
     {
+        engine.Sys_Printf("Host_Init\n");
         engine.Host_Init();
         double oldtime = system.Time;
         while (true)
         {
-            // the next frame's time on the virtual clock, when the real one gets there (after a frame that waited for
-            // the network, the clock is ahead: design.md §11.5)
-            double wait = (system.Time + Step) - clock.Elapsed.TotalSeconds;
-            if (wait > 0)
-            {
-                Thread.Sleep(TimeSpan.FromSeconds(wait));
-            }
-
+            system.Waiting!();
             system.Step();
             double newtime = system.Time;
             engine.Host_Frame((float)(newtime - oldtime));
@@ -209,7 +222,7 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     catch (QuitException)
     {
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"Recorded {frames} frames to {path}: replay with -traceevents {path} -oracleframes {frames}"));
+            $"Recorded {frames} frames to {path} and {datagrams}: replay with -traceevents {path} -tracedatagrams {datagrams} -oracleframes {frames}"));
         return 0;
     }
     finally

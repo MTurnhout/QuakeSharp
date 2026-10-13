@@ -414,7 +414,7 @@ int Oracle_HarnessSwitch (char **argv, int j, int argc)
 	{
 		{"-trace", 1}, {"-traceevents", 1}, {"-tracedatagrams", 1}, {"-tracedump", 1}, {"-traceshot", 1},
 		{"-tracequitafterdemo", 0}, {"-oracleframes", 1}, {"-oraclevid", 2}, {"-oraclestep", 1}, {"-oraclehost", 1},
-		{"-oracleverbose", 0}, {"-netunplug", 0},
+		{"-oracleverbose", 0}, {"-netunplug", 0}, {"-recordevents", 1}, {"-quitafter", 1},
 	};
 	int i, n;
 
