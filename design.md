@@ -459,7 +459,8 @@ pixel) and a second sound mixer at the device's rate, with the 8-bit software fr
 every frame so nothing the game reads (the particles `R_DrawParticles` moves and frees, the static entities
 `R_StoreEfrags` adds, the painted sound `S_StartSound`'s `rand()` depends on) changes. What the GPU needs is taken
 from the game in Core into snapshots; `Render.Vulkan` draws them. Verified as in DoomSharp: the traces, every line,
-with enhanced frames and sound made after every frame, still match. The plan: §11.6.
+with enhanced frames and sound made after every frame, still match. The plan: §11.6. Milestone 13 adds texture
+packs to it (§11.7).
 
 ## 7. Audio
 
@@ -619,6 +620,7 @@ registered data's, byte for byte).
 | 10 ✅ | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios. *Plan: §11.4. Winquake.exe 1.09 audited (§3.4): its start-up lines, `joystick` cvar and seven modes emulated, its real-time `rand()` and x87 rounding documented, quake.exe 1.08 documented from the source. Ported: in_win.c over a virtual Win32 on both sides (trace format 6's `I`; `QuakeEngine.Pending.cs` gone) and vid_win.c's modes and Video menu; the executable starts as Winquake.exe, in mode 3 full screen, and plays with the mouse in every mode. Both mission packs traced from their original PAKs (MD5s confirmed): their demos, attract loops, tours, saves read back, menus and endings, every line and file in sync. The rest of the UI in six scripted runs; the fidelity tests reach 84.3% of Core's lines, what none reaches listed with why. CI's shareware smoke test plays demo1-3 from `quake106.zip`'s `pak0.pak` to the oracle's last frames* |
 | 11 ✅ | Networking | UDP play with other NetQuake engines; net game tests. *Plan: §11.5. net_wins.c, net_wipx.c and net_win.c ported over a Winsock real (`SocketWinsock`, .NET's sockets) and virtual (`VirtualWinsock`, the oracle's `winsock_oracle.c`), the stand-ins gone (decision 55); games between hosts played together in one process and each host replayed alone in the oracle, every line in sync (`netjoin`, `netdm`, `netloss`, `netcmds`, `netswitches`, `netded`; decision 56); the dedicated server on both sides, its console scripted (trace format 8; decision 58); the real network, and games on it recorded and replayed (decision 59); Winquake.exe 1.09 and QuakeSpasm 0.96.3 played against, as server and as client, on one machine and on two (§3.4, decision 60): QuakeSharp plays with both but for QuakeSpasm's server, which no 1.09 client can join.* |
 | 12 ✅ | Enhanced mode | An optional layer the player switches on and off at any time, the faithful mode the default and untouched (§6.6): a Vulkan hardware renderer of the same view at any resolution and aspect, MSAA, filtered and mipmapped textures, lighting with overbright, the palette's shifts and gamma, sky, water, particles, frames interpolated beyond 72 a second and alias poses blended; sound mixed at the device's rate. *Plan: §11.6.* **Every trace, every line and file, matches with enhanced frames and sound made after every frame** (`EnhancedModeChangesNothing`); demos, saves, config.cfg and net games stay the same bytes. *Done (decisions 61-67): seams in draw.c, R_RenderView, V_UpdatePalette, VID_Update and S_Update_ hand snapshots and the channels to `Core/Enhanced`, which makes the models ready and mixes; `Render.Vulkan` draws on its own thread: the world lit as r_surf.c lights it (the colormap's look or true colour with overbright), the sky and water as r_sky.c, d_sky.c and d_scan.c draw them, alias models lit as r_alias.c, sprites, particles, the 2D from the frame, widened Hor+, MSAA, interpolated at the display's pace; a 44.1 kHz mixer following WinQuake's channels. Every trace matches with it on and switched; the comparison with the software frame, at faithful settings, has 96.6-100% of the view's pixels within 24 of the software's on every frame measured with everything drawn* |
+| 13 | Texture packs | Enhanced mode draws replacement textures from a pack (QuakeSpasm's and DarkPlaces' names): the world's textures, skies and alias skins at any resolution, their fullbrights, and normal and gloss maps lit by the dynamic lights; the tools export the game's textures for a pack's maker and check a pack. The faithful mode, and enhanced mode without a pack, untouched. *Plan: §11.7* |
 | Later | | QuakeWorld, release builds (single file, NativeAOT) |
 
 ### 11.1 Milestone 7: the plan
@@ -1482,6 +1484,89 @@ QuakeSharp's own); one would be asked for first.
 **Done when** `EnhancedModeChangesNothing` passes on every trace; the executable plays in enhanced mode with every
 enhancement above, switched at any time, and the comparison's numbers are recorded; the faithful mode is unchanged.
 
+### 11.7 Milestone 13: the plan
+
+Milestone 12's enhanced mode draws the game's own textures: 8-bit, most of them 64×64 or smaller, filtered and
+mipmapped but no sharper than the PAK has them; external textures were left out (decision 65). Milestone 13 lets
+enhanced mode draw **replacement textures** from a texture pack instead: higher-resolution colours for the world and
+the alias models' skins, and material maps (normals, gloss) that the dynamic lights light per pixel. How a pack is made
+is outside QuakeSharp: the tools export the game's textures under the names a pack uses and check a pack against the
+game; the upscaling between the two (by hand, or by AI tools such as RTX Remix's texture tools or an ESRGAN-type
+upscaler) is the user's, on their own machine. RTX Remix's runtime itself cannot be used: it hooks Direct3D 9 calls,
+and QuakeSharp draws with Vulkan (D22).
+
+**The rules.** §11.6's, unchanged, and:
+
+- **The faithful mode stays untouched, and so does enhanced mode without a pack.** A missing replacement is the game's
+  own texture, as today; with `enhanced_textures` 0 or no pack, nothing new runs.
+- **The game never sees the pack.** Packs are read by the enhanced side with its own file reading, never through the
+  game's (`COM_FindFile`, `COM_LoadFile`: `com_filesize`, the loading disc). The game asks for no file a pack has, so
+  the loose files of the user folder (§9) and a pack can share a game directory.
+- **The game thread never waits for a pack.** The capture still makes the models ready from the game's own data
+  (§11.6); replacements are found, read and decoded on a loader thread of `Render.Vulkan`'s, and a surface shows the
+  game's texture until its replacement is uploaded (a level's first frames may show some of each).
+- **Core keeps no GPU dependency**; the pack's lookup and decoders are in `Core/Enhanced` and unit-tested without a GPU
+  or game data.
+- **Windows and Linux alike.** Names are looked up without regard to case (a pack's file names as their maker wrote
+  them, the BSP's as id wrote them), and with `/` whatever the platform's separator; CI runs the pack's tests on both.
+- **No package** (D22): PNG is decoded by QuakeSharp's own code over .NET's `ZLibStream`, TGA (raw and RLE) by its
+  own; one would be asked for first.
+
+**A pack** (D18) is loose files under `textures/` (world) and `progs/` (skins) in a game directory, in the user folder
+(§9) first, then the Quake folder's; a mission pack (`-game`) looks in its own directory, then `id1`'s. The names are
+QuakeSpasm's and DarkPlaces', so packs made for them work:
+
+| What | File (`.png` or `.tga`) | Notes |
+|---|---|---|
+| A world texture | `textures/<map>/<name>`, then `textures/<name>` | `<map>` is the BSP's name (`e1m1`): a map whose texture differs from another's of the same name. `*` in a name is `#` (`#water0`); `+0slip` stays as it is, so animated textures' frames are replaced one by one |
+| Its fullbright texels | `<name>_glow` or `<name>_luma` | Unlit, added to the lit colour (D20) |
+| Its normals, gloss | `<name>_norm`, `<name>_gloss` | Tangent space normals (alpha unused); gloss as the specular strength (D21) |
+| The sky | `textures/<map>/sky<n>`, `textures/sky<n>` | The same layout as the BSP's (two layers side by side, the front one's index 0 the alpha) |
+| An alias skin | `progs/<model>.mdl_<skin>` | `<skin>` the skin's number; a skin group's frames `_<skin>_<frame>`; `_glow`, `_norm`, `_gloss` as above |
+| Players' colours | `progs/<model>.mdl_<skin>_pants`, `_shirt` | Grey masks, tinted by the entity's colours; an entity drawn with a colour translation uses the replacement only with both (D19) |
+
+A replacement's size may be any multiple of the game's (its texture coordinates stay the game's, scaled); its mip
+chain is made from it as §11.6's.
+
+**What it changes.** In the true-colour look only (D19): the colormap look keeps the palette indices it looks up, which
+a replacement does not have.
+
+| Enhancement | What | How it stays out of the game | Verified by |
+|---|---|---|---|
+| World textures | The replacement's colours, lit by the same light (lightmaps, styles, dlights, overbright, the palette's shifts and gamma); turbulent surfaces warped as now; the sky's two layers from the replacement | Read by the loader, never through the game's files | Unit tests: the lookup's order (map, game, `id1`; user folder, Quake folder), `*` as `#`, case; the comparison without a pack unchanged |
+| Fullbrights | `_glow`/`_luma` unlit; without one, the game's fullbright texels (palette 224-255) scaled to the replacement's size and taken from its colours unlit, so lamps and lava still glow (D20) | GPU only | Unit tests of the mask's scaling |
+| Alias skins | Replacement skins, skin groups by their intervals as now; players' colours through `_pants` and `_shirt` | Read | By eye; unit tests of the names |
+| Materials | `_norm` and `_gloss` lit per pixel by the dynamic lights (r_light.c's falloff, as now, times the normal's facing; gloss as a highlight); the lightmaps' light, which has no direction, stays as it is (D21). `enhanced_materials`, on | GPU only | By eye; validation layer clean |
+| Settings | `enhanced_textures` (1: a pack's textures where found), `enhanced_materials` (1), in `quakesharp.cfg` (decision 61) | Not the game's cvars | `EnhancedSettingsTests` |
+
+**The tools.** `quakesharp-tools export-textures <quake-dir> <out-dir> [-game <dir>]` writes every texture a pack could
+replace as PNG under its pack name: every BSP's textures (one under `textures/` per name, and under `textures/<map>/`
+where a map's differs from the first seen), the sky's layers as one image with the front's alpha, every alias model's
+skins; with each, its fullbright mask (`_glow`, the fullbright texels on black) where it has fullbright texels, and a
+list of what was written and from which maps and models. It builds on `dump-graphics`' reading and `PngWriter`, and
+refuses to write inside the repository as the other tools do: what it writes is game data, never committed.
+`quakesharp-tools texture-pack-check <quake-dir> <pack-dir> [-game <dir>]` lists what a pack replaces, what it lacks,
+names the game has no texture for, sizes that are not a multiple of the game's, players' skins without both masks, and
+files that do not decode.
+
+**Porting order.** Each step builds with the tests green and is committed:
+
+1. **Export and check**: `export-textures`, `texture-pack-check`. Then by hand: a few textures of e1m1 upscaled and
+   looked at, before the renderer reads any (the question whether it is worth it, answered on real textures); D18's
+   names checked against a published pack's.
+2. **The pack in Core**: `EnhancedTexturePack` (the directories, the lookup by name, the decoders); unit tests with
+   small PNG and TGA files written for the tests (colour types, bit depths, interlacing, RLE; no game data).
+3. **World textures**: the loader thread, the replacement uploaded in place of the game's colours, the fullbrights,
+   water and sky; `enhanced_textures`; the comparison's numbers without a pack unchanged.
+4. **Alias skins**, players' colours.
+5. **Materials**: `_norm` and `_gloss` with the dynamic lights.
+6. **By hand**: a pack of e1's textures made with an upscaler, played through e1 in both lightings and switched;
+   pictures described here; README's section on packs.
+
+**Done when** `EnhancedModeChangesNothing` passes on every trace; enhanced mode draws a pack's world textures, skins
+and materials, on Windows and Linux, and without a pack draws as milestone 12's (the comparison's numbers unchanged);
+the faithful mode is unchanged.
+
 ## 12. Decision log
 
 | # | Topic | Decision | Date |
@@ -1556,6 +1641,13 @@ enhancement above, switched at any time, and the comparison's numbers are record
 
 ## 13. Open decisions
 
-To confirm with the user before the milestones they affect; the proposals are the defaults until then.
+To confirm with the user before the milestones they affect; the proposals are the defaults until then (the
+earlier ones are settled in the decision log, marked "was D<n>"):
 
-None: every question raised here has been settled with the user and moved to the decision log, marked "was D<n>".
+| # | Question | Proposal |
+|---|---|---|
+| D18 | A texture pack's format (milestone 13) | QuakeSpasm's and DarkPlaces' names (§11.7's table: `textures/<map>/<name>`, `textures/<name>`, `*` as `#`, `progs/<model>.mdl_<skin>`, `_glow`/`_luma`, `_norm`, `_gloss`, `_pants`/`_shirt`), so packs made for them work; PNG and TGA; loose files in a game directory of the user folder, then of the Quake folder, a mission pack's own before `id1`'s. Not in PAK or zip files, not DDS |
+| D19 | Where replacements apply (milestone 13) | The true-colour look only (the colormap look needs palette indices); world textures, skies and alias skins; an entity drawn with a colour translation (players) only with both `_pants` and `_shirt`. Sprites, the 2D (status bar, console, menus) and particles keep the game's. `enhanced_textures` on by default: without a pack it changes nothing |
+| D20 | Fullbrights without a `_glow` (milestone 13) | The game's fullbright texels scaled to the replacement's size, nearest, and those texels of the replacement drawn unlit, so lamps, lava and screens still glow |
+| D21 | Material maps (milestone 13) | `_norm` and `_gloss` lit per pixel by the dynamic lights only (muzzle flashes, rockets, explosions, glowing items); the lightmaps' light stays flat, as it has no direction. Light direction for the lightmaps (DarkPlaces' "deluxemaps") is left out: it needs the maps' light compiled again by an outside tool or a direction guessed from the lights' entities, a milestone of its own if wanted |
+| D22 | How packs are made (milestone 13) | Outside QuakeSharp: the tools export and check, the upscaling (by hand, RTX Remix's texture tools, an ESRGAN-type model, ...) is the user's; QuakeSharp downloads, ships and runs no model. RTX Remix's runtime is not used (it hooks Direct3D 9, QuakeSharp draws with Vulkan; its C API is a renderer of its own, a different project). No package: PNG through .NET's `ZLibStream` and TGA by QuakeSharp's own code |
