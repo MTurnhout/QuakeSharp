@@ -15,9 +15,13 @@ internal static class EnhancedCommands
     // writes <frame>.software.png, <frame>.enhanced.png, <frame>.diff.png (the view's differing pixels in red over the
     // software frame in grey) and <frame>.default.png, and prints the share of the view's pixels that are the same
     // colour, and that are within 24 of it on every channel. <frames> "warp" instead lists the runs of frames whose view
-    // is warped as under water (r_dowarp), to choose frames from.
+    // is warped as under water (r_dowarp), to choose frames from. -pack <game-dir> draws the default frame with a texture
+    // pack's textures (design.md §11.7; the faithful comparison never uses them).
     public static int Shot(string baseDir, string outDir, string frameList, string[] args)
     {
+        int packArg = Array.IndexOf(args, "-pack");
+        string? packDir = packArg >= 0 && packArg + 1 < args.Length ? args[packArg + 1] : null;
+        args = packArg >= 0 ? [.. args[..packArg], .. args[Math.Min(args.Length, packArg + 2)..]] : args;
         Commands.RefuseRepository(outDir);
         Directory.CreateDirectory(outDir);
         bool scanWarp = frameList == "warp";
@@ -34,7 +38,12 @@ internal static class EnhancedCommands
             run.Engine.enhanced = capture;
 
             using VulkanPresenter presenter = VulkanPresenter.Headless(enableValidation: false, Console.Error.WriteLine);
-            var faithful = new EnhancedOptions(Scale: 1, Msaa: 1, Widescreen: false, Filter: 0, Mipmaps: 0, Anisotropy: 1, Lighting: 1);
+            if (packDir != null)
+            {
+                presenter.TexturePack = new EnhancedTexturePack([packDir]);
+            }
+
+            var faithful =new EnhancedOptions(Scale: 1, Msaa: 1, Widescreen: false, Filter: 0, Mipmaps: 0, Anisotropy: 1, Lighting: 1);
             var defaults = new EnhancedOptions();
 
             int frame = 0;
@@ -57,6 +66,12 @@ internal static class EnhancedCommands
                     byte[] enhanced = presenter.RenderEnhanced(shot, faithful, shot.Width, shot.Height);
                     presenter.SquarePixels = false;
                     byte[] look = presenter.RenderEnhanced(shot, defaults, shot.Width * 4, shot.Width * 3);
+                    if (packDir != null)
+                    {
+                        // the models first drawn just now asked for their replacements: drawn again with them
+                        presenter.LoadTexturePack();
+                        look = presenter.RenderEnhanced(shot, defaults, shot.Width * 4, shot.Width * 3);
+                    }
                     Compare(outDir, frame, shot, enhanced, look);
                 }
 

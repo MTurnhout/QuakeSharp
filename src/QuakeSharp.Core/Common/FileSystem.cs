@@ -510,6 +510,29 @@ public sealed partial class FileSystem
         }
     }
 
+    /// <summary>
+    /// The game directories in the order the search path looks in them (a -game directory before id1), each after
+    /// its namesake under <see cref="UserDir"/>: where the enhanced mode looks for texture packs (design.md §11.7).
+    /// The game never asks for it.
+    /// </summary>
+    public IEnumerable<string> LooseDirectories()
+    {
+        for (SearchPath? s = com_searchpaths; s != null; s = s.Next)
+        {
+            if (s.Pack != null)
+            {
+                continue;
+            }
+
+            if (UserDirFor(s.FileName) is string user)
+            {
+                yield return user;
+            }
+
+            yield return HostPath.Resolve(OnHost(s.FileName)) ?? OnHost(s.FileName);
+        }
+    }
+
     // A C string from a fixed-size field: up to its terminating 0, one character per byte.
     private static string CString(ReadOnlySpan<byte> field)
     {

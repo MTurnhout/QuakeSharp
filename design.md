@@ -1542,12 +1542,25 @@ a replacement does not have.
 **The tools.** `quakesharp-tools export-textures <quake-dir> <out-dir> [engine args]` writes every texture a pack
 could replace as PNG under its pack name: every BSP's textures (of the textures sharing a name, the one most BSPs have
 under `textures/`, each other under `textures/<map>/` of every BSP that has it), the sky's layers as one image with the
-front's alpha, every alias model's skins; with each lit one its fullbright mask (`_glow`, the fullbright texels on
-black) where it has fullbright texels; and `textures.txt`, what was written, its size and which BSPs and models use it.
-It refuses to write inside the repository as the other tools do: what it writes is game data, never committed.
-`quakesharp-tools texture-pack-check <quake-dir> <pack-dir> [engine args]` lists what a pack replaces, what it lacks,
-names the game has no texture for, sizes that are not a multiple of the game's, players' skins without both masks, and
-files that do not decode.
+front's alpha (its clear texels coloured as their opaque neighbours, spread outwards, so an upscaler does not draw
+their black into the clouds' edges), every alias model's skins; with each lit one its fullbright mask (`_glow`, the
+fullbright texels on black) where it has fullbright texels; and `textures.txt`, what was written, its size and which
+BSPs and models use it. `-tiled` writes each world texture 3×3 times over (a sky's two layers each on its own), for an
+upscaler to see its edges as they repeat. It refuses to write inside the repository as the other tools do: what it
+writes is game data, never committed. `quakesharp-tools texture-pack-finish <export-dir> <upscaled-dir> <pack-dir>`
+makes a pack from an export and its upscales (the same names): each upscale's detail with the game's colour at a
+coarse scale (the upscale, plus the game's texture resized and blurred, minus the upscale blurred; a Gaussian of 1.5 of
+the game's texels), as upscalers darken Quake's dark textures (step 1's hand check); a tiled export's middle cropped
+again; the alpha the upscale's where the game's texture has any. `quakesharp-tools texture-pack-check <quake-dir>
+<pack-dir> [engine args]` lists what a pack replaces, what it lacks, names the game has no texture for, sizes that are
+not a multiple of the game's, players' skins without both masks, and files that do not decode. A pack is made so:
+
+```
+quakesharp-tools export-textures <quake-dir> <export> -tiled
+realesrgan-ncnn-vulkan -i <export>/<folder> -o <upscaled>/<folder> -n realesrgan-x4plus   (each folder; or any upscaler)
+quakesharp-tools texture-pack-finish <export> <upscaled> <user folder or quake-dir>/id1
+quakesharp-tools texture-pack-check <quake-dir> <user folder or quake-dir>/id1
+```
 
 **Porting order.** Each step builds with the tests green and is committed:
 
@@ -1589,7 +1602,27 @@ files that do not decode.
    to 500×250, e1m1's own `sky4` removed, a file that does not decode, a name the game lacks, a `_norm` without its
    texture, a map's folder in upper case) reports each fault and finds the upper-case folder.*
 3. **World textures**: the loader thread, the replacement uploaded in place of the game's colours, the fullbrights,
-   water and sky; `enhanced_textures`; the comparison's numbers without a pack unchanged.
+   water and sky; `enhanced_textures`; the comparison's numbers without a pack unchanged. *Done: the executable makes
+   the pack after `Host_Init` from `FileSystem.LooseDirectories` (the search path's game directories, each after its
+   namesake in the user folder; a read the game never makes), and `-recordevents`, whose user folder is a temporary
+   one, from the real one's. A brush model made ready asks the loader (`VulkanPresenter.Packs.cs`, a thread of its own)
+   for each texture; `EnhancedReplacements.World` (Core, unit-tested) finds, decodes and makes it ready: a lit texture's
+   alpha the fullbright weight, from its `_glow`/`_luma` (the glow's brightest channel; the colour the replacement's
+   dimmed by it plus the glow, so a glowing texel is the glow's colour unlit) or else the game's fullbright texels scaled
+   nearest (decision 70), with a full mip chain; a sky's front alpha kept. The render thread uploads what is finished,
+   up to 64 MB a frame in one submission, as a second descriptor set beside the game's (each texture's pool has room
+   for both), and draws it while `enhanced_textures` is on in true colour (`EnhancedOptions.Textures`); a texture whose
+   level went before its replacement was read is skipped. Lit and turbulent surfaces need no shader change (the
+   colours are sampled by normalised coordinates, the fullbright weight was already alpha); a pack's sky
+   (`DrawParams.flags` 4) reads the replacement's two layers between texels, each wrapping on its own, premultiplied by
+   alpha, the front over the back. `enhanced-shot -pack <dir>` draws the default frame with a pack (the presenter's
+   `LoadTexturePack` waits for the loader). The pack of the registered game made by the commands above with Real-ESRGAN
+   x4plus (758 files, 167 MB; the upscale 136 s, the finish 54 s on the test machine): every texture's mean brightness
+   within 1 of the game's; demo1 and the starts of e1m1, e1m2, e2m1, e3m1, e4m1, start and dm3 drawn with it, walls,
+   floors, panels, lamps and skies replaced, lamps still glowing; the faithful comparison's numbers the same with and
+   without it (demo1 frames 300, 900, 1500, 2500: 97.5, 97.3, 98.9, 99.1% within 24). The first skies had dark rings
+   round the clouds, the upscaler's drawing of the clear texels' black: the export now colours them (above). The
+   executable on e1m2 under the validation layer with the pack and without: clean, 7.57 ms a frame both.*
 4. **Alias skins**, players' colours.
 5. **Materials**: `_norm` and `_gloss` with the dynamic lights.
 6. **By hand**: a pack of e1's textures made with an upscaler, played through e1 in both lightings and switched;

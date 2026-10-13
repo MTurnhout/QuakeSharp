@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using QuakeSharp.Core.Common;
 using QuakeSharp.Core.Enhanced;
@@ -13,22 +14,29 @@ internal static class TextureCommands
     /// Every texture a pack can replace, as PNG under its pack name (decision 68): the BSPs' textures (of those
     /// sharing a name, the one most BSPs have under textures/, each other under textures/&lt;map&gt;/), the skies with
     /// the front layer's index 0 as alpha, every alias model's skins; with each lit texture its fullbright texels on
-    /// black (_glow) where it has any; and textures.txt, what was written and where it is used.
+    /// black (_glow) where it has any; and textures.txt, what was written and where it is used. With <c>-tiled</c>,
+    /// each world texture is written 3x3 times over (a sky's two layers each on their own), so that an upscaler sees
+    /// its edges as they repeat on a wall; <see cref="FinishPack"/> crops the middle again.
     /// </summary>
     public static int ExportTextures(string baseDir, string outDir, string[] engineArgs)
     {
         Commands.RefuseRepository(outDir);
-        FileSystem fs = Commands.Init(baseDir, engineArgs);
+        bool tiled = engineArgs.Contains("-tiled");
+        FileSystem fs = Commands.Init(baseDir, [.. engineArgs.Where(a => a != "-tiled")]);
         Directory.CreateDirectory(outDir);
         byte[] palette = Commands.Load(fs, "gfx/palette.lmp")[..768];
         var written = new SortedDictionary<string, Entry>(StringComparer.Ordinal);
         foreach (GameTexture t in Scan(fs).Textures)
         {
-            WriteTexture(outDir, t.File, t.Name, t.Width, t.Height, t.Pixels, palette, written, t.Users);
+            WriteTexture(outDir, t.File, t.Name, t.Width, t.Height, t.Pixels, palette, written, t.Users, tiled);
         }
 
         var list = new StringBuilder();
         list.Append("# QuakeSharp's texture export (design.md §11.7): file, size, what uses it\n");
+        if (tiled)
+        {
+            list.Append($"{TiledMark}: each world texture 3x3 times over (a sky's two layers each), the game's size\n");
+        }
         foreach ((string file, Entry entry) in written)
         {
             list.Append($"{file}.png {entry.Width}x{entry.Height} {string.Join(' ', entry.Users)}\n");
@@ -142,6 +150,171 @@ internal static class TextureCommands
 
     private static string Rel(string root, string file) => Path.GetRelativePath(root, file).Replace('\\', '/');
 
+    /// <summary>
+    /// A pack from an export (<see cref="ExportTextures"/>) and the upscales of its files (the same names under
+    /// <paramref name="upscaledDir"/>): each upscale's detail with the game's colour at a coarse scale, as upscalers
+    /// darken Quake's dark textures (the upscale, plus the game's texture resized and blurred, minus the upscale blurred;
+    /// a Gaussian of 1.5 of the game's texels); the middle of a tiled export cropped again; the alpha the upscale's
+    /// where the game's texture has any (a sky's front layer), else opaque. Written as PNG under the pack's names.
+    /// </summary>
+    public static int FinishPack(string exportDir, string upscaledDir, string packDir)
+    {
+        Commands.RefuseRepository(packDir);
+        string[] lines = File.ReadAllLines(Path.Combine(exportDir, "textures.txt"));
+        bool tiled = lines.Any(l => l.StartsWith(TiledMark, StringComparison.Ordinal));
+        var skipped = new List<string>();
+        int written = 0;
+        foreach (string line in lines.Where(l => l.Length > 0 && l[0] != '#'))
+        {
+            string file = line[..line.IndexOf(' ')];
+            string upscaled = Path.Combine(upscaledDir, file);
+            if (!File.Exists(upscaled))
+            {
+                skipped.Add($"{file}: no upscale");
+                continue;
+            }
+
+            EnhancedImage game = EnhancedImage.Load(Path.Combine(exportDir, file));
+            EnhancedImage big = EnhancedImage.Load(upscaled);
+            if (big.Width % game.Width != 0 || big.Height % game.Height != 0 || big.Width / game.Width != big.Height / game.Height)
+            {
+                skipped.Add($"{file}: {big.Width}x{big.Height} is not a whole multiple of {game.Width}x{game.Height}");
+                continue;
+            }
+
+            byte[] rgba = RestoreColour(game, big, 1.5 * (big.Width / game.Width));
+            (int w, int h) = (big.Width, big.Height);
+            if (tiled && file.StartsWith("textures/", StringComparison.Ordinal))
+            {
+                (rgba, w, h) = Middle(rgba, w, h, EnhancedPackNames.IsSky(Path.GetFileNameWithoutExtension(file)) ? 2 : 1);
+            }
+
+            string path = Path.Combine(packDir, file.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            PngWriter.WriteRgba(path, w, h, rgba);
+            written++;
+        }
+
+        foreach (string skip in skipped)
+        {
+            Console.WriteLine($"skipped {skip}");
+        }
+
+        Console.WriteLine($"wrote {written} textures to {packDir}; {skipped.Count} skipped");
+        return 0;
+    }
+
+    // The upscale plus the game's texture (resized bilinearly to its size) blurred, minus the upscale blurred
+    private static byte[] RestoreColour(EnhancedImage game, EnhancedImage big, double sigma)
+    {
+        int w = big.Width, h = big.Height, n = w * h;
+        bool alpha = Enumerable.Range(0, game.Width * game.Height).Any(i => game.Rgba[(i * 4) + 3] != 255);
+        var result = new byte[n * 4];
+        for (int c = 0; c < 3; c++)
+        {
+            float[] up = new float[n], resized = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                up[i] = big.Rgba[(i * 4) + c];
+            }
+
+            Parallel.For(0, h, y =>
+            {
+                double gy = Math.Clamp(((y + 0.5) * game.Height / h) - 0.5, 0, game.Height - 1);
+                int y0 = (int)gy, y1 = Math.Min(y0 + 1, game.Height - 1);
+                double fy = gy - y0;
+                for (int x = 0; x < w; x++)
+                {
+                    double gx = Math.Clamp(((x + 0.5) * game.Width / w) - 0.5, 0, game.Width - 1);
+                    int x0 = (int)gx, x1 = Math.Min(x0 + 1, game.Width - 1);
+                    double fx = gx - x0;
+                    double top = (Texel(game, x0, y0, c) * (1 - fx)) + (Texel(game, x1, y0, c) * fx);
+                    double bottom = (Texel(game, x0, y1, c) * (1 - fx)) + (Texel(game, x1, y1, c) * fx);
+                    resized[(y * w) + x] = (float)((top * (1 - fy)) + (bottom * fy));
+                }
+            });
+
+            float[] gameBlur = Blur(resized, w, h, sigma), upBlur = Blur(up, w, h, sigma);
+            for (int i = 0; i < n; i++)
+            {
+                result[(i * 4) + c] = (byte)Math.Clamp(Math.Round(up[i] + gameBlur[i] - upBlur[i]), 0, 255);
+            }
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            result[(i * 4) + 3] = alpha ? big.Rgba[(i * 4) + 3] : (byte)255;
+        }
+
+        return result;
+    }
+
+    private static byte Texel(EnhancedImage image, int x, int y, int c) => image.Rgba[(((y * image.Width) + x) * 4) + c];
+
+    // A separable Gaussian, the edges clamped
+    private static float[] Blur(float[] source, int w, int h, double sigma)
+    {
+        int radius = (int)Math.Ceiling(3 * sigma);
+        var kernel = new float[(2 * radius) + 1];
+        double sum = 0;
+        for (int i = -radius; i <= radius; i++)
+        {
+            sum += kernel[i + radius] = (float)Math.Exp(-(i * i) / (2 * sigma * sigma));
+        }
+
+        for (int i = 0; i < kernel.Length; i++)
+        {
+            kernel[i] = (float)(kernel[i] / sum);
+        }
+
+        var across = new float[w * h];
+        var result = new float[w * h];
+        Parallel.For(0, h, y =>
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float v = 0;
+                for (int k = -radius; k <= radius; k++)
+                {
+                    v += kernel[k + radius] * source[(y * w) + Math.Clamp(x + k, 0, w - 1)];
+                }
+
+                across[(y * w) + x] = v;
+            }
+        });
+        Parallel.For(0, h, y =>
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float v = 0;
+                for (int k = -radius; k <= radius; k++)
+                {
+                    v += kernel[k + radius] * across[(Math.Clamp(y + k, 0, h - 1) * w) + x];
+                }
+
+                result[(y * w) + x] = v;
+            }
+        });
+        return result;
+    }
+
+    // The middle of an image 3x3 times over; with two layers side by side (a sky), each layer's middle
+    private static (byte[] Rgba, int Width, int Height) Middle(byte[] rgba, int w, int h, int layers)
+    {
+        int lw = w / layers / 3, mh = h / 3;
+        var middle = new byte[lw * layers * mh * 4];
+        for (int layer = 0; layer < layers; layer++)
+        {
+            for (int y = 0; y < mh; y++)
+            {
+                int from = (((y + mh) * w) + (layer * (w / layers)) + lw) * 4;
+                rgba.AsSpan(from, lw * 4).CopyTo(middle.AsSpan(((y * lw * layers) + (layer * lw)) * 4));
+            }
+        }
+
+        return (middle, lw * layers, mh);
+    }
+
     /// <summary>A texture of the game under its pack name: <see cref="Name"/> is the BSP's texture name, or the
     /// skin's pack name.</summary>
     private sealed record GameTexture(string File, string Name, int Width, int Height, byte[] Pixels, string[] Users);
@@ -215,26 +388,36 @@ internal static class TextureCommands
         public SortedSet<string> Maps { get; } = new(StringComparer.Ordinal);
     }
 
-    private static void WriteTexture(string outDir, string file, string name, int width, int height, byte[] pixels, byte[] palette, SortedDictionary<string, Entry> written, string[] users)
+    private const string TiledMark = "# tiled";
+
+    private static void WriteTexture(string outDir, string file, string name, int width, int height, byte[] pixels, byte[] palette, SortedDictionary<string, Entry> written, string[] users, bool tiled)
     {
         string path = Path.Combine(outDir, file.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         written[file] = new Entry(width, height, users);
+        bool sky = EnhancedPackNames.IsSky(Path.GetFileName(name));
+        bool tile = tiled && file.StartsWith("textures/", StringComparison.Ordinal);
+        int tw = tile ? width * 3 : width, th = tile ? height * 3 : height;
+        T[] Tiled<T>(T[] data) => tile ? Tile(data, width, height, sky ? 2 : 1) : data;
 
-        if (EnhancedPackNames.IsSky(Path.GetFileName(name)))
+        if (sky)
         {
-            // r_sky.c: the left half is the front layer, its index 0 transparent; the right half behind it
-            var opaque = new bool[width * height];
-            for (int i = 0; i < opaque.Length; i++)
+            // r_sky.c: the left half is the front layer, its index 0 transparent; the right half behind it. The clear
+            // texels take their opaque neighbours' colours (an upscaler would otherwise draw their black into the
+            // clouds' edges)
+            uint[] texels = SkyTexels(pixels, width, height, palette);
+            uint[] shown = Tiled(texels);
+            byte[] rgba = new byte[shown.Length * 4];
+            for (int i = 0; i < shown.Length; i++)
             {
-                opaque[i] = i % width >= width / 2 || pixels[i] != 0;
+                BinaryPrimitives.WriteUInt32LittleEndian(rgba.AsSpan(i * 4), shown[i]);
             }
 
-            PngWriter.WriteIndexed(path + ".png", width, height, pixels, palette, opaque);
+            PngWriter.WriteRgba(path + ".png", tw, th, rgba);
             return;
         }
 
-        PngWriter.WriteIndexed(path + ".png", width, height, pixels, palette);
+        PngWriter.WriteIndexed(path + ".png", tw, th, Tiled(pixels), palette);
 
         // the fullbright texels (palette 224-255, never lit) on black (index 0); turbulent surfaces are all unlit
         if (EnhancedPackNames.IsTurbulent(name) || !pixels.Any(p => p >= EnhancedTextures.Fullbright))
@@ -243,8 +426,79 @@ internal static class TextureCommands
         }
 
         byte[] glow = [.. pixels.Select(p => p >= EnhancedTextures.Fullbright ? p : (byte)0)];
-        PngWriter.WriteIndexed(path + EnhancedPackNames.Glow + ".png", width, height, glow, palette);
+        PngWriter.WriteIndexed(path + EnhancedPackNames.Glow + ".png", tw, th, Tiled(glow), palette);
         written[file + EnhancedPackNames.Glow] = new Entry(width, height, users);
+    }
+
+    // A sky's texels as RGBA words (red in the low byte): the front layer's index 0 clear, its clear texels the average
+    // of their opaque neighbours' colours, spread outwards a ring at a time (wrapping within the layer, as it tiles)
+    private static uint[] SkyTexels(byte[] pixels, int width, int height, byte[] palette)
+    {
+        int lw = width / 2;
+        var texels = new uint[width * height];
+        var known = new bool[width * height];
+        for (int i = 0; i < texels.Length; i++)
+        {
+            int p = pixels[i] * 3;
+            bool clear = i % width < lw && pixels[i] == 0;
+            texels[i] = palette[p] | ((uint)palette[p + 1] << 8) | ((uint)palette[p + 2] << 16) | (clear ? 0u : 0xFF000000u);
+            known[i] = !clear;
+        }
+
+        for (bool spread = true; spread;)
+        {
+            spread = false;
+            bool[] before = (bool[])known.Clone();
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < lw; x++)
+                {
+                    int i = (y * width) + x;
+                    if (before[i])
+                    {
+                        continue;
+                    }
+
+                    int r = 0, g = 0, b = 0, n = 0;
+                    foreach ((int dx, int dy) in (ReadOnlySpan<(int, int)>)[(-1, 0), (1, 0), (0, -1), (0, 1)])
+                    {
+                        int j = ((((y + dy + height) % height) * width) + ((x + dx + lw) % lw));
+                        if (before[j])
+                        {
+                            r += (int)(texels[j] & 0xFF);
+                            g += (int)((texels[j] >> 8) & 0xFF);
+                            b += (int)((texels[j] >> 16) & 0xFF);
+                            n++;
+                        }
+                    }
+
+                    if (n > 0)
+                    {
+                        texels[i] = (uint)(r / n) | ((uint)(g / n) << 8) | ((uint)(b / n) << 16);
+                        known[i] = true;
+                        spread = true;
+                    }
+                }
+            }
+        }
+
+        return texels;
+    }
+
+    // An image 3x3 times over; with two layers side by side (a sky), each layer 3x3 times over on its own
+    private static T[] Tile<T>(T[] data, int width, int height, int layers)
+    {
+        int lw = width / layers;
+        var tiled = new T[width * 3 * height * 3];
+        for (int y = 0; y < height * 3; y++)
+        {
+            for (int x = 0; x < width * 3; x++)
+            {
+                tiled[(y * width * 3) + x] = data[((y % height) * width) + (x / (lw * 3) * lw) + (x % lw)];
+            }
+        }
+
+        return tiled;
     }
 
     // bspfile.h: the textures lump (dmiptexlump_t) and its miptex_t: each texture's name and mip level 0

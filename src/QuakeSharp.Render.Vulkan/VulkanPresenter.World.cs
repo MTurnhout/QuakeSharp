@@ -183,6 +183,9 @@ public sealed unsafe partial class VulkanPresenter
                 }
             }
 
+            UploadReplacements();
+            useReplacements = options.Textures && options.Lighting == 0;
+
             WriteParticles(particleBuffers[f], frame);
             SetParticles(options.Particles != 0);
 
@@ -238,6 +241,7 @@ public sealed unsafe partial class VulkanPresenter
         public void Dispose()
         {
             VkDeviceApi api = context.Api;
+            loader?.Dispose();
             foreach (GpuBrushModel m in models.Values)
             {
                 m.Dispose();
@@ -523,9 +527,10 @@ public sealed unsafe partial class VulkanPresenter
 
                 VkDescriptorPoolSize* sizes = stackalloc VkDescriptorPoolSize[3];
                 sizes[0] = new() { type = VkDescriptorType.StorageBuffer, descriptorCount = 2 };
-                sizes[1] = new() { type = VkDescriptorType.SampledImage, descriptorCount = (uint)Math.Max(1, model.Textures.Length) };
-                sizes[2] = new() { type = VkDescriptorType.CombinedImageSampler, descriptorCount = (uint)Math.Max(1, model.Textures.Length) };
-                VkDescriptorPoolCreateInfo poolInfo = new() { maxSets = (uint)(1 + model.Textures.Length), poolSizeCount = 3, pPoolSizes = sizes };
+                // two sets a texture: the game's colours and a pack's (VulkanPresenter.Packs.cs)
+                sizes[1] = new() { type = VkDescriptorType.SampledImage, descriptorCount = (uint)Math.Max(1, 2 * model.Textures.Length) };
+                sizes[2] = new() { type = VkDescriptorType.CombinedImageSampler, descriptorCount = (uint)Math.Max(1, 2 * model.Textures.Length) };
+                VkDescriptorPoolCreateInfo poolInfo = new() { maxSets = (uint)(1 + (2 * model.Textures.Length)), poolSizeCount = 3, pPoolSizes = sizes };
                 Check(context.Api.vkCreateDescriptorPool(&poolInfo, null, out pool), "vkCreateDescriptorPool");
                 modelSet = owner.Allocate(pool, owner.modelSetLayout);
                 VkDescriptorBufferInfo surfacesInfo = new() { buffer = surfaces.Buffer, range = surfaces.Size };
@@ -536,6 +541,7 @@ public sealed unsafe partial class VulkanPresenter
                 context.Api.vkUpdateDescriptorSets(2, writes, 0, null);
 
                 textures = [.. model.Textures.Select(t => new GpuTexture(owner, pool, t, basePalette, fullMips))];
+                owner.RequestReplacements(model, textures);
             }
 
             public void Draw(VkCommandBuffer cmd, WorldRenderer renderer, int submodel, float[] transform, int frame, double time)
@@ -562,7 +568,8 @@ public sealed unsafe partial class VulkanPresenter
                     }
 
                     GpuTexture t = textures[shown];
-                    VkDescriptorSet textureSet = t.Set;
+                    bool replaced = renderer.useReplacements && t.ReplacedSet != VkDescriptorSet.Null;
+                    VkDescriptorSet textureSet = replaced ? t.ReplacedSet : t.Set;
                     api.vkCmdBindDescriptorSets(cmd, VkPipelineBindPoint.Graphics, renderer.pipelineLayout, 2, 1, &textureSet, 0, null);
                     DrawParams p = new()
                     {
@@ -571,6 +578,7 @@ public sealed unsafe partial class VulkanPresenter
                         M20 = transform[8], M21 = transform[9], M22 = transform[10], M23 = transform[11],
                         TextureWidth = t.Width,
                         TextureHeight = t.Height,
+                        Flags = replaced ? DrawReplaced : 0,
                     };
                     api.vkCmdPushConstants(cmd, renderer.pipelineLayout, VkShaderStageFlags.Vertex | VkShaderStageFlags.Fragment, 0, (uint)sizeof(DrawParams), &p);
                     api.vkCmdDrawIndexed(cmd, (uint)count, 1, (uint)first, 0, 0);
@@ -600,13 +608,22 @@ public sealed unsafe partial class VulkanPresenter
             }
         }
 
-        /// <summary>A BSP texture on the GPU: its palette indices (the BSP's four mips) and its colours (a mip chain).</summary>
+        /// <summary>
+        /// A BSP texture on the GPU: its palette indices (the BSP's four mips) and its colours (a mip chain); once a
+        /// pack's replacement is uploaded, a second set with the same indices and the pack's colours.
+        /// </summary>
         private sealed class GpuTexture : IDisposable
         {
+            private readonly WorldRenderer owner;
+            private readonly VkDescriptorPool pool;
             private readonly Image indices, colors;
+            private Image? replacement;
+            private volatile bool disposed;
 
             public GpuTexture(WorldRenderer owner, VkDescriptorPool pool, EnhancedTexture texture, byte[] basePalette, bool fullMips)
             {
+                this.owner = owner;
+                this.pool = pool;
                 Width = texture.Width;
                 Height = texture.Height;
                 VulkanContext context = owner.context;
@@ -635,13 +652,7 @@ public sealed unsafe partial class VulkanPresenter
                     Copy(owner, cmd, staging, colors, chain.Count, m => (colorOffsets[m], chain[m].Width, chain[m].Height));
                 });
 
-                Set = owner.Allocate(pool, owner.textureSetLayout);
-                VkDescriptorImageInfo indicesInfo = new() { imageView = indices.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
-                VkDescriptorImageInfo colorsInfo = new() { sampler = owner.colorSampler, imageView = colors.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
-                VkWriteDescriptorSet* writes = stackalloc VkWriteDescriptorSet[2];
-                writes[0] = new() { dstSet = Set, dstBinding = 0, descriptorCount = 1, descriptorType = VkDescriptorType.SampledImage, pImageInfo = &indicesInfo };
-                writes[1] = new() { dstSet = Set, dstBinding = 1, descriptorCount = 1, descriptorType = VkDescriptorType.CombinedImageSampler, pImageInfo = &colorsInfo };
-                context.Api.vkUpdateDescriptorSets(2, writes, 0, null);
+                Set = TextureSet(colors);
             }
 
             public int Width { get; }
@@ -650,10 +661,39 @@ public sealed unsafe partial class VulkanPresenter
 
             public VkDescriptorSet Set { get; }
 
+            /// <summary>The set with a pack's colours (null until one is uploaded).</summary>
+            public VkDescriptorSet ReplacedSet { get; private set; }
+
+            /// <summary>Gone (its level's models dropped): the loader skips it, its replacement is not uploaded.</summary>
+            public bool Disposed => disposed;
+
+            /// <summary>A pack's colours, uploaded, in place of the game's.</summary>
+            public void Replace(Image image)
+            {
+                replacement?.Dispose();
+                replacement = image;
+                ReplacedSet = TextureSet(image);
+            }
+
             public void Dispose()
             {
+                disposed = true;
                 indices.Dispose();
                 colors.Dispose();
+                replacement?.Dispose();
+            }
+
+            // world.slang's set 2: the indices, and these colours through the colour sampler
+            private VkDescriptorSet TextureSet(Image colorImage)
+            {
+                VkDescriptorSet set = owner.Allocate(pool, owner.textureSetLayout);
+                VkDescriptorImageInfo indicesInfo = new() { imageView = indices.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
+                VkDescriptorImageInfo colorsInfo = new() { sampler = owner.colorSampler, imageView = colorImage.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
+                VkWriteDescriptorSet* writes = stackalloc VkWriteDescriptorSet[2];
+                writes[0] = new() { dstSet = set, dstBinding = 0, descriptorCount = 1, descriptorType = VkDescriptorType.SampledImage, pImageInfo = &indicesInfo };
+                writes[1] = new() { dstSet = set, dstBinding = 1, descriptorCount = 1, descriptorType = VkDescriptorType.CombinedImageSampler, pImageInfo = &colorsInfo };
+                owner.context.Api.vkUpdateDescriptorSets(2, writes, 0, null);
+                return set;
             }
 
             public static void Copy(WorldRenderer owner, VkCommandBuffer cmd, HostBuffer staging, Image image, int levels,

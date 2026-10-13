@@ -31,6 +31,9 @@ public sealed record EnhancedOptions(float Scale = 1, int Msaa = 4, bool Widescr
     /// <summary>Monsters' steps smoothed (enhanced_lerpmove).</summary>
     public bool LerpMove { get; init; }
 
+    /// <summary>A texture pack's textures drawn where it has them, in the true-colour look (enhanced_textures).</summary>
+    public bool Textures { get; init; } = true;
+
     /// <summary>Each pixel of the view the number of its surface (red the low byte, green the high; the tools' debugging).</summary>
     public bool DebugSurfaces { get; init; }
 }

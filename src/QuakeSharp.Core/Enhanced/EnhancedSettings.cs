@@ -6,7 +6,7 @@ namespace QuakeSharp.Core.Enhanced;
 /// <summary>
 /// The enhanced mode's settings (design.md decision 61): QuakeSharp's own <c>quakesharp.cfg</c> in the user folder,
 /// lines of <c>name "value"</c> as config.cfg's, read and written by the executable and never Quake's cvars, so the
-/// game's commands, cvars and config.cfg stay WinQuake's. The defaults are decisions 62-64's.
+/// game's commands, cvars and config.cfg stay WinQuake's. The defaults are decisions 62-64's and 69's.
 /// </summary>
 public sealed class EnhancedSettings
 {
@@ -21,6 +21,7 @@ public sealed class EnhancedSettings
         ("enhanced_anisotropy", "16", "anisotropic filtering, 1 (off) to 16"),
         ("enhanced_lighting", "0", "0 true colour with overbright, 1 the colormap's 64 levels (the software's look)"),
         ("enhanced_particles", "0", "0 square, 1 round"),
+        ("enhanced_textures", "1", "1: a texture pack's textures where it has them (true colour only)"),
         ("enhanced_widescreen", "1", "1: the view widened to the window's shape (the 2D stays 4:3)"),
         ("enhanced_vsync", "1", "1: frames at the display's pace"),
         ("enhanced_maxfps", "0", "the most frames a second without vsync (0: no limit)"),

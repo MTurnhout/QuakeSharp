@@ -9,7 +9,7 @@ source of truth for scope, fidelity rules and milestones. Record new decisions i
 - Test: `dotnet test --solution QuakeSharp.slnx` (Microsoft.Testing.Platform runner, configured in `global.json`)
 - Tables: `dotnet run tools/codegen/GenerateTables.cs` regenerates the `*.g.cs` files from `reference/Quake`.
 - Tools: `dotnet run --project tools/QuakeSharp.Tools` (identify, files, extract, dump-graphics, export-textures,
-  texture-pack-check); they refuse to write inside the repository.
+  texture-pack-check, texture-pack-finish); they refuse to write inside the repository.
 - Shaders (`shaders/*.slang`) are compiled by the `QuakeSharp.Render.Vulkan` build with `slangc`: `SLANGC`, or the
   Vulkan SDK's through `VULKAN_SDK`. CI pins the Slang release and its SHA-256 in `.github/workflows/ci.yml`.
 - Try the executable from a Quake folder (it looks for `id1/` in the current directory) with `-window`,

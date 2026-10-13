@@ -27,7 +27,7 @@ struct DrawParams
     float4 model1;
     float4 model2;
     float2 textureSize;
-    int flags;     // 1 sky, 2 turbulent
+    int flags;     // 4: the colours are a pack's (DRAW_REPLACED)
     int pad;
 };
 
@@ -196,6 +196,51 @@ uint skyIndex(float3 world, float2 targetPixel)
     return f != 0 ? f : textureIndices.Load(int3(back.x + 128, back.y, 0));
 }
 
+static const int DRAW_REPLACED = 4;
+
+// a texel of a pack's sky with its colour times its alpha (so the clear texels' colour does not darken the edges)
+float4 premultiplied(int x, int y)
+{
+    float4 t = textureColors.Load(int3(x, y, 0));
+    return float4(t.rgb * t.a, t.a);
+}
+
+// a texel of one layer of a pack's sky, between texels, wrapping within the layer (x0: the layer's first column),
+// premultiplied by its alpha
+float4 skyLayer(float2 p, int x0, int width, int height)
+{
+    p -= 0.5;
+    int2 i = int2(floor(p));
+    float2 f = p - floor(p);
+    int xa = ((i.x % width) + width) % width, xb = (xa + 1) % width;
+    int ya = ((i.y % height) + height) % height, yb = (ya + 1) % height;
+    float4 a = premultiplied(x0 + xa, ya), b = premultiplied(x0 + xb, ya);
+    float4 c = premultiplied(x0 + xa, yb), d = premultiplied(x0 + xb, yb);
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+// a pack's sky (design.md §11.7): skyIndex's two layers and their scrolling, the colours read between the pack's
+// texels, the front layer over the back by its alpha
+float3 replacedSky(float3 world, float2 targetPixel)
+{
+    float3 dir = stepped() ? softwareSkyRay(targetPixel) : world - viewOrigin();
+    dir.z *= 3;
+    dir = normalize(dir);
+    float time = frameTime();
+    float skytime = time - (floor(time / 512.0) * 512.0);
+    float scroll = skytime * 8.0;
+    float s = scroll + (6.0 * 63.0 * dir.x);
+    float t = scroll + (6.0 * 63.0 * dir.y);
+    float shift = stepped() ? floor(scroll) : scroll;
+    uint w, h, levels;
+    textureColors.GetDimensions(0, w, h, levels);
+    float k = float(w) / draw.textureSize.x;
+    int layer = int(w) / 2;
+    float4 front = skyLayer(float2(s + shift, t + shift) * k, 0, layer, int(h));
+    float4 back = skyLayer(float2(s, t) * k, layer, layer, int(h));
+    return (back.rgb * (1.0 - front.a)) + front.rgb;
+}
+
 // d_scan.c: D_DrawTurbulent8Span: each texel moved along the other axis's sine (r_turb_turb: 8 + 8 sin, a cycle of
 // 128 texels, 20 a second), from the surface's texturemins, in a 64x64 texture
 float sineTurb(float i) { return 8.0 + (8.0 * sin(i * 3.14159 * 2.0 / 128.0)); }
@@ -226,6 +271,11 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     // the sky and water are not lit: their texels as the palette shows them
     if ((flags & SURF_DRAWSKY) != 0)
     {
+        if ((draw.flags & DRAW_REPLACED) != 0 && !colormapLighting())
+        {
+            return float4(shiftColor(replacedSky(input.world, input.position.xy)), 1);
+        }
+
         return float4(paletteColor(skyIndex(input.world, input.position.xy)), 1);
     }
 

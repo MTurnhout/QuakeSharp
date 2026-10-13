@@ -76,6 +76,7 @@ static int Run(CommandLine commandLine)
         MaxFps = (int)settings.Number("enhanced_maxfps"),
         LerpModels = settings.Number("enhanced_lerpmodels") != 0,
         LerpMove = settings.Number("enhanced_lerpmove") != 0,
+        Textures = settings.Number("enhanced_textures") != 0,
     });
     var mode = new EnhancedMode(renderer, enhancedSound: settings.Number("enhanced_sound") != 0,
         placement: settings.Number("enhanced_3d_sfx") != 0);
@@ -133,6 +134,7 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     try
     {
         engine.Host_Init();
+        presenter.TexturePack = TexturePack(engine, userdir, userdir);
 
         double oldtime = system.FloatTime();
         while (true)
@@ -154,6 +156,25 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     {
         return 0;
     }
+}
+
+// The texture packs of the game's directories (design.md §11.7, decision 68): each in the user folder, then in the
+// Quake folder, a -game directory's before id1's; read by the enhanced view only. A run whose user folder is not the
+// real one (-recordevents) looks in the real one's instead.
+static EnhancedTexturePack? TexturePack(QuakeEngine engine, string userdir, string realUserdir)
+{
+    string[] directories = [.. engine.FileSystem.LooseDirectories().Select(d =>
+        Path.GetFullPath(d).StartsWith(Path.GetFullPath(userdir), StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(realUserdir, Path.GetRelativePath(userdir, d))
+            : d)];
+    var pack = new EnhancedTexturePack(directories);
+    if (pack.Count == 0)
+    {
+        return null;
+    }
+
+    Console.WriteLine($"Texture pack: {pack.Count} files in {string.Join(", ", directories.Where(Directory.Exists))}");
+    return pack;
 }
 
 // sys_win.c: WinMain for a dedicated server (-dedicated): no window, video or sound; the console's text on standard
@@ -251,6 +272,8 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     {
         engine.Sys_Printf("Host_Init\n");
         engine.Host_Init();
+        presenter.TexturePack = TexturePack(engine, userdir,
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp"));
         double oldtime = system.Time;
         while (true)
         {
