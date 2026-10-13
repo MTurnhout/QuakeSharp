@@ -1561,7 +1561,18 @@ files that do not decode.
    against DarkPlaces' documentation (Xonotic's wiki, "Materials"): `textures/<map>/<name>` before `textures/<name>`,
    `progs/<model>.mdl_<skin>`, `_glow` or Tenebrae's `_luma`, `_norm` (height in alpha, unused here), `_gloss`;
    `_pants` and `_shirt` are greyscale layers over texels the base skin leaves black, tinted and blended in (step 4); every
-   layer needs its base texture. The hand check of upscaled textures is the user's to make.*
+   layer needs its base texture. The hand check, made with the user's go-ahead with Real-ESRGAN's portable Vulkan
+   build (`realesrgan-ncnn-vulkan-20220424-windows.zip`, v0.2.5.0, SHA-256 `abc02804...412802d`, outside the
+   repository), its three models at 4× on 11 of e1m1's textures (walls, floor, crate, panels, a light, the exit sign,
+   water, `sky4`) and three skins (player, soldier, ogre): x4plus draws metal, wood, panels, signs and faces sharply
+   and believably; x4plus-anime flattens them into posterised shapes (the ground's grass becomes ink lines);
+   animevideov3 keeps the colours but adds little over linear filtering. Two things a pack's making needs, found on
+   the way: a world texture tiles, so it is upscaled as a 3×3 tiling and the middle cropped (alone, its edges seam);
+   and the two ESRGAN models darken Quake's dark textures (the mean brightness of `comp1_1` 32 → 20, `#water0` 36 →
+   27, `twall2_1` 25 → 18; animevideov3 within 1), which keeping the upscale's detail and the original's colour at a
+   coarse scale undoes (the upscale plus the original's blur minus its own, σ 6 at 4×, clipped): within 0.2 of the
+   original's mean on every texture checked, detail kept. Organic textures (ground, rock) are redrawn rather than
+   sharpened by x4plus, a matter of taste per texture. Worth it: the renderer's steps go ahead.*
 2. **The pack in Core**: `EnhancedTexturePack` (the directories, the lookup by name, the decoders) and
    `texture-pack-check`, which needs the decoders; unit tests with small PNG and TGA files written for the tests
    (colour types, bit depths, interlacing, RLE; no game data). *Done: `EnhancedImage` decodes PNG (every colour type
