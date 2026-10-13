@@ -1121,11 +1121,11 @@ protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
 5. **Other engines**, audited by hand into §3.4 as decision 42's audit: Winquake.exe 1.09 (a scratch copy) and
    QuakeSharp on one machine and on two, each the server and each the client, through the search and `connect`; a
    deathmatch with chat, a level change and a disconnect, QuakeSharp's side recorded and replayed in the oracle in
-   sync; the same with the engines of D12.
+   sync; the same with QuakeSpasm (decision 57).
 
 **Done when** the LAN drivers are ported with no stand-in left; games between hosts, the lossy LAN and the dedicated
 server match the oracle on every frame for every host; the executable plays over a real network with Winquake.exe
-(and D12's engines), as server and as client, and those games replay in sync.
+(and decision 57's QuakeSpasm), as server and as client, and those games replay in sync.
 
 ## 12. Decision log
 
@@ -1187,12 +1187,10 @@ server match the oracle on every frame for every host; the executable plays over
 | 54 | Scope of v1 (was D8) | Confirmed with the user: v1 is Quake and both mission packs (hipnotic, rogue) on the WinQuake engine; GLQuake and QuakeWorld come after v1 (§1, §11) | 2026-10-13 |
 | 55 | The virtual network (milestone 11, step 1) | net_win.c, net_wins.c and net_wipx.c are ported in Core over `IWinsock` and compiled unchanged in the oracle over `winsock_oracle.c` (no wsock32 linked; LoadLibrary and GetProcAddress renamed for those files); the virtual machine is `quake<n>` at 10.0.0.<n> on a LAN of 254 hosts (`-oraclehost`), the other hosts' datagrams come from `-tracedatagrams` keyed by the clock's step, trace format 7's `U` hashes what was sent and received. Waiting: a frame that reads the clock 1,000 times without it moving moves it a step at that read, on both sides, and the next frame's time is what passed, as sys_win.c computes it. Supersedes decision 33 (§6.5, §11.5) | 2026-10-13 |
 | 56 | Games between hosts (milestone 11, step 2) | `NetRun` plays a game's hosts together in one process, in lockstep on one virtual clock (each host on its own thread, holding the turn for a frame or a step of its wait; a datagram sent during a step arrives at the next); a game is `events/<game>.net` (hosts' command lines, `lanloss`, `-netunplug`, `datagram` lines from no host of the game). The oracle replays each host alone from the datagrams QuakeSharp's run gave it (derived from game data: kept with the traces, never committed); every host matching, the `U` line included, means the oracle's hosts would have played the same game. The `cmdline` cvar gets a shared stand-in (§3.3) (§11.5) | 2026-10-13 |
+| 57 | Other engines (was D12) | Confirmed with the user, who approved the download: besides Winquake.exe 1.09, QuakeSpasm's latest Windows release (protocol 15, the engine most NetQuake servers run), downloaded into a scratch folder outside the repository, run only, never committed or copied from (milestone 11, step 5; §11.5) | 2026-10-13 |
 
 ## 13. Open decisions
 
-To confirm with the user before the milestones they affect; the proposals are the defaults until then (the
-earlier ones are settled in the decision log, marked "was D<n>"):
+To confirm with the user before the milestones they affect; the proposals are the defaults until then.
 
-| # | Question | Proposal |
-|---|---|---|
-| D12 | Which NetQuake engines besides Winquake.exe 1.09 to play with (milestone 11, step 5); each is a download | QuakeSpasm's latest Windows release (protocol 15, the engine most NetQuake servers run), run from a scratch folder outside the repository, never committed or copied from |
+None: every question raised here has been settled with the user and moved to the decision log, marked "was D<n>".
