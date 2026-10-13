@@ -99,6 +99,23 @@ public sealed class EnhancedModelTests : IDisposable
         }
     }
 
+    // The capture of -enhanced exists before Host_Init; a new game's CL_ClearState makes a new cl, and the gun is that
+    // cl's viewent: still the view model, so it is interpolated with the view (it ghosted when it was not)
+    [Fact]
+    public void TheGunIsTheViewModelAfterANewGame()
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        var run = new TraceRun(baseDir, userdir, ["+map", "e1m1", "-oracleframes", "60"]);
+        var capture = new EnhancedCapture(run.Engine);
+        run.Engine.enhanced = capture;
+        foreach (IReadOnlyList<string> _ in run.Frames(quitAfterDemo: false, maxFrames: 60))
+        {
+        }
+
+        EnhancedFrame frame = capture.Latest ?? throw new InvalidOperationException("no frame");
+        Assert.Contains(frame.Entities, e => e.Id == EnhancedEntity.ViewModel && frame.Models[e.Model]?.Alias != null);
+    }
+
     private static (int Offset, int Length) Lump(byte[] bsp, int lump) =>
         (BinaryPrimitives.ReadInt32LittleEndian(bsp.AsSpan(4 + (lump * 8))),
          BinaryPrimitives.ReadInt32LittleEndian(bsp.AsSpan(8 + (lump * 8))));

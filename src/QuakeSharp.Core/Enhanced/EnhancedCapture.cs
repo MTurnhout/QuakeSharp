@@ -64,7 +64,6 @@ public sealed class EnhancedCapture
             entityIds[engine.cl_temp_entities[i]] = EnhancedEntity.TempBase + i;
         }
 
-        entityIds[engine.cl.viewent] = EnhancedEntity.ViewModel;
 
         if (!engine.host_initialized)
         {
@@ -330,7 +329,9 @@ public sealed class EnhancedCapture
             }
         }
 
-        var entity = new EnhancedEntity(entityIds.GetValueOrDefault(ent, EnhancedEntity.Other), ModelId(ent.model),
+        // the view model is cl.viewent of the cl there is now (CL_ClearState makes a new one with each game)
+        int id = viewModel ? EnhancedEntity.ViewModel : entityIds.GetValueOrDefault(ent, EnhancedEntity.Other);
+        var entity = new EnhancedEntity(id, ModelId(ent.model),
             ent.origin, ent.angles, ent.frame, ent.skinnum, colormap, ent.effects, ent.syncbase)
         {
             Top = top,
