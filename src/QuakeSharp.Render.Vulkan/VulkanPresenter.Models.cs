@@ -313,6 +313,9 @@ public sealed unsafe partial class VulkanPresenter
 
             public VkDescriptorSet Set { get; }
 
+            /// <summary>The palette indices (a pack's skin is drawn beside them).</summary>
+            public VkImageView IndicesView => indices.View;
+
             public void Dispose()
             {
                 indices.Dispose();
@@ -320,20 +323,39 @@ public sealed unsafe partial class VulkanPresenter
             }
         }
 
-        /// <summary>An alias model on the GPU: its poses, its corners, its skins.</summary>
+        /// <summary>
+        /// An alias model on the GPU: its poses, its corners, its skins; and a pack's skins as entities show them (each
+        /// skin with a player's colours its own, design.md §11.7), asked for the first time each is drawn.
+        /// </summary>
         private sealed class GpuAliasModel : IDisposable
         {
             private readonly WorldRenderer owner;
             private readonly EnhancedAliasModel model;
+            private readonly byte[] basePalette;
             private readonly HostBuffer poses, corners;
             private readonly VkDescriptorPool pool;
             private readonly VkDescriptorSet set;
             private readonly GpuPicture[] skins;
+            private readonly (int Skin, int Frame)[] skinNames;
+            private readonly Dictionary<(int Skin, int Top, int Bottom), GpuSkinReplacement> replacements = [];
 
             public GpuAliasModel(WorldRenderer owner, EnhancedAliasModel model, byte[] basePalette)
             {
                 this.owner = owner;
                 this.model = model;
+                this.basePalette = basePalette;
+
+                // each skin's name in a pack: its number, and its frame in a group
+                skinNames = new (int, int)[model.Skins.Length];
+                for (int n = 0; n < model.SkinGroups.Length; n++)
+                {
+                    (int[] group, float[] intervals) = model.SkinGroups[n];
+                    for (int k = 0; k < group.Length; k++)
+                    {
+                        skinNames[group[k]] = (n, intervals.Length > 0 ? k : -1);
+                    }
+                }
+
                 VulkanContext context = owner.context;
                 poses = Upload(context, MemoryMarshal.AsBytes(model.Poses.AsSpan()), VkBufferUsageFlags.StorageBuffer);
                 corners = Upload(context, MemoryMarshal.AsBytes(model.Corners.AsSpan()), VkBufferUsageFlags.VertexBuffer);
@@ -365,7 +387,25 @@ public sealed unsafe partial class VulkanPresenter
                 VkDeviceApi api = renderer.context.Api;
                 int pose = model.Pose(e.Frame, time + e.Syncbase);
                 int from = e.PoseFrom >= 0 ? e.PoseFrom : pose;
-                int skin = model.Skin(e.Skin, time + e.Syncbase);
+                int skin = Math.Clamp(model.Skin(e.Skin, time + e.Syncbase), 0, skins.Length - 1);
+                VkDescriptorSet skinSet = skins[skin].Set;
+                int flags = e.Id == EnhancedEntity.ViewModel ? 1 : 0;
+                if (renderer.useReplacements && renderer.presenter.TexturePack != null)
+                {
+                    bool translated = e.Top >= 0 || e.Bottom >= 0;
+                    (int, int, int) key = (skin, translated ? e.Top : -1, translated ? e.Bottom : -1);
+                    if (!replacements.TryGetValue(key, out GpuSkinReplacement? replacement))
+                    {
+                        replacements[key] = replacement = new GpuSkinReplacement(renderer, skins[skin].IndicesView);
+                        renderer.RequestSkin(replacement, model, skinNames[skin], model.Skins[skin], basePalette, key.Item2, key.Item3);
+                    }
+
+                    if (replacement.Set != VkDescriptorSet.Null)
+                    {
+                        skinSet = replacement.Set;
+                        flags |= AliasReplaced;
+                    }
+                }
 
                 // r_alias.c: R_AliasSetUpTransform: forward, -right and up from the angles with the pitch turned
                 (double[] fwd, double[] right, double[] up) = EnhancedCamera.AngleVectors(-e.Angles[0], e.Angles[1], e.Angles[2]);
@@ -379,13 +419,13 @@ public sealed unsafe partial class VulkanPresenter
                     OriginX = model.ScaleOrigin[0], OriginY = model.ScaleOrigin[1], OriginZ = model.ScaleOrigin[2],
                     Pose = from, Pose2 = pose, Ambient = e.LightAmbient,
                     SkinWidth = model.SkinWidth, SkinHeight = model.SkinHeight, Top = e.Top, Bottom = e.Bottom,
-                    Flags = e.Id == EnhancedEntity.ViewModel ? 1 : 0,
+                    Flags = flags,
                 };
 
                 VkBuffer vertexBuffer = corners.Buffer;
                 ulong offset = 0;
                 api.vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, &offset);
-                VkDescriptorSet* sets = stackalloc VkDescriptorSet[2] { set, skins[Math.Clamp(skin, 0, skins.Length - 1)].Set };
+                VkDescriptorSet* sets = stackalloc VkDescriptorSet[2] { set, skinSet };
                 api.vkCmdBindDescriptorSets(cmd, VkPipelineBindPoint.Graphics, renderer.aliasPipelineLayout, 1, 2, sets, 0, null);
                 api.vkCmdPushConstants(cmd, renderer.aliasPipelineLayout, VkShaderStageFlags.Vertex | VkShaderStageFlags.Fragment, 0, (uint)sizeof(AliasParams), &p);
                 api.vkCmdDraw(cmd, (uint)model.Corners.Length, 1, 0, 0);
@@ -396,6 +436,11 @@ public sealed unsafe partial class VulkanPresenter
                 foreach (GpuPicture s in skins)
                 {
                     s.Dispose();
+                }
+
+                foreach (GpuSkinReplacement r in replacements.Values)
+                {
+                    r.Dispose();
                 }
 
                 owner.context.Api.vkDestroyDescriptorPool(pool);

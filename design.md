@@ -1523,7 +1523,7 @@ QuakeSpasm's and DarkPlaces', so packs made for them work:
 | Its normals, gloss | `<name>_norm`, `<name>_gloss` | Tangent space normals (alpha unused); gloss as the specular strength (decision 71) |
 | The sky | `textures/<map>/sky<n>`, `textures/sky<n>` | The same layout as the BSP's (two layers side by side, the front one's index 0 the alpha) |
 | An alias skin | `progs/<model>.mdl_<skin>` | `<skin>` the skin's number; a skin group's frames `_<skin>_<frame>`; `_glow`, `_norm`, `_gloss` as above |
-| Players' colours | `progs/<model>.mdl_<skin>_pants`, `_shirt` | Grey masks, tinted by the entity's colours; an entity drawn with a colour translation uses the replacement only with both (decision 69) |
+| Players' colours | `progs/<model>.mdl_<skin>_pants`, `_shirt` | Grey layers over texels the colours leave black; each grey a place on the player's colour ramp (decision 73); an entity drawn with a colour translation uses the replacement only with both (decision 69) |
 
 A replacement's size may be any multiple of the game's (its texture coordinates stay the game's, scaled); its mip
 chain is made from it as §11.6's.
@@ -1535,7 +1535,7 @@ a replacement does not have.
 |---|---|---|---|
 | World textures | The replacement's colours, lit by the same light (lightmaps, styles, dlights, overbright, the palette's shifts and gamma); turbulent surfaces warped as now; the sky's two layers from the replacement | Read by the loader, never through the game's files | Unit tests: the lookup's order (map, game, `id1`; user folder, Quake folder), `*` as `#`, case; the comparison without a pack unchanged |
 | Fullbrights | `_glow`/`_luma` unlit; without one, the game's fullbright texels (palette 224-255) scaled to the replacement's size and taken from its colours unlit, so lamps and lava still glow (decision 70) | GPU only | Unit tests of the mask's scaling |
-| Alias skins | Replacement skins, skin groups by their intervals as now; players' colours through `_pants` and `_shirt` | Read | By eye; unit tests of the names |
+| Alias skins | Replacement skins, skin groups by their intervals as now; players' colours baked from `_pants` and `_shirt` per skin and colours (decision 73) | Read | By eye; unit tests of the names and the bake |
 | Materials | `_norm` and `_gloss` lit per pixel by the dynamic lights (r_light.c's falloff, as now, times the normal's facing; gloss as a highlight); the lightmaps' light, which has no direction, stays as it is (decision 71). `enhanced_materials`, on | GPU only | By eye; validation layer clean |
 | Settings | `enhanced_textures` (1: a pack's textures where found), `enhanced_materials` (1), in `quakesharp.cfg` (decision 61) | Not the game's cvars | `EnhancedSettingsTests` |
 
@@ -1623,7 +1623,22 @@ quakesharp-tools texture-pack-check <quake-dir> <user folder or quake-dir>/id1
    without it (demo1 frames 300, 900, 1500, 2500: 97.5, 97.3, 98.9, 99.1% within 24). The first skies had dark rings
    round the clouds, the upscaler's drawing of the clear texels' black: the export now colours them (above). The
    executable on e1m2 under the validation layer with the pack and without: clean, 7.57 ms a frame both.*
-4. **Alias skins**, players' colours.
+4. **Alias skins**, players' colours. *Done: the export writes the skins of the models a player shows
+   (`EnhancedPackNames.PlayerModels`: player, eyes, head) with their shirt and pants texels black and a `_shirt` and a
+   `_pants` layer, each texel's grey its colour's brightness against its range's brightest (palette 31, 111); the
+   pack, made again with them upscaled (764 files), checks with no problem. An alias model asks the loader for a skin
+   the first time an entity shows it with a colour translation (`(skin, top, bottom)`, -1 none):
+   `EnhancedReplacements.Skin` adds the layers' colours to the replacement's (decision 73), a translated entity
+   without both layers keeping the game's skin (decision 69); the layers of skins with both are kept for other
+   colours. alias.slang's flag 2 draws the replacement's colours, the player's in them, instead of translating the
+   indices. Unit tests: the names, the bake (translated, not, a grey between two entries, a player without both
+   layers), CL_NewTranslation's rows. Checked by drawing: the pack's player skin baked with the colours 0/0, 4/12,
+   13/3 and untranslated beside the game's skin translated by CL_NewTranslation: shirts and pants the game's colours
+   (the first bake, DarkPlaces' grey times the range's brightest colour, made the orange pants olive: the pants'
+   ramp goes from brown to yellow); demo1 frame 900, the view model's skin the pack's. A player's colours were not
+   seen on an entity in a frame: WinQuake never draws the player's own entity (r_main.c, even with chase_active), and
+   scripted deathmatch respawns left the bodies out of view; the translated path differs from the drawn one only by
+   the bake's colours. The executable on demo1 under the validation layer with the pack: clean.*
 5. **Materials**: `_norm` and `_gloss` with the dynamic lights.
 6. **By hand**: a pack of e1's textures made with an upscaler, played through e1 in both lightings and switched;
    pictures described here; README's section on packs.
@@ -1708,6 +1723,7 @@ the faithful mode is unchanged.
 | 70 | Fullbrights without a `_glow` (was D20) | Confirmed with the user: the game's fullbright texels scaled to the replacement's size, nearest, and those texels of the replacement drawn unlit, so lamps, lava and screens still glow (§11.7) | 2026-10-13 |
 | 71 | Material maps (was D21) | Confirmed with the user: `_norm` and `_gloss` lit per pixel by the dynamic lights only (muzzle flashes, rockets, explosions, glowing items); the lightmaps' light stays flat, as it has no direction. Light direction for the lightmaps (DarkPlaces' "deluxemaps") is left out: it needs the maps' light compiled again by an outside tool or a direction guessed from the lights' entities, a milestone of its own if wanted (§11.7) | 2026-10-13 |
 | 72 | How packs are made (was D22) | Confirmed with the user: packs are made outside QuakeSharp: the tools export and check, the upscaling (by hand, RTX Remix's texture tools, an ESRGAN-type model, ...) is the user's; QuakeSharp downloads, ships and runs no model. RTX Remix's runtime is not used (it hooks Direct3D 9, QuakeSharp draws with Vulkan; its C API is a renderer of its own, a different project). No package: PNG through .NET's `ZLibStream` and TGA by QuakeSharp's own code (§11.7) | 2026-10-13 |
+| 73 | Players' colours from a pack's layers (milestone 13, step 4) | A `_shirt` or `_pants` layer's grey is read as a place on the player's colour ramp: the base palette's range (16-31, 96-111) gives each entry its brightness against the range's brightest, the grey falls on or between two entries, and the colour is the player's row's at those entries as CL_NewTranslation moves them (darker than the darkest entry: it darkened to black). So the colours keep the ramps' hues, which change along them, as the game's do; DarkPlaces' grey times one colour made Quake's orange pants olive. The bake is per skin and colours, on the loader thread (§11.7) | 2026-10-13 |
 
 ## 13. Open decisions
 

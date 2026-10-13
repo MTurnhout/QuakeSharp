@@ -612,7 +612,7 @@ public sealed unsafe partial class VulkanPresenter
         /// A BSP texture on the GPU: its palette indices (the BSP's four mips) and its colours (a mip chain); once a
         /// pack's replacement is uploaded, a second set with the same indices and the pack's colours.
         /// </summary>
-        private sealed class GpuTexture : IDisposable
+        private sealed class GpuTexture : IReplaceable, IDisposable
         {
             private readonly WorldRenderer owner;
             private readonly VkDescriptorPool pool;
@@ -664,7 +664,6 @@ public sealed unsafe partial class VulkanPresenter
             /// <summary>The set with a pack's colours (null until one is uploaded).</summary>
             public VkDescriptorSet ReplacedSet { get; private set; }
 
-            /// <summary>Gone (its level's models dropped): the loader skips it, its replacement is not uploaded.</summary>
             public bool Disposed => disposed;
 
             /// <summary>A pack's colours, uploaded, in place of the game's.</summary>

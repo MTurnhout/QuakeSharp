@@ -28,6 +28,12 @@ internal static class TextureCommands
         var written = new SortedDictionary<string, Entry>(StringComparer.Ordinal);
         foreach (GameTexture t in Scan(fs).Textures)
         {
+            if (EnhancedPackNames.PlayerModels.Any(m => t.File.StartsWith(m + "_", StringComparison.Ordinal)))
+            {
+                WritePlayerSkin(outDir, t, palette, written);
+                continue;
+            }
+
             WriteTexture(outDir, t.File, t.Name, t.Width, t.Height, t.Pixels, palette, written, t.Users, tiled);
         }
 
@@ -428,6 +434,39 @@ internal static class TextureCommands
         byte[] glow = [.. pixels.Select(p => p >= EnhancedTextures.Fullbright ? p : (byte)0)];
         PngWriter.WriteIndexed(path + EnhancedPackNames.Glow + ".png", tw, th, Tiled(glow), palette);
         written[file + EnhancedPackNames.Glow] = new Entry(width, height, users);
+    }
+
+    // A skin of a model players show (decision 69, DarkPlaces' layers): its shirt and pants texels (cl_parse.c's ranges)
+    // black, and each range a greyscale layer, _shirt and _pants, a texel's grey its colour's brightness against the
+    // range's brightest (palette 31, 111), which the renderer tints with the player's colour there
+    private static void WritePlayerSkin(string outDir, GameTexture t, byte[] palette, SortedDictionary<string, Entry> written)
+    {
+        (int Range, string Layer)[] ranges = [(EnhancedPackNames.ShirtRange, EnhancedPackNames.Shirt), (EnhancedPackNames.PantsRange, EnhancedPackNames.Pants)];
+        bool InRange(byte p, int range) => p >= range && p < range + 16;
+        if (!t.Pixels.Any(p => ranges.Any(r => InRange(p, r.Range))))
+        {
+            WriteTexture(outDir, t.File, t.Name, t.Width, t.Height, t.Pixels, palette, written, t.Users, tiled: false);
+            return;
+        }
+
+        byte[] rest = [.. t.Pixels.Select(p => ranges.Any(r => InRange(p, r.Range)) ? (byte)0 : p)];
+        WriteTexture(outDir, t.File, t.Name, t.Width, t.Height, rest, palette, written, t.Users, tiled: false);
+        double Brightness(int i) => (0.299 * palette[i * 3]) + (0.587 * palette[(i * 3) + 1]) + (0.114 * palette[(i * 3) + 2]);
+        foreach ((int range, string layer) in ranges)
+        {
+            byte[] rgba = new byte[t.Pixels.Length * 4];
+            for (int i = 0; i < t.Pixels.Length; i++)
+            {
+                byte grey = InRange(t.Pixels[i], range)
+                    ? (byte)Math.Min(255, Math.Round(255 * Brightness(t.Pixels[i]) / Brightness(range + 15)))
+                    : (byte)0;
+                (rgba[i * 4], rgba[(i * 4) + 1], rgba[(i * 4) + 2], rgba[(i * 4) + 3]) = (grey, grey, grey, 255);
+            }
+
+            string path = Path.Combine(outDir, (t.File + layer).Replace('/', Path.DirectorySeparatorChar));
+            PngWriter.WriteRgba(path + ".png", t.Width, t.Height, rgba);
+            written[t.File + layer] = new Entry(t.Width, t.Height, t.Users);
+        }
     }
 
     // A sky's texels as RGBA words (red in the low byte): the front layer's index 0 clear, its clear texels the average

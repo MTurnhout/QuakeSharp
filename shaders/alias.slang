@@ -27,7 +27,7 @@ struct AliasParams
     int skinHeight;
     int top;            // a player's colours (-1 none)
     int bottom;
-    int flags;          // 1 the view model
+    int flags;          // 1 the view model, 2 the skin's colours a pack's (the player's colours in them)
 };
 
 [[vk::push_constant]] ConstantBuffer<AliasParams> alias;
@@ -122,10 +122,10 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     }
 
     // true colour: the base palette's colour of the translated index, lit, the fullbright colours unlit; a player's
-    // translated texels read their own colour, the rest the filtered skin
+    // translated texels read their own colour, the rest the filtered skin (a pack's skin has the player's colours)
     float3 color;
     float fullbright;
-    if (index != skinIndices.Load(int3(texel, 0)))
+    if ((alias.flags & 2) == 0 && index != skinIndices.Load(int3(texel, 0)))
     {
         color = baseColor(index);
         fullbright = index >= 224 ? 1.0 : 0.0;

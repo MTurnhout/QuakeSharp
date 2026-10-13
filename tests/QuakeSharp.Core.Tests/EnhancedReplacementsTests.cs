@@ -77,6 +77,92 @@ public class EnhancedReplacementsTests
         Assert.Null(EnhancedReplacements.World(pack, "e1m1", Texture("+0slip", 2, 2, [0, 0, 0, 0])));
     }
 
+    [Fact]
+    public void TheTranslationsRowsAsClNewTranslationMovesThem()
+    {
+        Assert.Equal(31, EnhancedReplacements.Translate(31, 16, -1));
+        Assert.Equal(79, EnhancedReplacements.Translate(31, 16, 64));
+        Assert.Equal(128, EnhancedReplacements.Translate(31, 16, 128));
+        Assert.Equal(143, EnhancedReplacements.Translate(16, 16, 128));
+        Assert.Equal(111, EnhancedReplacements.Translate(111, 96, 96));
+    }
+
+    [Fact]
+    public void ASkinWithoutAPlayersColours()
+    {
+        using var files = new TestFiles();
+        files.Write("id1/progs/ogre.mdl_0.tga", Tga(2, 1, [10, 20, 30, 255, 40, 50, 60, 255]));
+        var pack = new EnhancedTexturePack([Path.Combine(files.Root, "id1")]);
+
+        EnhancedSkinLayers layers = EnhancedReplacements.SkinLayers(pack, "progs/ogre.mdl", 0, -1)!;
+        byte[] rgba = EnhancedReplacements.Skin(layers, [1, 250], 2, 1, Palette(), -1, -1)![0].Rgba;
+
+        // the game's second texel fullbright
+        Assert.Equal<byte>([10, 20, 30, 0, 40, 50, 60, 255], rgba);
+        Assert.Null(EnhancedReplacements.SkinLayers(pack, "progs/ogre.mdl", 1, -1));
+    }
+
+    [Fact]
+    public void APlayersColoursTintTheShirtAndPants()
+    {
+        using var files = new TestFiles();
+        files.Write("id1/progs/player.mdl_0.tga", Tga(2, 1, [5, 5, 5, 255, 0, 0, 0, 255]));
+        files.Write("id1/progs/player.mdl_0_shirt.tga", Tga(2, 1, [255, 255, 255, 255, 0, 0, 0, 255]));
+        files.Write("id1/progs/player.mdl_0_pants.tga", Tga(2, 1, [0, 0, 0, 255, 102, 102, 102, 255]));
+        var pack = new EnhancedTexturePack([Path.Combine(files.Root, "id1")]);
+        EnhancedSkinLayers layers = EnhancedReplacements.SkinLayers(pack, "progs/player.mdl", 0, -1)!;
+
+        // a palette of greys, index i (i, i, i): a range's entry j at 255 * (range + j) / (range + 15) on its ramp
+        byte[] palette = [.. Enumerable.Range(0, 256).SelectMany(i => new[] { (byte)i, (byte)i, (byte)i })];
+        byte[] rgba = EnhancedReplacements.Skin(layers, [0, 0], 2, 1, palette, 64, 128)![0].Rgba;
+
+        // the shirt's 255: the ramp's brightest, entry 15, in row 64: 79
+        Assert.Equal<byte>([5 + 79, 5 + 79, 5 + 79, 0], rgba[..4]);
+
+        // the pants' 102: darker than the ramp's darkest (entry 0 at 220.5), entry 0 of row 128 (reversed: 143) darkened
+        byte dark = (byte)Math.Round(143 * 102 / (255 * 96 / 111.0));
+        Assert.Equal<byte>([dark, dark, dark, 0], rgba[4..8]);
+
+        // not translated: the skin's own range, entry 15 is 31
+        byte[] own = EnhancedReplacements.Skin(layers, [0, 0], 2, 1, palette, -1, -1)![0].Rgba;
+        Assert.Equal(5 + 31, own[0]);
+    }
+
+    [Fact]
+    public void AGreyBetweenTwoEntriesIsBetweenTheirColours()
+    {
+        using var files = new TestFiles();
+        files.Write("id1/progs/player.mdl_0.tga", Tga(1, 1, [0, 0, 0, 255]));
+        files.Write("id1/progs/player.mdl_0_pants.tga", Tga(1, 1, [0, 0, 0, 255]));
+        byte[] palette = [.. Enumerable.Range(0, 256).SelectMany(i => new[] { (byte)i, (byte)i, (byte)i })];
+
+        // the shirt half way between entries 4 and 5 (20 and 21 of 31): row 160 reversed gives 171 and 170
+        double grey = 255 * 20.5 / 31;
+        files.Write("id1/progs/player.mdl_0_shirt.tga", Tga(1, 1, [(byte)Math.Round(grey), (byte)Math.Round(grey), (byte)Math.Round(grey), 255]));
+        var pack = new EnhancedTexturePack([Path.Combine(files.Root, "id1")]);
+        EnhancedSkinLayers layers = EnhancedReplacements.SkinLayers(pack, "progs/player.mdl", 0, -1)!;
+
+        byte value = EnhancedReplacements.Skin(layers, [0], 1, 1, palette, 160, 0)![0].Rgba[0];
+
+        Assert.InRange(value, 170, 171);
+    }
+
+    [Fact]
+    public void APlayerWithoutBothLayersIsDrawnWithTheGamesSkin()
+    {
+        using var files = new TestFiles();
+        files.Write("id1/progs/player.mdl_0.tga", Tga(1, 1, [5, 5, 5, 255]));
+        files.Write("id1/progs/player.mdl_0_shirt.tga", Tga(1, 1, [255, 255, 255, 255]));
+        var pack = new EnhancedTexturePack([Path.Combine(files.Root, "id1")]);
+        EnhancedSkinLayers layers = EnhancedReplacements.SkinLayers(pack, "progs/player.mdl", 0, -1)!;
+
+        Assert.Null(EnhancedReplacements.Skin(layers, [0], 1, 1, Palette(), 64, 128));
+        Assert.NotNull(EnhancedReplacements.Skin(layers, [0], 1, 1, Palette(), -1, -1));
+    }
+
+    // a palette whose every colour differs: index i is (i, 255 - i, i / 2)
+    private static byte[] Palette() => [.. Enumerable.Range(0, 256).SelectMany(i => new[] { (byte)i, (byte)(255 - i), (byte)(i / 2) })];
+
     private static EnhancedTexture Texture(string name, int width, int height, byte[] level0)
     {
         int size = width * height;

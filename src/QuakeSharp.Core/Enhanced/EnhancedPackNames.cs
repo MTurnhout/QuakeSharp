@@ -38,6 +38,15 @@ public static class EnhancedPackNames
     public static string Skin(string model, int skin, int frame = -1) =>
         frame < 0 ? $"{model}_{skin}" : $"{model}_{skin}_{frame}";
 
+    /// <summary>The players' colour ranges of a skin (cl_parse.c: TOP_RANGE, the shirt; BOTTOM_RANGE, the pants).</summary>
+    public const int ShirtRange = 16;
+
+    public const int PantsRange = 96;
+
+    /// <summary>The models a player's entity shows (id1's QuakeC: the player, the eyes while invisible, the head once
+    /// gibbed), drawn with the player's colours: the export writes their _shirt and _pants.</summary>
+    public static readonly string[] PlayerModels = ["progs/player.mdl", "progs/eyes.mdl", "progs/h_player.mdl"];
+
     /// <summary>Whether a BSP texture is a sky (model.c: Mod_LoadTextures' "sky" prefix).</summary>
     public static bool IsSky(string name) => name.StartsWith("sky", StringComparison.Ordinal);
 
