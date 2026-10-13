@@ -12,7 +12,8 @@ namespace QuakeSharp.Platform.Sdl;
 /// audio stream plays round and round (SDL converts it to the device), the mixer painting ahead of its position
 /// (design.md §7.1). With a clock (the executable's -recordevents), the position is the clock's instead, as the
 /// oracle's virtual device has it (snd_oracle.c), so the mix is the one a trace of the recorded game has; the device
-/// plays the buffer from that position.
+/// plays the buffer from that position, and without an audio device the buffer is there all the same, unheard (a
+/// replay has the virtual device whatever machine recorded it).
 /// </summary>
 public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
 {
@@ -42,7 +43,8 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
     // snd_win.c: SNDDMA_Init
     public Dma? Init()
     {
-        if (!SDL_InitSubSystem(SDL_InitFlags.SDL_INIT_AUDIO))
+        bool audio = SDL_InitSubSystem(SDL_InitFlags.SDL_INIT_AUDIO);
+        if (!audio && clock == null)
         {
             return null;
         }
@@ -60,6 +62,11 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
             buffer = new byte[SecondaryBufferSize],
         };
 
+        if (!audio)
+        {
+            return shm;
+        }
+
         self = GCHandle.Alloc(this);
         var spec = new SDL_AudioSpec { format = SDL_AudioFormat.SDL_AUDIO_S16LE, channels = shm.channels, freq = shm.speed };
         stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, &Fill, GCHandle.ToIntPtr(self));
@@ -67,8 +74,12 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
         {
             self.Free();
             SDL_QuitSubSystem(SDL_InitFlags.SDL_INIT_AUDIO);
-            shm = null;
-            return null;
+            if (clock == null)
+            {
+                shm = null;
+            }
+
+            return shm;
         }
 
         SDL_ResumeAudioStreamDevice(stream);

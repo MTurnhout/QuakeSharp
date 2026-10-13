@@ -9,11 +9,11 @@ A faithful C# port of id Software's Quake, translated from the original source r
 
 See [design.md](design.md) for the full design and milestones.
 
-> **Status:** milestone 11 (milestones 0-10 done): the Quake file system, the C library's maths functions (from musl)
+> **Status:** milestones 0-11 done: the Quake file system, the C library's maths functions (from musl)
 > and `rand()`, the host, the commands, cvars, console text and keys, the client (demo playback, models, particles,
 > the view, the sound mixer), the software renderer, the console, the status bar and the menus, the QuakeC VM and its
-> builtins, the server (physics, monsters, the world), the host's server commands and the network layer (loopback, and
-> the datagram protocol over a virtual TCP/IP driver), the sound and the CD, savegames, demo recording,
+> builtins, the server (physics, monsters, the world), the host's server commands, the network layer and WinQuake's
+> LAN drivers (loopback, the datagram protocol over TCP/IP, the dedicated server), the sound and the CD, savegames, demo recording,
 > `config.cfg`, the mouse and joystick, WinQuake's video modes and both mission packs are ported and checked against
 > WinQuake 1.09's own C, built
 > headless as a reference oracle that traces every frame: the three demos at three video modes, the attract loop, a
@@ -22,7 +22,9 @@ See [design.md](design.md) for the full design and milestones.
 > played by hand and recorded in QuakeSharp match it on every frame, pixel for pixel and edict for edict, sample for
 > sample; the files the game writes (config.cfg, savegames, demos, screenshots) are the oracle's byte for byte, and
 > load back in sync. The mission packs' demos, tours, saves and endings match the same way, and so does the rest of
-> the UI. The executable plays with the keyboard and the mouse, in every mode, with either mission pack.
+> the UI. Games between several hosts, a lossy LAN and a dedicated server match it on every frame for every host. The
+> executable plays with the keyboard and the mouse, in every mode, with either mission pack, and over a real network
+> with Winquake.exe 1.09 and QuakeSpasm, on Windows and Linux.
 
 ## Game data
 
@@ -57,8 +59,10 @@ screen, `-noaspect` shows square pixels instead of a 4:3 picture,
 output, and commands typed at it on standard input (8 players by default, 16 at most).
 
 Multiplayer is WinQuake's TCP/IP over UDP (NetQuake's protocol 15, port 26000, `-udpport` for another), on Windows and
-Linux alike. As WinQuake, a server on the same machine is not listed by the search and is joined by the machine's
-address, not 127.0.0.1.
+Linux alike: QuakeSharp plays with Winquake.exe 1.09 and with QuakeSpasm, as server and as client (QuakeSpasm 0.96.3's
+server sends a signon too large for any 1.09 client, Winquake.exe's or QuakeSharp's). As WinQuake: a server on the same
+machine is not listed by the search and is joined by the machine's address, not 127.0.0.1; a server keeps one player
+per address; on Linux, where the machine's name often resolves to 127.0.1.1, `-ip <address>` gives the real one.
 
 `-recordevents <file>` records a game for the fidelity tests: QuakeSharp then runs as the oracle's traces do (a
 virtual clock of 1/64 s steps paced to real time, no `config.cfg`) and writes every key as a `-traceevents` line; on

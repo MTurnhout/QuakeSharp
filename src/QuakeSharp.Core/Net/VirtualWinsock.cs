@@ -490,7 +490,8 @@ public sealed class VirtualWinsock : IWinsock
         }
 
         uint addr = SinAddr(name);
-        if (addr != INADDR_ANY && addr != hostAddr && !IsLoopback(addr))
+        // (a recorded machine's binds are the network's, to any of its addresses)
+        if (network == null && addr != INADDR_ANY && addr != hostAddr && !IsLoopback(addr))
         {
             lastError = WSAEADDRNOTAVAIL;
             return SOCKET_ERROR;

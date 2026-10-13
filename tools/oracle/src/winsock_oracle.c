@@ -733,7 +733,8 @@ int PASCAL FAR bind (SOCKET s, const struct sockaddr FAR *addr, int namelen)
 		last_error = WSAEINVAL;
 		return SOCKET_ERROR;
 	}
-	if (in->sin_addr.s_addr != INADDR_ANY && in->sin_addr.s_addr != host_addr && !IsLoopback (in->sin_addr.s_addr))
+	// (a recorded machine's binds are the recording's, to any of its addresses)
+	if (!recorded && in->sin_addr.s_addr != INADDR_ANY && in->sin_addr.s_addr != host_addr && !IsLoopback (in->sin_addr.s_addr))
 	{
 		last_error = WSAEADDRNOTAVAIL;
 		return SOCKET_ERROR;
