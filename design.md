@@ -36,7 +36,8 @@ v1 is Quake and both mission packs (hipnotic, rogue) on the WinQuake engine (dec
 - GLQuake and QuakeWorld (`QW/`): they come after v1.
 - Source-port features: mouselook beyond the original's `+mlook`, higher limits, new protocol versions, fog,
   skyboxes, coloured lighting, `.lit` files, external textures, interpolated models. Hardware-rendered and
-  higher-fidelity pictures exist only in an optional enhanced mode (§6.6) that only reads the game.
+  higher-fidelity pictures (any resolution, filtering, frames and models interpolated) and a finer sound mix exist only
+  in an optional enhanced mode (§6.6) that only reads the game.
 - Shipping game data. QuakeSharp contains **no** copyrighted PAK data; the user supplies their own `id1/pak0.pak`
   (shareware or registered) and `id1/pak1.pak`.
 - The DOS and Windows drivers of the time (IPX, serial and modem links, DirectDraw, VESA, MGL, Sound Blaster DMA):
@@ -448,13 +449,17 @@ LAN drivers, `net_wins.c` (TCP/IP) and `net_wipx.c` (IPX, which today's Windows 
 machine's in the traces, .NET UDP sockets in the executable, so QuakeSharp and other NetQuake engines (protocol 15)
 play together (milestone 11, §11.5, decision 55).
 
-### 6.6 Enhanced mode (later)
+### 6.6 Enhanced mode (milestone 12)
 
-As DoomSharp's (its design.md §6.5): an optional layer that only reads the game, switchable at any time, the
-faithful mode the default and untouched. For Quake: a Vulkan hardware renderer of the same view (GLQuake-like, at
-the window's resolution and aspect, possibly interpolated between server frames), with the 8-bit software frame
-still produced every frame so nothing the game reads (the renderer's `rand()` calls for particles, the client
-state it updates) changes. Verified as in DoomSharp: the traces with enhanced frames drawn must still match.
+As DoomSharp's (its design.md §6.5): an optional layer that only reads the game, switchable at any time (also in a
+demo or a net game), the faithful mode the default and untouched. For Quake: a Vulkan hardware renderer of the same
+view (GLQuake-like and beyond: any resolution and widescreen, MSAA, filtered and mipmapped textures, lighting with
+overbright, frames interpolated beyond the game's 72 a second, alias models' poses blended, the sky and water per
+pixel) and a second sound mixer at the device's rate, with the 8-bit software frame and WinQuake's mix still produced
+every frame so nothing the game reads (the particles `R_DrawParticles` moves and frees, the static entities
+`R_StoreEfrags` adds, the painted sound `S_StartSound`'s `rand()` depends on) changes. What the GPU needs is taken
+from the game in Core into snapshots; `Render.Vulkan` draws them. Verified as in DoomSharp: the traces, every line,
+with enhanced frames and sound made after every frame, still match. The plan: §11.6.
 
 ## 7. Audio
 
@@ -613,7 +618,8 @@ registered data's, byte for byte).
 | 9 ✅ | Persistence | `config.cfg`, savegames, demo recording, byte for byte; loaded games in sync. *Plan: §11.3. Each oracle run keeps the files it writes (`<name>.files`), and every trace test compares QuakeSharp's with them byte for byte: config.cfg after every run (it already matched), the 41 saves of `saves.events` (a save on every map, the menus' slots, the refusals) and `commands`' save, three demos (through a level change and an intermission, with a forced CD track, one cut by the end of the run), two screenshots and `qconsole.log`. Read back in fresh runs, in sync on every frame: the menus' config.cfg, every save (`loads.events`), every demo played back and as a timedemo. Fixed on the way: reading a savegame as the C runtime's `fscanf` does (hex floats, exponents without digits, 64-bit `%i`, a 0xff byte taken for EOF; checked on 20,000 inputs of each against the oracle), `qconsole.log` in text mode (CR LF), `CL_GetMessage`'s uninitialised `f` at a demo's end (§3.3, the oracle patched alike), and the demo file still open at the end. Winquake.exe 1.09 loads QuakeSharp's saves, and QuakeSharp loads Winquake.exe's saves and plays its demos* |
 | 10 ✅ | Fidelity pass | Executable differences audited (DOS/Win), mission packs (hipnotic, rogue), remaining UI scenarios. *Plan: §11.4. Winquake.exe 1.09 audited (§3.4): its start-up lines, `joystick` cvar and seven modes emulated, its real-time `rand()` and x87 rounding documented, quake.exe 1.08 documented from the source. Ported: in_win.c over a virtual Win32 on both sides (trace format 6's `I`; `QuakeEngine.Pending.cs` gone) and vid_win.c's modes and Video menu; the executable starts as Winquake.exe, in mode 3 full screen, and plays with the mouse in every mode. Both mission packs traced from their original PAKs (MD5s confirmed): their demos, attract loops, tours, saves read back, menus and endings, every line and file in sync. The rest of the UI in six scripted runs; the fidelity tests reach 84.3% of Core's lines, what none reaches listed with why. CI's shareware smoke test plays demo1-3 from `quake106.zip`'s `pak0.pak` to the oracle's last frames* |
 | 11 ✅ | Networking | UDP play with other NetQuake engines; net game tests. *Plan: §11.5. net_wins.c, net_wipx.c and net_win.c ported over a Winsock real (`SocketWinsock`, .NET's sockets) and virtual (`VirtualWinsock`, the oracle's `winsock_oracle.c`), the stand-ins gone (decision 55); games between hosts played together in one process and each host replayed alone in the oracle, every line in sync (`netjoin`, `netdm`, `netloss`, `netcmds`, `netswitches`, `netded`; decision 56); the dedicated server on both sides, its console scripted (trace format 8; decision 58); the real network, and games on it recorded and replayed (decision 59); Winquake.exe 1.09 and QuakeSpasm 0.96.3 played against, as server and as client, on one machine and on two (§3.4, decision 60): QuakeSharp plays with both but for QuakeSpasm's server, which no 1.09 client can join.* |
-| Later | | Enhanced mode (Vulkan hardware renderer), QuakeWorld, release builds (single file, NativeAOT) |
+| 12 | Enhanced mode | An optional layer the player switches on and off at any time, the faithful mode the default and untouched (§6.6): a Vulkan hardware renderer of the same view at any resolution and aspect, MSAA, filtered and mipmapped textures, lighting with overbright, the palette's shifts and gamma, sky, water, particles, frames interpolated beyond 72 a second and alias poses blended; sound mixed at the device's rate. *Plan: §11.6.* **Every trace, every line and file, matches with enhanced frames and sound made after every frame** (`EnhancedModeChangesNothing`); demos, saves, config.cfg and net games stay the same bytes |
+| Later | | QuakeWorld, release builds (single file, NativeAOT) |
 
 ### 11.1 Milestone 7: the plan
 
@@ -1206,6 +1212,126 @@ protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
 server match the oracle on every frame for every host; the executable plays over a real network with Winquake.exe
 (and decision 57's QuakeSpasm), as server and as client, and those games replay in sync.
 
+### 11.6 Milestone 12: the plan
+
+The game is ported and in sync; what the player sees is WinQuake's 8-bit frame, shown by `VulkanPresenter` (§6.4), and
+what they hear WinQuake's mix at 11025 Hz. Milestone 12 adds the enhanced mode of §6.6 and decision 5, on the rules
+DoomSharp's §6.5 set (D13-D17 are the choices still open).
+
+**The rules.**
+
+- **The faithful mode is the default and stays untouched.** With enhanced mode off nothing new runs: the seams below are
+  null, and the frame and the sound go out as today.
+- **The enhanced layer only reads the game.** The 8-bit frame is still rendered every frame, so everything the software
+  renderer does to the game stays as it is: `R_DrawParticles` moving and freeing the particles the client then reuses,
+  `R_StoreEfrags` adding the static entities to `cl_visedicts`, `R_AnimateLight`'s light styles, the surface cache and
+  its "ram" icon, `Draw_FadeScreen`'s `S_ExtraUpdate`. WinQuake's mixer still paints `shm` every frame, so `S_StartSound`'s
+  `rand()` draws are unchanged. The enhanced side never reads the clock through the engine (the waiting rule counts
+  `Sys_FloatTime`'s reads, §11.5), never draws `rand()`, never calls a ported function that writes anything
+  (`Mod_LeafPVS`'s buffer, `COM_LoadFile`'s loading disc; it has its own read-only copies of what it needs, as
+  `R_LightPoint` and `R_TextureAnimation`), and adds no cvar or command to the game's: Tab would complete them, and
+  a line the game answers "Unknown command" would do something. Its settings are its own (D13).
+- **Switchable at any time**: in a game, a demo, a timedemo, a net game, under `-recordevents`. Demos, saves,
+  config.cfg and net games stay the same bytes, because the game is the same.
+- **Core keeps no GPU dependency.** What the GPU needs is taken from the game in Core (`Core/Enhanced`), on the game
+  thread, into immutable snapshots of plain arrays; `Render.Vulkan` uploads and draws them with Slang shaders on a
+  thread of its own and never sees `QuakeEngine` (its enhanced renderer takes only `Core/Enhanced`'s snapshot types).
+  The CPU half runs in the tests; nothing there needs a GPU.
+- **A test proves it** (below): every trace, with enhanced frames and sound made after every frame, matches every line
+  and every file.
+
+**The seams in the ported code**, one object (`EnhancedCapture`, `engine.enhanced`, null by default), each call a read
+or a write into its own buffers:
+
+| Where | What |
+|---|---|
+| `VID_Update` (vid_win.c), before `IVideoOutput.Present` | The frame is final: a snapshot is taken (below) |
+| `R_RenderView` (r_main.c), after `D_WarpScreen` | The view was drawn this frame, its `vrect`; the 2D mask cleared over it |
+| draw.c's functions, `D_BeginDirectRect`, `R_TimeGraph`-like writes to `vid.buffer` | The 2D mask: which pixels the 2D wrote last; `Draw_FadeScreen` marks what it fades |
+| `S_Update_` (snd_dma.c), around `S_PaintChannels` | The enhanced mixer follows the channels and paints the same span at its own rate |
+
+The 2D mask is a side buffer of the frame's size that follows the frame as WinQuake's partial updates leave it: a pixel
+is the view's where the 3D was drawn last, the 2D's where draw.c wrote last (the status bar redrawn only when it
+changes, `sb_updates`, keeps its pixels), faded where `Draw_FadeScreen` darkened it since. The game never reads it.
+
+**A snapshot** (`EnhancedFrame`) holds what the frame showed: `r_refdef` (`vrect`, `vieworg`, `viewangles`, `fov_x`,
+`fov_y`) and whether the view was drawn; `cl.time`; every entity of `cl_visedicts` (as the software frame left it,
+the static ones included) and the view model as `R_DrawViewModel` decides it, each with where it came from (its slot
+in `cl_entities`, the static entities, the temporary ones) for interpolation, its model, origin, angles, frame, skin,
+colour translation, `syncbase`, effects, and the lighting r_alias.c would give it; `d_lightstylevalue`, the live
+`cl_dlights`, the live particles (pool slot, origin, colour); the palette shown, and per channel the 256-entry table
+`V_UpdatePalette` applies (the four `cl.cshifts` blended in, then `gammatable`); the 8-bit frame and its mask; the
+renderer cvars that decide what is drawn (`r_drawentities`, `r_drawviewmodel`, `r_fullbright`, `r_waterwarp`,
+`r_clearcolor`). A few hundred kilobytes, copied once per frame.
+
+**Models, built once** (`EnhancedModels`, Core): when a model is first seen (a level's world and its brush
+submodels, alias models, sprites), its GPU-ready data in plain arrays: the world's surfaces as triangles with their
+texture and lightmap coordinates (from `texinfo` as r_surf.c computes them), a lightmap atlas with each surface's four
+styles, the textures as palette indices (the BSP's own four mip levels) and as RGB with full mip chains, their
+fullbright texels (palette 224-255), alias poses with their normals (`anorms.h`), skins, sprite frames. Read from
+`model_t`s already loaded, never reloaded; uploaded once by `Render.Vulkan`.
+
+**The enhancements.** The setting names are D13's file's; every one of them is also checked by the test below.
+
+| Enhancement | What | How it stays out of the game | Verified by |
+|---|---|---|---|
+| Any resolution | The 3D at the window's size in pixels times `enhanced_scale` (0.25-2: under- or supersampling); the full-screen modes cover the screen at its own resolution; the windowed modes' windows may be resized | `vid_mode` still sets the frame the game draws (`vid.width`, `vrect`, `con_linewidth`, the menus' layout are the mode's); only the swapchain follows the window | The enhanced frame at faithful settings (below) against the software frame |
+| Widescreen | Hor+: `r_refdef.fov_y` kept, the view widened to the window's aspect (up to 32:9) where the software view spans the frame's width; the 2D stays the mode's 4:3 rectangle, centred; beside it the view's rows show the view, the others the border's tile (`backtile`) in a level, black elsewhere | The server sends every entity in the client's PVS whatever the view's direction (`SV_WriteEntitiesToClient`), so a wider view shows nothing the game hides; `scr_fov` and `vrect` are untouched | The comparison's centre against the software frame; by eye at 16:9, 21:9, 32:9 |
+| MSAA | 1, 2, 4 or 8 samples (`enhanced_msaa`, 4); alpha-tested sprites and the sky's front layer by alpha to coverage | GPU only | By eye, validation layer clean |
+| Textures | `enhanced_filter`: nearest, or linear with mipmaps and anisotropy; the BSP's own mips (the software look) or mip chains made from the RGB; fullbright texels unlit in either; animated textures (`+0`-`+9`, the `+a` alternates by the entity's frame) chosen as `R_TextureAnimation` does at `cl.time` | Textures from models already loaded; the animation's choice is a read-only copy | `EnhancedModels`' unit tests: every texture, mip and fullbright mask of e1m1 and the mission packs' first maps as the PAK has it; the comparison |
+| Lighting, overbright | Lightmaps with their four styles at `d_lightstylevalue`, dynamic lights per pixel with r_light.c's falloff, `r_fullbright`; alias models lit as r_alias.c (`R_LightPoint`, the dlights, the view model's minimum, the shade vector against each vertex's normal), per vertex. Two looks (`enhanced_lighting`, D14): **colormap**, the light level turned into one of the colormap's 64 rows and looked up as the software does (its overbright, its banding, at any resolution and smooth across a surface), or **true colour**, the texel's RGB times the light, up to twice as bright as the colormap's brightest rows make it, fullbrights unlit | The styles are what `R_AnimateLight` computed for the software frame; `R_LightPoint` and the alias lighting are read-only copies | Unit tests: the light the snapshot gives an alias model equals what the software's `R_AliasDrawModel` computed in the same frame of demo1-3 (read in the test, not a trace line); the comparison at colormap lighting |
+| Palette shifts, gamma | The picture through the same per-channel tables `V_UpdatePalette` uses for the palette: damage, items, contents and bonus flashes and `gamma` exactly as WinQuake shows them, also for true colour | Read from `cl.cshifts` and `gammatable` after `V_UpdatePalette` | The test checks on every frame of every trace that the tables applied to `host_basepal` give the palette shown, byte for byte |
+| Sky | The two layers scrolling as r_sky.c's (`skytime`, speeds 8 and 2, the front layer's index 0 transparent), mapped per pixel by the view's direction as d_sky.c's `D_Sky_uv_To_st` does per span, at interpolated `cl.time` | `cl.time` read | The comparison |
+| Water | Turbulent surfaces (`*` textures) warped per pixel by d_scan.c's sine table at `cl.time`; under water (`r_dowarp`, `r_waterwarp`) the view warped as `D_WarpScreen` at the output's resolution | `cl.time`, the view leaf's contents read | The comparison (the warp's phase identical at the same `cl.time`) |
+| Particles | From `active_particles` after `R_DrawParticles` moved them: square, sized as `D_DrawParticle` sizes them with distance and scaled to the resolution, or round (`enhanced_particles`) | Read after the software frame moved them | The comparison: each particle where the software drew it |
+| Models, sprites | Brush entities, alias models (skins, player colours through the entity's translation table, `syncbase` groups, the view model as `R_DrawViewModel` decides: `r_drawviewmodel`, a field of view over 90, invisibility, death), sprites by r_sprite.c's five orientations | Read | The comparison |
+| Uncapped frame rate | `Host_FilterTime` keeps the game at most 72 frames a second, and the listen server runs its physics once per frame, so the game's rate cannot change. The render thread draws as often as the display shows frames (`enhanced_vsync`) or `enhanced_maxfps`, each frame part way between the last two snapshots by real time: the view, the entities by their slot, the particles by their pool slot, the dlights, `cl.time` for the sky, water and animations. The picture is one game frame (at most 1/72 s) behind. Not interpolated: a move of more than 100 units in a frame (teleports, respawns), a changed model, the 2D, light styles | The game thread only copies a snapshot and never waits for the GPU: `Host_Frame`'s cadence is the faithful mode's | Unit tests of the interpolation (fractions 0, ½, 1; teleports; models appearing and going); the test builds half-frames |
+| Alias poses, movement | A pose change blended over the time since the previous change (at most 0.1 s, QuakeC's animation rate), frame groups by their intervals; monsters moving in 10 Hz steps (`MOVETYPE_STEP`'s `think`s, which the client sees as jumps) smoothed over the step when their origin changes only every few frames (`enhanced_lerpmodels`, `enhanced_lerpmove`, D15) | The history is the renderer's (per entity slot, reset when its model changes), never on `entity_t` | Unit tests of the blending and the step detection on recorded entity paths of demo1 |
+| 2D | The frame's 2D pixels (the mask) over the enhanced view, scaled as the faithful presenter scales them (integer nearest, then linear to the 4:3 rectangle): the status bar, console, menus, centre prints, intermission, the loading disc, pixel for pixel WinQuake's; the faded pixels as the view at a quarter of its brightness (`Draw_FadeScreen` blackens three pixels in four) | The 2D is the game's own frame | The comparison: outside the view, identical |
+| Sound | A second mixer (`EnhancedMixer`, Core) at the device's rate (48 kHz), following WinQuake's channels (each sound's start from its `end`, its volumes from `SND_Spatialize`, `volume`, the ambients, the loops at `loopstart`), each sound resampled from its own samples with Hermite interpolation (11025 Hz, 8-bit; a sound file of another rate, if any, from the file, read without `COM_LoadFile`'s disc), volumes ramped over a few milliseconds instead of stepping per frame, mixed in floating point; optionally placed by direction (D16). The device plays it instead of `shm`; the music is unchanged | WinQuake's mixer still paints `shm` every frame; its play position is the device's time at 11025 Hz, continuous across switches | The test (`P` unchanged); unit tests: a sound started at `paintedtime` t starts at t × 48000 / 11025, a single sound's mix resampled down matches WinQuake's paint within rounding, loops and stops where WinQuake's do, no step at a volume change; by ear |
+
+**The comparison** (`quakesharp-tools enhanced-shot`, needs a GPU, not a test): an offscreen run of a trace's command
+line drawing the enhanced frame of chosen frames at faithful settings (the mode's resolution, nearest, the BSP's mips,
+colormap lighting, square particles, no interpolation or MSAA, 4:3) and writing it beside the software frame, with the
+share of the view's pixels that agree and a picture of the differences. Expected differences: the software's
+perspective corrected every 16 pixels and affine alias models, its z-buffer and its mip choice per surface; the
+numbers per frame are recorded here and a regression shows as a drop.
+
+**The test** (`EnhancedModeChangesNothing`, `QuakeSharp.Fidelity.Tests`): `TraceRun` with `EnhancedCapture` attached
+(and `quakesharp-tools trace -traceenhanced` alike) takes a snapshot after every frame, builds the interpolated view at
+¼, ½ and ¾ of the frame on the CPU, builds every model it meets, and runs the enhanced mixer after every paint;
+it switches the mode off and on at fixed frames along the way. Every trace (demo1-3 at three sizes, the attract loops,
+the menus, the scripted games, the playthroughs, `sound`, the saves and loads, the mission packs, every host of the
+net games; a dedicated server has no frame) must match the oracle's on every line and every file, and the engine must
+read the clock and draw `rand()` exactly as often as without it.
+
+**Porting order.** Each step builds with the tests green and is committed:
+
+1. **The seams and the test, nothing drawn yet**: `Core/Enhanced` (`EnhancedCapture`, the mask, `EnhancedFrame`, the
+   interpolation on the CPU), `EnhancedModeChangesNothing` over every trace; the executable's switch (D13), the
+   settings file, and the enhanced path presenting the 8-bit frame from its own render thread.
+2. **The enhanced presenter**: the swapchain at the window's size, `enhanced_scale`, MSAA targets, the 2D composite
+   (mask, fade, loading disc), widescreen's layout, the view's area cleared to `r_clearcolor`; resizable windows.
+3. **The world**: `EnhancedModels`' BSP data, textures and filtering, lightmaps, styles and dlights, both lightings,
+   the palette tables (checked in the test), brush entities, the Hor+ projection; the comparison tool, first numbers on
+   demo1-3.
+4. **Sky and water**: the sky's layers, turbulent surfaces, the underwater warp.
+5. **Models and particles**: alias models (poses, skins, player colours, lighting, the view model), sprites, particles.
+6. **Interpolation**: frames between snapshots at the display's pace, `enhanced_maxfps`, vsync; pose blending and step
+   smoothing.
+7. **Sound**: `EnhancedMixer`, `SdlSoundDma` playing it with WinQuake's position from the device's time, switching in
+   mid-sound; D16's placement.
+8. **The pass**: the comparison on frames of demo1-3 and the mission packs' demos (numbers recorded here), the
+   validation layer clean, frame times measured at 2560×1440 and 3840×2160 with 4× MSAA; a game played switching the
+   mode on and off, in a demo, a timedemo, a net game against Winquake.exe, and under `-recordevents`, the recording
+   replayed in the oracle in sync.
+
+No package is needed (Vortice.Vulkan, its allocator, SDL3 and Slang cover it; the mesh building and the resampler are
+QuakeSharp's own); one would be asked for first.
+
+**Done when** `EnhancedModeChangesNothing` passes on every trace; the executable plays in enhanced mode with every
+enhancement above, switched at any time, and the comparison's numbers are recorded; the faithful mode is unchanged.
+
 ## 12. Decision log
 
 | # | Topic | Decision | Date |
@@ -1273,6 +1399,13 @@ server match the oracle on every frame for every host; the executable plays over
 
 ## 13. Open decisions
 
-To confirm with the user before the milestones they affect; the proposals are the defaults until then.
+To confirm with the user before the milestones they affect; the proposals are the defaults until then (the
+earlier ones are settled in the decision log, marked "was D<n>"):
 
-None: every question raised here has been settled with the user and moved to the decision log, marked "was D<n>".
+| # | Question | Proposal |
+|---|---|---|
+| D13 | How enhanced mode is switched and set (milestone 12) | Scroll Lock switches it at any time. Winquake.exe's `MapKey` gives Scroll Lock key 0, which the game takes (`key_lastpress`, `key_count`; in the key bindings menu "<UNKNOWN KEYNUM>" is not a valid key), so the key still reaches the game as key 0 and nothing differs from Winquake.exe (and `-recordevents` records it). `-enhanced` / `-faithful` set it for a run. Its settings (`enhanced`, `enhanced_scale`, `enhanced_msaa`, `enhanced_filter`, `enhanced_lighting`, `enhanced_particles`, `enhanced_vsync`, `enhanced_maxfps`, `enhanced_lerpmodels`, `enhanced_lerpmove`, `enhanced_sound`, `enhanced_3d_sfx`) are in QuakeSharp's own `quakesharp.cfg` in the user folder (§9), read and written by the executable, never Quake's cvars, commands or config.cfg; no menu of its own in this milestone (Quake's menus are the game's) |
+| D14 | Enhanced mode's look by default (milestone 12) | QuakeSpasm's kind of mix: true-colour lighting with overbright, nearest texels with mip chains and anisotropy (sharp texels without shimmer), square particles, 4× MSAA, widescreen. The software's look (colormap lighting, the BSP's mips) and GLQuake's (linear filtering, round particles) are a setting away |
+| D15 | Interpolation by default (milestone 12) | On: frames drawn at the display's pace between the last two game frames (the picture at most 1/72 s behind), alias poses blended, step-moving monsters smoothed. Each can be switched off |
+| D16 | Sound placed by direction (milestone 12) | DoomSharp's `enhanced_3d_sfx` (equal-power panning, the far ear up to 0.66 ms later and duller, sounds from behind quieter and duller) as an option, off by default: WinQuake's own stereo separation (`SND_Spatialize`) is kept unless asked. The mix at the device's rate, Hermite resampling and the volume ramps are on with enhanced mode |
+| D17 | What milestone 12 leaves out | Translucent water (`r_wateralpha`: the maps are not vised for it, and the server sends nothing it hides), `.lit` files, external textures, skyboxes, fog, GLQuake's planar shadows, screenshots of the enhanced frame, an in-game settings menu; and GPU tests: none in CI or the test projects (a software Vulkan such as lavapipe would be a download), the comparison tool runs by hand |
