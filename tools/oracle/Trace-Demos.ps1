@@ -29,6 +29,9 @@ when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.fi
                         a failed load), sbar (powerups, sigils, deathmatch, coop), menuwalk (every menu's keys, a new
                         game during a game, the quit menu's yes), hostcmds (the commands no other run uses); screen and
                         sbar also at 640x480
+  dedicated.trace       a dedicated server typed at through its console (events/dedicated.events, @stdin lines),
+                        a save of saves.trace's loaded; dedicated.16.trace -dedicated 99, dedicated.listen.trace
+                        -dedicated with -listen (Sys_Error)
   rdebug.trace          the renderer's debug cvars and commands with -surfcachesize 160, events/e1m1.pts in maps/
   loads.trace           every save saves.trace's run wrote, loaded in turn and played on
   record.trace          demos recorded (events/record.events), two screenshots, with -condebug's qconsole.log;
@@ -54,7 +57,9 @@ host replayed alone from the datagrams it received:
                                           (-netunplug) timing out; netloss: two hosts on a lossy LAN (lanloss);
                                           netcmds: the network's commands and refusals, with datagrams from no
                                           host of the game (another program's requests, a bad response);
-                                          netswitches: -ip, -udpport, -listen 4, -noipx, -noudp
+                                          netswitches: -ip, -udpport, -listen 4, -noipx, -noudp; netded: a
+                                          dedicated server typed at through its console, two clients, a kick, a
+                                          ban, a level change, the server quitting
 
 .PARAMETER Oracle
 quake-oracle.exe, as Build-Oracle.ps1 builds it.
@@ -121,7 +126,7 @@ Copy-Item (Join-Path $base 'id1\pak0.pak') (Join-Path $shareware 'id1\pak0.pak')
 # "<run>/<file>", in the run's game folder $game; and $place's files, path in the game folder = file), writing
 # <name>.trace; what the run's game folder holds afterwards, but the PAKs, is kept in <name>.files. $root is the Quake
 # folder it runs from: $base, or $shareware
-function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), [string] $game = 'id1', [hashtable] $place = @{}, [string] $root = $base) {
+function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), [string] $game = 'id1', [hashtable] $place = @{}, [string] $root = $base, [switch] $Fails) {
     if ($Only -and $Only -notcontains $name) { return }
     foreach ($g in $gameDirs) {
         Get-ChildItem (Join-Path $base $g) | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' } | Remove-Item -Recurse
@@ -141,7 +146,9 @@ function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), 
     # traces do wherever the game data is; in a window, mode 0 (design.md decision 50)
     Push-Location $root
     try { & $Oracle -startwindowed -noautostretch -trace $trace @arguments | Out-Null } finally { Pop-Location }
-    if ($LASTEXITCODE -ne 0) { throw "the oracle failed on $name" }
+    # a run that ends in Sys_Error ($Fails) exits with 1, its trace ending in the Err line
+    if ($Fails) { if ($LASTEXITCODE -eq 0) { throw "the oracle did not fail on $name" } }
+    elseif ($LASTEXITCODE -ne 0) { throw "the oracle failed on $name" }
     $frames = (Select-String -Path $trace -Pattern '^F ' | Measure-Object).Count
 
     $files = Join-Path $OutDir "$name.files"
@@ -232,6 +239,14 @@ foreach ($pack in $packs) {
         Trace $name @("-$pack", '-traceevents', $events, '-oracleframes', "$($packGames[$pack][$game])") $inputs $pack
     }
 }
+
+# a dedicated server alone (design.md §11.5, step 3), typed at through its console (@stdin lines): the host commands'
+# paths on a dedicated server, a save of the saves game loaded; Host_FindMaxClients: -dedicated last (8 clients), with
+# too many (16), and with -listen (Sys_Error)
+$events = Join-Path $PSScriptRoot 'events\dedicated.events'
+Trace 'dedicated' @('-traceevents', $events, '-oracleframes', '600', '-dedicated') @('saves/e1m3.sav')
+Trace 'dedicated.16' @('-oracleframes', '50', '-dedicated', '99')
+Trace 'dedicated.listen' @('-dedicated', '2', '-listen') -Fails
 
 # games between hosts (design.md §11.5): events/<game>.net names each host's command line. QuakeSharp's netrun plays
 # them together on its virtual LAN and keeps what each host received; the oracle then replays each host alone from its

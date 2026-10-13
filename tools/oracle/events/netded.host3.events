@@ -1,0 +1,9 @@
+1 name carl
+1 color 13 3
+200 connect quake1
+600 +left
+640 -left
+650 say carl here
+1000 connect quake1
+1300 connect quake1
+1600 say back again

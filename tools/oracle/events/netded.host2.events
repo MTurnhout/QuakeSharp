@@ -1,0 +1,16 @@
+1 name bob
+1 color 4 12
+100 connect quake1
+500 +forward
+540 -forward
+560 +attack
+700 -attack
+720 say hi console
+740 say_team team bob
+800 kill
+900 +right
+960 -right
+1500 +forward
+1530 -forward
+1600 say after the change
+1700 status

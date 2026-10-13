@@ -53,6 +53,9 @@ Closing the window quits. Settings (`config.cfg`) and everything else the game w
 screen, `-noaspect` shows square pixels instead of a 4:3 picture,
 `-vkvalidation` turns on the Vulkan validation layer (it comes with the Vulkan SDK).
 
+`-dedicated [<players>]` runs a dedicated server, as WinQuake's: no window, video or sound, its console on standard
+output, and commands typed at it on standard input (8 players by default, 16 at most).
+
 `-recordevents <file>` records a game for the fidelity tests: QuakeSharp then runs as the oracle's traces do (a
 virtual clock of 1/64 s steps paced to real time, no `config.cfg`) and writes every key as a `-traceevents` line; on
 quitting it prints the frame count. The oracle (`quake-oracle.exe -traceevents <file> -oracleframes <n>`, from its

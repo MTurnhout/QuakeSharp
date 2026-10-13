@@ -17,7 +17,7 @@ namespace QuakeSharp.Fidelity.Tests;
 /// </summary>
 public sealed class DemoTests : IDisposable
 {
-    private const string Lines = "FCEDXSTRVGQNWMPAIU";
+    private const string Lines = "FCEDXSTRVGQNWMPAIUO";
 
     private readonly string userdir = Path.Combine(Path.GetTempPath(), "quakesharp-tests", Guid.NewGuid().ToString("N"));
 
@@ -265,9 +265,34 @@ public sealed class DemoTests : IDisposable
         RunFiles.AssertSame(game + ".trace", userdir, pack);
     }
 
+    // A dedicated server alone (design.md §11.5, step 3), typed at through its console (@stdin), a save of the saves
+    // game loaded; Host_FindMaxClients' -dedicated last (8 clients), with too many (16) and with -listen (Sys_Error in
+    // Host_Init, the trace only its Err line)
+    [Theory]
+    [InlineData("dedicated.trace", "saves/e1m3.sav", "-traceevents", "{events}/dedicated.events", "-oracleframes", "600", "-dedicated")]
+    [InlineData("dedicated.16.trace", null, "-oracleframes", "50", "-dedicated", "99")]
+    [InlineData("dedicated.listen.trace", null, "-dedicated", "2", "-listen")]
+    public void DedicatedServerRunsInSyncWithTheOracle(string trace, string? input, params string[] args)
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile(trace);
+        if (input != null)
+        {
+            RunFiles.CopyInputs(userdir, input);
+        }
+
+        string events = Path.Combine(RepositoryRoot(), "tools", "oracle", "events");
+        var run = new TraceRun(baseDir, userdir, [.. args.Select(a => a.Replace("{events}", events, StringComparison.Ordinal))]);
+        int f = Array.IndexOf(args, "-oracleframes");
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false,
+            maxFrames: f < 0 ? int.MaxValue : int.Parse(args[f + 1], CultureInfo.InvariantCulture)));
+        RunFiles.AssertSame(trace, userdir);
+    }
+
     // Games between hosts (design.md §11.5): tools/oracle/events/<game>.net played together on NetRun's virtual LAN,
     // each host against the oracle's replay of it alone from the datagrams it received, its files too
     [Theory]
+    [InlineData("netded")]
     [InlineData("netjoin")]
     [InlineData("netdm")]
     [InlineData("netloss")]
@@ -303,25 +328,36 @@ public sealed class DemoTests : IDisposable
         throw new InvalidOperationException("QuakeSharp.slnx not found above the test directory");
     }
 
-    // Compares the frames' lines with the oracle's, and the number of frames
+    // Compares the frames' lines with the oracle's, and the number of frames, and the Sys_Error that ended the run
     private static void AssertSameTrace(string reference, IEnumerable<IReadOnlyList<string>> frames)
     {
         using IEnumerator<Dictionary<string, string>> theirs = ReadFrames(reference).GetEnumerator();
         int frame = 0;
-        foreach (IReadOnlyList<string> lines in frames)
+        string? error = null;
+        try
         {
-            frame++;
-            Assert.True(theirs.MoveNext(), $"QuakeSharp ran frame {frame}; the oracle's trace ends before it");
-            Dictionary<string, string> ours = Split(lines);
-            foreach (char letter in Lines)
+            foreach (IReadOnlyList<string> lines in frames)
             {
-                string key = letter.ToString();
-                Assert.True(ours[key] == theirs.Current[key],
-                    $"frame {frame}, {key}: the oracle's {theirs.Current[key]}, QuakeSharp's {ours[key]}");
+                frame++;
+                Assert.True(theirs.MoveNext(), $"QuakeSharp ran frame {frame}; the oracle's trace ends before it");
+                Dictionary<string, string> ours = Split(lines);
+                foreach (char letter in Lines)
+                {
+                    string key = letter.ToString();
+                    Assert.True(ours[key] == theirs.Current[key],
+                        $"frame {frame}, {key}: the oracle's {theirs.Current[key]}, QuakeSharp's {ours[key]}");
+                }
             }
+        }
+        catch (Core.QuakeException e)
+        {
+            error = e.Message;
         }
 
         Assert.False(theirs.MoveNext(), $"the oracle's trace goes on after QuakeSharp's {frame} frames");
+        string? theirError = File.ReadLines(reference).Where(l => l.StartsWith("Err ", StringComparison.Ordinal))
+            .Select(l => l[4..]).LastOrDefault();
+        Assert.Equal(theirError, error);
     }
 
     // The lines of each frame, by their letter (an F line starts a frame)

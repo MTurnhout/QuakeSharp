@@ -62,10 +62,11 @@ public sealed record NetGame(IReadOnlyList<IReadOnlyList<string>> Hosts, int Lan
 /// <summary>
 /// A game between hosts (design.md §11.5): several engines in one process, each the virtual machine quake&lt;n&gt; with
 /// its own <see cref="VirtualWinsock"/> on one virtual LAN, in lockstep on one virtual clock. At each step every host
-/// runs a frame or, while a frame waits for the network, one step of its wait; a datagram sent during a step arrives at
-/// the next. Each host runs as the oracle runs one (<see cref="TraceRun"/>, its own command line), and what it received
-/// is kept as -tracedatagrams lines, so the oracle can replay each host alone. A host whose command line has -netunplug
-/// leaves the LAN when it has run its -oracleframes (a machine unplugged: the others see it time out).
+/// runs a frame, one step of a wait for the network, or one of a dedicated server's sleeps; a datagram sent during a
+/// step arrives at the next. Each host runs as the oracle runs one (<see cref="TraceRun"/>, its own command line), and
+/// what it received is kept as -tracedatagrams lines, so the oracle can replay each host alone. A host whose command
+/// line has -netunplug leaves the LAN when it has run its -oracleframes (a machine unplugged: the others see it time
+/// out).
 /// </summary>
 public sealed class NetRun
 {
@@ -231,7 +232,7 @@ public sealed class NetRun
             bool unplug = commandLine.CheckParm("-netunplug") != 0;
             int count = 0;
 
-            // a frame that waits gives the turn back until the next step
+            // the clock about to move gives the turn back until the next step
             Run.System.Waiting = () =>
             {
                 done.Release();
@@ -252,19 +253,14 @@ public sealed class NetRun
                         return;
                     }
 
+                    // the turn goes back before every step of the clock (VirtualSystem.Waiting): before each frame,
+                    // while a frame waits, while a dedicated server sleeps
                     foreach (IReadOnlyList<string> lines in Run.Frames(quitAfterDemo, frames))
                     {
                         onFrame(Number, lines);
                         if (unplug && ++count >= frames)
                         {
                             Unplugged = true;
-                        }
-
-                        done.Release();
-                        go.Wait();
-                        if (stopping)
-                        {
-                            return;
                         }
                     }
                 }
@@ -286,7 +282,7 @@ public sealed class NetRun
             thread.Start();
         }
 
-        // the host's turn at a step: until its frame ends, it waits, or it finishes
+        // the host's turn at a step: until its clock is about to move again, or it finishes
         public void Turn()
         {
             go.Release();

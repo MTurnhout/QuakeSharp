@@ -8,7 +8,8 @@ namespace QuakeSharp.Core.Diagnostics;
 /// The oracle's scripted input (tools/oracle/src/trace.c: Trace_Events, -traceevents): lines of
 /// "&lt;frame&gt; &lt;console text&gt;", added to the command buffer before that frame runs;
 /// "&lt;frame&gt; @key &lt;key number&gt; &lt;1 or 0&gt;", a key going down or up; "&lt;frame&gt; @mouse &lt;dx&gt; &lt;dy&gt;",
-/// the mouse moved; "&lt;frame&gt; @buttons &lt;state&gt;", the mouse buttons held (1 left, 2 right, 4 middle).
+/// the mouse moved; "&lt;frame&gt; @buttons &lt;state&gt;", the mouse buttons held (1 left, 2 right, 4 middle);
+/// "&lt;frame&gt; @stdin &lt;text&gt;", typed in a dedicated server's console (<see cref="VirtualSystem.ConsoleType"/>).
 /// Sys_SendKeyEvents delivers them to the window procedure.
 /// </summary>
 public sealed class TraceEvents : IInputEvents
@@ -29,6 +30,9 @@ public sealed class TraceEvents : IInputEvents
 
     /// <summary>The engine whose command buffer gets the console text.</summary>
     public QuakeEngine? Engine { get; set; }
+
+    /// <summary>The virtual machine whose dedicated server's console gets the @stdin lines.</summary>
+    public VirtualSystem? Machine { get; set; }
 
     public bool SendKeyEvents(IWindowMessages window)
     {
@@ -68,6 +72,10 @@ public sealed class TraceEvents : IInputEvents
                 {
                     window.MouseMove(dx, dy);
                 }
+            }
+            else if (nextEvent.StartsWith("@stdin ", StringComparison.Ordinal))
+            {
+                Machine?.ConsoleType(nextEvent[7..]);
             }
             else if (nextEvent.StartsWith("@buttons ", StringComparison.Ordinal))
             {

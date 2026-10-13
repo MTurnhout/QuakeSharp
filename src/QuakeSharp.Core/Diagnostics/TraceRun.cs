@@ -64,6 +64,7 @@ public sealed class TraceRun
         if (events != null)
         {
             events.Engine = Engine;
+            events.Machine = system;
         }
     }
 
@@ -109,28 +110,57 @@ public sealed class TraceRun
     /// Host_Init, then frames until the engine quits, <paramref name="maxFrames"/> have run (-oracleframes) or, with
     /// <paramref name="quitAfterDemo"/>, the demo that was playing has ended (-tracequitafterdemo); the trace's
     /// lines of each frame. The last two end with Sys_Quit, as the oracle's run does (Host_Shutdown writes
-    /// config.cfg).
+    /// config.cfg). A dedicated server (-dedicated) runs a frame once sys_ticrate has passed, as sys_win.c's loop:
+    /// its Sys_Sleep moves the clock.
     /// </summary>
     public IEnumerable<IReadOnlyList<string>> Frames(bool quitAfterDemo, int maxFrames = int.MaxValue)
     {
         bool wasPlaying = false;
 
+        Engine.Sys_Printf("Host_Init\n");
         Engine.Host_Init();
         double oldtime = system.Time;
         while (true)
         {
-            if (writer.Frame >= maxFrames)
+            double time, newtime;
+            if (Engine.isDedicated)
             {
-                _ = Engine.Sys_Quit();
-                yield break;
+                if (writer.Frame >= maxFrames)
+                {
+                    _ = Engine.Sys_Quit();
+                    yield break;
+                }
+
+                // sys_win.c's loop for a dedicated server: a frame once sys_ticrate has passed, sleeping until then
+                newtime = Engine.Sys_FloatTime();
+                time = newtime - oldtime;
+
+                while (time < Engine.sys_ticrate.value)
+                {
+                    Engine.Sys_Sleep();
+                    newtime = Engine.Sys_FloatTime();
+                    time = newtime - oldtime;
+                }
+            }
+            else
+            {
+                // games between hosts give the turn to the others before the clock moves
+                system.Waiting?.Invoke();
+                if (writer.Frame >= maxFrames)
+                {
+                    _ = Engine.Sys_Quit();
+                    yield break;
+                }
+
+                // sys_win.c's loop: the time since the last frame began, a step, or more after a frame that waited
+                system.Step();
+                newtime = system.Time;
+                time = newtime - oldtime;
             }
 
-            // sys_win.c's loop: the time since the last frame began, a step, or more after a frame that waited
-            system.Step();
-            double newtime = system.Time;
             try
             {
-                Engine.Host_Frame((float)(newtime - oldtime));
+                Engine.Host_Frame((float)time);
             }
             catch (QuitException)
             {

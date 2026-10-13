@@ -1,0 +1,27 @@
+10 @stdin status\r
+12 @stdin maxplayers 2\r
+14 @stdin map dm3\r
+20 @stdin startdemos demo1\r
+100 @stdin status\r
+140 @stdin status\r
+150 @stdin say hello from the console\r
+160 @stdin say oops\b\b\b\bfixed\r
+170 @stdin status\rsay together\r
+172 @stdin \r
+174 @stdin \b\bnet_stats\r
+180 @stdin echo 0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\r
+182 @stdin \xe9\x01say plain\r
+190 @stdin fraglimit 3\r
+200 @stdin kick # 2 bye\r
+210 @stdin ban 10.0.0.3\r
+212 @stdin ban\r
+300 @stdin ban off\r
+330 @stdin changelevel e1m1\r
+400 @stdin status\r
+410 @stdin pause\r
+420 @stdin kill\r
+430 @stdin god\r
+440 @stdin name console\r
+460 @stdin status
+461 @stdin \r
+500 @stdin quit\r

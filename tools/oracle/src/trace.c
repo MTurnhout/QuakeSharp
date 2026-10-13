@@ -34,6 +34,7 @@ int Oracle_InputDevice (int *out);			// in_oracle.c
 int Oracle_WindowedMouse (void);			// vid_oracle.c
 void Oracle_MouseMove (int dx, int dy);		// in_oracle.c
 void Oracle_MouseButtons (int state);		// in_oracle.c
+void Oracle_ConsoleType (const char *text);	// sys_oracle.c
 extern int vid_modenum;						// vid_oracle.c
 extern int modestate;						// vid_oracle.c (winquake.h's modestate_t)
 byte *Oracle_Frame (int *rowbytes);			// vid_oracle.c
@@ -52,7 +53,7 @@ static int quit_after_demo, was_playing, frame_limit;
 static unsigned long long palette_hash;
 
 // -traceevents: lines of "<frame> <console text>", run before that frame's commands, "<frame> @key <key> <down>",
-// "<frame> @mouse <dx> <dy>" or "<frame> @buttons <state>"
+// "<frame> @mouse <dx> <dy>", "<frame> @buttons <state>" or "<frame> @stdin <text>"
 static FILE *events;
 static int next_event_frame = -1;
 static char next_event[1024];
@@ -65,6 +66,12 @@ static int message_log_length, message_log_size;
 
 // paintedtime when the frame began: -tracedump writes the samples painted since
 static int frame_paintedtime;
+
+// the O line: what a dedicated server's console was given during the frame (and, for -tracedump, the bytes)
+static unsigned long long console_hash;
+static int console_bytes;
+static char *console_log;
+static int console_log_length, console_log_size;
 
 /*
 ===============================================================================
@@ -767,6 +774,29 @@ THE TRACE
 ===============================================================================
 */
 
+// sys_oracle.c: what WriteFile gives a dedicated server's console (Sys_Printf, the echo of the keys typed)
+void Trace_Console (const char *data, int length)
+{
+	hash_t h = console_hash;
+	int i;
+
+	H_Bytes (&h, data, length);
+	console_hash = h;
+	console_bytes += length;
+
+	// the frame running is trace_frame + 1
+	if (DumpThisFrame (trace_frame + 1))
+	{
+		if (console_log_length + length * 2 + 1 > console_log_size)
+		{
+			console_log_size = (console_log_length + length * 2 + 1) * 2;
+			console_log = realloc (console_log, console_log_size);
+		}
+		for (i = 0; i < length; i++)
+			console_log_length += sprintf (console_log + console_log_length, "%02x", (byte)data[i]);
+	}
+}
+
 void Trace_Init (void)
 {
 	int t;
@@ -802,6 +832,7 @@ void Trace_Init (void)
 
 	quit_after_demo = COM_CheckParm ("-tracequitafterdemo") != 0;
 	message_hash = FNV_OFFSET;
+	console_hash = FNV_OFFSET;
 }
 
 static void Shot (void)
@@ -1021,6 +1052,7 @@ static void Dump (void)
 	DumpSound (f);
 	DumpInput (f);
 	fputs (Oracle_DatagramLog (), f);
+	fprintf (f, "console %d %s\n", console_bytes, console_log_length ? console_log : "");
 	fclose (f);
 }
 
@@ -1043,7 +1075,7 @@ void Trace_Frame (void)
 	if (trace)
 	{
 		if (trace_frame == 1)
-			fprintf (trace, "H 7 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
+			fprintf (trace, "H 8 %d %d %d\n", vid.width, vid.height, (int)(1.0 / oracle_step + 0.5));
 		fprintf (trace, "F %d %d %016llx %08x %u\n", trace_frame, host_framecount,
 			*(unsigned long long *)&realtime, oracle_rand_seed (), oracle_rand_calls);
 		fprintf (trace, "C %016llx\n", Client ());
@@ -1074,6 +1106,7 @@ void Trace_Frame (void)
 			hash_t u = Oracle_Datagrams (&datagrams);
 			fprintf (trace, "U %016llx %d\n", u, datagrams);
 		}
+		fprintf (trace, "O %016llx %d\n", console_hash, console_bytes);
 	}
 	else
 	{
@@ -1089,6 +1122,9 @@ void Trace_Frame (void)
 	message_hash = FNV_OFFSET;
 	message_count = 0;
 	message_log_length = 0;
+	console_hash = FNV_OFFSET;
+	console_bytes = 0;
+	console_log_length = 0;
 	frame_paintedtime = paintedtime;
 
 	if (cls.demoplayback)
@@ -1136,6 +1172,11 @@ void Trace_Events (void)
 
 			if (sscanf (event + 7, "%d %d", &dx, &dy) == 2)
 				Oracle_MouseMove (dx, dy);
+		}
+		else if (!Q_strncmp (event, "@stdin ", 7))
+		{
+			// typed in a dedicated server's console: "@stdin <text>" (\r Enter, \b Backspace, \\, \xHH)
+			Oracle_ConsoleType (event + 7);
 		}
 		else if (!Q_strncmp (event, "@buttons ", 9))
 		{

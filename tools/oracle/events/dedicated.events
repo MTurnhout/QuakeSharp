@@ -1,0 +1,41 @@
+10 @stdin status\r
+20 @stdin map e1m1 a b\r
+40 @stdin edictcount\r
+50 @stdin edict 1\r
+60 @stdin noclip\r
+70 @stdin save s1\r
+80 @stdin load nosuch\r
+90 @stdin connect quake9\r
+100 @stdin reconnect\r
+110 @stdin demos\r
+112 @stdin stopdemo\r
+114 @stdin startdemos demo1 demo2\r
+130 @stdin status\r
+140 @stdin say nobody\r
+150 @stdin startdemos demo1\r
+200 @stdin restart\r
+220 @stdin changelevel e1m2\r
+300 @stdin load e1m3\r
+310 @stdin status\r
+320 @stdin save s2\r
+330 @stdin pause\r
+340 @stdin begin\r
+342 @stdin prespawn\r
+344 @stdin spawn\r
+346 @stdin ping\r
+348 @stdin kick nobody\r
+350 @stdin tell nobody hi\r
+352 @stdin say_team the team\r
+354 @stdin color 3 4\r
+356 @stdin name somebody\r
+358 @stdin fly\r
+360 @stdin give s 50\r
+362 @stdin kill\r
+364 @stdin viewmodel progs/player.mdl\r
+366 @stdin viewframe 3\r
+368 @stdin viewnext\r
+370 @stdin viewprev\r
+380 @stdin maxplayers 4\r
+410 @stdin coop 1\r
+420 @stdin map e1m4\r
+500 @stdin status\r

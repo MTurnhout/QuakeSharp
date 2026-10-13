@@ -986,7 +986,7 @@ first and QuakeSharp follows them.
    test skips with a warning. `Trace-Demos.ps1` writes `shareware.demo1`-`3.trace` from a Quake folder of the
    oracle's holding only `id1/pak0.pak`: they are `demo1`-`3.trace`, byte for byte (what differs, common.c's
    "Playing shareware version." and the `registered` cvar, is printed before the console exists and is not in a demo's
-   trace lines). `SharewareTests` keeps every line of each one's last frame (18 since format 7; its `F` line holds the frame count)
+   trace lines). `SharewareTests` keeps every line of each one's last frame (19 since format 8; its `F` line holds the frame count)
    and runs from any original `id1/pak0.pak` in `QUAKESHARP_QUAKE_DIR`, copied alone; QuakeSharp matched at the first
    run, from the shareware's PAK and the registered's, in 12 seconds for the three.*
 
@@ -1058,7 +1058,9 @@ net_dgrm.c's resends, NAKs and timeouts. `quakesharp-tools netrun` writes the fi
 **The dedicated server.** sys_win.c's `-dedicated`: no window, video or sound; the console text on standard output and
 `Sys_ConsoleInput` reading standard input as WinQuake's console window does (line editing, backspace, the echo). The
 traces script it with `<frame> @stdin <text>` lines in `-traceevents`, typed into `Sys_ConsoleInput` as keys are into
-the window.
+the window. **Trace format 8** adds `O <hash> <bytes>` after `U`: what the dedicated server's console was given during the
+frame (`Sys_Printf`'s text, the echo of the keys typed); outside a dedicated server, where WinQuake's `Sys_Printf`
+prints nothing, it hashes nothing.
 
 **The real Winsock** (`SocketWinsock`, in the platform project): .NET UDP sockets with Winsock 1.1's semantics, on
 Windows and Linux alike: non-blocking, broadcast, the machine's name and first IPv4 address, `MSG_PEEK`, the errors
@@ -1115,7 +1117,29 @@ protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
    - *What WinQuake never calls: `NET_CanSendUnreliableMessage`'s drivers, `WINS_StringToAddr`; and the dedicated
      server's paths (step 3).*
 3. **The dedicated server**: sys_win.c's `-dedicated` in Core and the executable, `@stdin` on both sides; a dedicated
-   server traced with remote clients, `Host_FindMaxClients`' lines, its `say`, `status` and `startdemos`.
+   server traced with remote clients, `Host_FindMaxClients`' lines, its `say`, `status` and `startdemos`. *Done
+   (decision 58): sys_win.c's dedicated parts are ported in Core (`isDedicated` set as WinMain sets it, `Sys_Printf` to
+   the console, `Sys_ConsoleInput`, `Sys_Sleep`, `Host_GetConsoleCommands`, `Sys_Error`'s message and its wait for
+   Enter) and copied into `sys_oracle.c`, whose `isDedicated` was never set (a dedicated server would have written
+   config.cfg). Both run sys_win.c's loop: a frame once `sys_ticrate` (0.05 s) has passed, `Sys_Sleep` (`Sleep (1)`,
+   about a step of Windows' default 15.6 ms timer) moving the virtual clock a step, so a dedicated server runs a frame
+   every 4 steps. `@stdin` lines type into a virtual console (`\r` Enter, `\b` Backspace, `\xHH` a byte); trace format
+   8's `O` line hashes what the console is given; every trace was regenerated. A dedicated server never sets a palette
+   or `vid.colormap` (NULL in the C): the traces' palette hash stays 0 and an entity's unset colormap counts as the
+   normal one, as `trace.c` compares the pointers. `NetRun` now gives the turn back before every step of a host's clock
+   (before a frame, in a wait, in a dedicated server's sleep) rather than after each frame, which is the same for the
+   other hosts. The executable's `-dedicated` runs without window, video or sound, its console on standard output and
+   input (a terminal's keys one by one, unechoed, or redirected input's lines). Traced: `dedicated` (alone, typed at:
+   the host commands on a dedicated server, the client's refused (`Can't "kill", not connected`; `name` and `color`
+   find no `_cl_name`, `_cl_color`), `disconnect` unknown, `maxplayers` refused, a single-player save loaded,
+   quake.rc's `startdemos` starting `map start`), `dedicated.16` (`-dedicated 99`), `dedicated.listen` (`Sys_Error` in
+   `Host_Init`, compared on its `Err` line) and `netded` (two clients: `status`, `say` as `<quake1>`, a kick "by
+   Console", a ban refusing a connection, a level change, `quit`), every host in sync. Kept as WinQuake has them: two
+   lines read in one frame run together, as `Host_GetConsoleCommands` adds each without a newline ("statussay"); a
+   line past 255 characters wraps onto its own start; characters above 127 are dropped (`AsciiChar` is a signed
+   `CHAR`); WinQuake's console takes key releases, the executable's terminal gives presses (the same characters).
+   Not ported: conproc.c's QHOST hooks (`-HFILE`, `-HPARENT`, `-HCHILD`: a parent program reading the console), and
+   `-recordevents` for a dedicated server.*
 4. **The real Winsock**: `SocketWinsock`, the executable on it, `-recordevents`' datagrams. CI runs a test of two
    engines in one process over real sockets on 127.0.0.1 (a connection made and a game played; not traced, real time).
 5. **Other engines**, audited by hand into §3.4 as decision 42's audit: Winquake.exe 1.09 (a scratch copy) and
@@ -1188,6 +1212,7 @@ server match the oracle on every frame for every host; the executable plays over
 | 55 | The virtual network (milestone 11, step 1) | net_win.c, net_wins.c and net_wipx.c are ported in Core over `IWinsock` and compiled unchanged in the oracle over `winsock_oracle.c` (no wsock32 linked; LoadLibrary and GetProcAddress renamed for those files); the virtual machine is `quake<n>` at 10.0.0.<n> on a LAN of 254 hosts (`-oraclehost`), the other hosts' datagrams come from `-tracedatagrams` keyed by the clock's step, trace format 7's `U` hashes what was sent and received. Waiting: a frame that reads the clock 1,000 times without it moving moves it a step at that read, on both sides, and the next frame's time is what passed, as sys_win.c computes it. Supersedes decision 33 (§6.5, §11.5) | 2026-10-13 |
 | 56 | Games between hosts (milestone 11, step 2) | `NetRun` plays a game's hosts together in one process, in lockstep on one virtual clock (each host on its own thread, holding the turn for a frame or a step of its wait; a datagram sent during a step arrives at the next); a game is `events/<game>.net` (hosts' command lines, `lanloss`, `-netunplug`, `datagram` lines from no host of the game). The oracle replays each host alone from the datagrams QuakeSharp's run gave it (derived from game data: kept with the traces, never committed); every host matching, the `U` line included, means the oracle's hosts would have played the same game. The `cmdline` cvar gets a shared stand-in (§3.3) (§11.5) | 2026-10-13 |
 | 57 | Other engines (was D12) | Confirmed with the user, who approved the download: besides Winquake.exe 1.09, QuakeSpasm's latest Windows release (protocol 15, the engine most NetQuake servers run), downloaded into a scratch folder outside the repository, run only, never committed or copied from (milestone 11, step 5; §11.5) | 2026-10-13 |
+| 58 | The dedicated server (milestone 11, step 3) | sys_win.c's dedicated parts are ported in Core and copied into `sys_oracle.c`; on the virtual clock `Sys_Sleep` moves a step, so sys_win.c's loop runs a dedicated server's frame once `sys_ticrate` has passed (every 4 steps); `-traceevents`' `@stdin <text>` lines type into a virtual console; trace format 8's `O` line hashes what the console is given; the executable's console is standard output and input (§11.5) | 2026-10-13 |
 
 ## 13. Open decisions
 

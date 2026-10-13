@@ -15,7 +15,7 @@ try
         ["netrun", var baseDir, var outDir, var game] => TraceCommands.NetRun(baseDir, outDir, game),
         ["shot-diff", var a, var b] => TraceCommands.ShotDiff(a, b, null),
         ["shot-diff", var a, var b, var output] => TraceCommands.ShotDiff(a, b, output),
-        ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRVGQNWMPAIU"),
+        ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRVGQNWMPAIUO"),
         ["trace-compare", var a, var b, var letters] => TraceCommands.Compare(a, b, letters),
         ["file-compare", var a, var b] => TraceCommands.FileCompare(a, b),
         _ => Usage(),

@@ -73,9 +73,6 @@ public sealed partial class QuakeEngine
     /// <summary>host.c: host_colormap, gfx/colormap.lmp</summary>
     public byte[] host_colormap = [];
 
-    /// <summary>sys_win.c: isDedicated (-dedicated)</summary>
-    public bool isDedicated;
-
     // host.c: the host's cvars
     public readonly Cvar host_framerate = new("host_framerate", "0"); // set for slow motion
     public readonly Cvar host_speeds = new("host_speeds", "0"); // set for running times
@@ -539,9 +536,21 @@ public sealed partial class QuakeEngine
     }
 
     // host.c: Host_GetConsoleCommands
-    // Add them exactly as if they had been typed at the console (a dedicated server's console: there is none here)
-    public static void Host_GetConsoleCommands()
+    // Add them exactly as if they had been typed at the console
+    public void Host_GetConsoleCommands()
     {
+        string? cmd;
+
+        while (true)
+        {
+            cmd = Sys_ConsoleInput();
+            if (cmd == null)
+            {
+                break;
+            }
+
+            Cbuf_AddText(cmd);
+        }
     }
 
     // host.c: _Host_Frame
@@ -712,8 +721,6 @@ public sealed partial class QuakeEngine
         {
             throw Sys_Error("Only %4.1f megs of memory available, can't execute game", host_parms.memsize / (float)0x100000);
         }
-
-        isDedicated = COM_CheckParm("-dedicated") != 0;
 
         Memory_Init();
         Cbuf_Init();

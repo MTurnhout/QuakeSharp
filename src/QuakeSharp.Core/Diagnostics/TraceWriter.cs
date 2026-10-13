@@ -17,7 +17,7 @@ namespace QuakeSharp.Core.Diagnostics;
 public sealed class TraceWriter
 {
     /// <summary>The trace format's version (the H line).</summary>
-    public const int Version = 7;
+    public const int Version = 8;
 
     private const ulong FNV_OFFSET = 0xcbf29ce484222325UL;
     private const ulong FNV_PRIME = 0x100000001b3UL;
@@ -31,6 +31,12 @@ public sealed class TraceWriter
     private List<(int Sender, bool Reliable, int Result, byte[] Data)> messages = [];
     private List<(int Sender, bool Reliable, int Result, byte[] Data)> lastMessages = [];
 
+    // the O line: what a dedicated server's console was given during the frame running, and during the frame just
+    // traced (for Dump)
+    private Hash consoleHash = new();
+    private List<byte> console = [];
+    private List<byte> lastConsole = [];
+
     // paintedtime when the frame running began, and when the frame just traced began (Dump writes what it painted)
     private int framePaintedtime;
     private int lastFramePaintedtime;
@@ -40,6 +46,7 @@ public sealed class TraceWriter
         this.engine = engine;
         this.framesPerSecond = framesPerSecond;
         engine.MessageSent = OnMessageSent;
+        engine.ConsoleWritten = OnConsoleWritten;
     }
 
     /// <summary>The trace's frames so far.</summary>
@@ -81,6 +88,10 @@ public sealed class TraceWriter
         lines.Add(Invariant($"I {Input():x16}"));
         ulong u = Datagrams(out int datagrams);
         lines.Add(Invariant($"U {u:x16} {datagrams}"));
+        lines.Add(Invariant($"O {consoleHash.h:x16} {console.Count}"));
+        consoleHash = new Hash();
+        (lastConsole, console) = (console, lastConsole);
+        console.Clear();
         lastFramePaintedtime = framePaintedtime;
         framePaintedtime = e.paintedtime;
         return lines;
@@ -141,6 +152,7 @@ public sealed class TraceWriter
             sb.Append(winsock.LastDatagramLog);
         }
 
+        sb.Append(Invariant($"console {lastConsole.Count} {Convert.ToHexStringLower([.. lastConsole])}\n"));
         return sb.ToString();
     }
 
@@ -175,7 +187,7 @@ public sealed class TraceWriter
         DumpVec(sb, "msg_angles0", e.msg_angles[0]);
         DumpVec(sb, "msg_angles1", e.msg_angles[1]);
         DumpVec(sb, "angles", e.angles);
-        int colormap = e.colormap == engine.vid.colormap ? 0
+        int colormap = IsVidColormap(e.colormap) ? 0
             : engine.cl.scores is { } scores && Array.FindIndex(scores, s => s.translations == e.colormap) is int n && n >= 0 && n < engine.cl.maxclients ? 1 + n
             : -1;
         sb.Append(Invariant($" model {e.model?.name ?? ""} frame {e.frame} syncbase {BitConverter.SingleToInt32Bits(e.syncbase):x8} colormap {colormap} effects {e.effects} skinnum {e.skinnum}\n"));
@@ -287,12 +299,17 @@ public sealed class TraceWriter
         public void Model(Model.Model? m) => String(m?.name ?? "");
     }
 
+    // colormap == vid.colormap: a dedicated server's vid.colormap is NULL, as an entity's that was never set (the
+    // empty array here)
+    private bool IsVidColormap(byte[]? colormap) =>
+        colormap == engine.vid.colormap || (colormap == null && engine.vid.colormap.Length == 0);
+
     // a colormap: 0 the normal one, 1 + n player n's translation, -1 anything else
     private void H_Colormap(ref Hash h, byte[]? colormap)
     {
         ClientState cl = engine.cl;
 
-        if (colormap == engine.vid.colormap)
+        if (IsVidColormap(colormap))
         {
             h.Int(0);
             return;
@@ -795,9 +812,14 @@ public sealed class TraceWriter
         return h.h;
     }
 
-    // V: the palette last passed to VID_SetPalette
+    // V: the palette last passed to VID_SetPalette; 0 for a dedicated server, which never sets one (no VID_Init)
     private ulong Palette()
     {
+        if (engine.isDedicated)
+        {
+            return 0;
+        }
+
         var h = new Hash();
         h.Bytes(engine.vid_curpal);
         return h.h;
@@ -1075,6 +1097,13 @@ public sealed class TraceWriter
         messageHash.Int(data.cursize);
         messageHash.Bytes(data.data.AsSpan(0, data.cursize));
         messages.Add((sender, reliable, result, data.data.AsSpan(0, data.cursize).ToArray()));
+    }
+
+    // the oracle's Trace_Console: what WriteFile gives a dedicated server's console
+    private void OnConsoleWritten(byte[] text)
+    {
+        consoleHash.Bytes(text);
+        console.AddRange(text);
     }
 
     // a string in a dump: quoted, with \\, \" and the characters outside 32-126 as \xHH

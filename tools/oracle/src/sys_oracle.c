@@ -10,6 +10,7 @@
 #include "winsock_oracle.h"
 
 qboolean isDedicated;
+static qboolean sc_return_on_enter = false;
 
 double oracle_time;
 double oracle_step = 1.0 / 64.0;
@@ -200,14 +201,80 @@ void Sys_DebugLog(char *file, char *fmt, ...)
 	fclose (f);
 }
 
+qboolean oracle_verbose;
+
+/*
+ * sys_win.c's dedicated console (AllocConsole, design.md §11.5): what WriteFile writes to houtput goes to the trace's O
+ * line (and with -oracleverbose to stdout); the keys ReadConsoleInput reads come from -traceevents' @stdin lines
+ * (Oracle_ConsoleType), only their releases, as WinQuake takes them: a character each.
+ */
+#define ORACLE_CONSOLE_KEYS	4096
+static unsigned char console_keys[ORACLE_CONSOLE_KEYS];
+static int console_keys_in, console_keys_out;
+
+static void Oracle_ConsoleWrite (const char *data, int length)
+{
+	Trace_Console (data, length);
+	if (oracle_verbose)
+		fwrite (data, 1, length, stdout);
+}
+
+// "@stdin <text>": its characters typed in the console; \r is Enter, \b Backspace, \\ a backslash, \xHH any byte
+void Oracle_ConsoleType (const char *text)
+{
+	int c, i, digit;
+
+	while (*text)
+	{
+		c = (unsigned char)*text++;
+		if (c == '\\' && *text)
+		{
+			c = (unsigned char)*text++;
+			if (c == 'r')
+				c = '\r';
+			else if (c == 'b')
+				c = '\b';
+			else if (c == 'x')
+			{
+				c = 0;
+				for (i = 0; i < 2 && *text; i++, text++)
+				{
+					digit = *text >= 'a' ? *text - 'a' + 10 : *text >= 'A' ? *text - 'A' + 10 : *text - '0';
+					c = c * 16 + digit;
+				}
+			}
+		}
+		if ((console_keys_in + 1) % ORACLE_CONSOLE_KEYS != console_keys_out)
+		{
+			console_keys[console_keys_in] = c;
+			console_keys_in = (console_keys_in + 1) % ORACLE_CONSOLE_KEYS;
+		}
+	}
+}
+
 void Sys_Error (char *error, ...)
 {
 	va_list         argptr;
-	char            text[1024];
+	char            text[1024], text2[1024];
+	char		*text3 = "Press Enter to exit\n";
+	char		*text4 = "***********************************\n";
+	char		*text5 = "\n";
 
 	va_start (argptr,error);
 	vsprintf (text, error, argptr);
 	va_end (argptr);
+
+	// sys_win.c: a dedicated server shows the error in its console (then waits for Enter, up to
+	// CONSOLE_ERROR_TIMEOUT seconds: the real console's, not the trace's, which ends here)
+	if (isDedicated)
+	{
+		sprintf (text2, "ERROR: %s\n", text);
+		Oracle_ConsoleWrite (text5, strlen (text5));
+		Oracle_ConsoleWrite (text4, strlen (text4));
+		Oracle_ConsoleWrite (text2, strlen (text2));
+		Oracle_ConsoleWrite (text3, strlen (text3));
+		Oracle_ConsoleWrite (text4, strlen (text4));
+	}
 
 	fprintf (stderr, "Sys_Error: %s\n", text);
 	Trace_Error (text);
@@ -215,11 +282,10 @@ void Sys_Error (char *error, ...)
 	exit (1);
 }
 
-qboolean oracle_verbose;
-
 // units.c's scenarios capture what is printed
 void (*oracle_print_hook) (const char *text);
 
+// sys_win.c: a dedicated server's console shows it (WinQuake prints nothing otherwise; -oracleverbose does)
 void Sys_Printf (char *fmt, ...)
 {
 	va_list         argptr;
@@ -231,7 +297,9 @@ void Sys_Printf (char *fmt, ...)
 
 	if (oracle_print_hook)
 		oracle_print_hook (text);
-	if (oracle_verbose)
+	if (isDedicated)
+		Oracle_ConsoleWrite (text, strlen (text));
+	else if (oracle_verbose)
 		printf ("%s", text);
 }
 
@@ -249,13 +317,75 @@ double Sys_FloatTime (void)
 	return oracle_time;
 }
 
+// sys_win.c: Sys_ConsoleInput, over the virtual console's keys
 char *Sys_ConsoleInput (void)
 {
+	static char	text[256];
+	static int		len;
+	int		ch;
+
+	if (!isDedicated)
+		return NULL;
+
+
+	for ( ;; )
+	{
+		// GetNumberOfConsoleInputEvents, ReadConsoleInput: the next key released (AsciiChar, a CHAR: signed)
+		if (console_keys_out == console_keys_in)
+			break;
+
+		ch = (signed char)console_keys[console_keys_out];
+		console_keys_out = (console_keys_out + 1) % ORACLE_CONSOLE_KEYS;
+
+		switch (ch)
+		{
+			case '\r':
+				Oracle_ConsoleWrite ("\r\n", 2);
+
+				if (len)
+				{
+					text[len] = 0;
+					len = 0;
+					return text;
+				}
+				else if (sc_return_on_enter)
+				{
+				// special case to allow exiting from the error handler on Enter
+					text[0] = '\r';
+					len = 0;
+					return text;
+				}
+
+				break;
+
+			case '\b':
+				Oracle_ConsoleWrite ("\b \b", 3);
+				if (len)
+				{
+					len--;
+				}
+				break;
+
+			default:
+				if (ch >= ' ')
+				{
+					Oracle_ConsoleWrite ((char *)&ch, 1);
+					text[len] = ch;
+					len = (len + 1) & 0xff;
+				}
+
+				break;
+
+		}
+	}
+
 	return NULL;
 }
 
+// sys_win.c: Sleep (1), which on Windows' default timer of 15.6 ms takes about a step of the clock
 void Sys_Sleep (void)
 {
+	Oracle_Step ();
 }
 
 void Sys_SendKeyEvents (void)
@@ -304,11 +434,13 @@ int main (int argc, char **argv)
 {
 	static quakeparms_t    parms;
 	int t;
-	double oldtime, newtime;
+	double time, oldtime, newtime;
 
 	// sys_win.c: argv[0] is empty (WinMain gets the command line without the program)
 	argv[0] = "";
 	COM_InitArgv (argc, argv);
+
+	isDedicated = (COM_CheckParm ("-dedicated") != 0);
 
 	// -oraclescenario <file> [-print]: one scenario (scenarios.c), then quit
 	t = COM_CheckParm ("-oraclescenario");
@@ -351,14 +483,33 @@ int main (int argc, char **argv)
 	Trace_Init ();
 	Oracle_WinsockInit ();
 
+	Sys_Printf ("Host_Init\n");
 	Host_Init (&parms);
 	oldtime = oracle_time;
 	while (1)
 	{
-		// sys_win.c's loop: the time since the last frame began, a step, or more after a frame that waited
-		Oracle_Step ();
-		newtime = oracle_time;
-		Host_Frame (newtime - oldtime);
+		if (isDedicated)
+		{
+			// sys_win.c's loop for a dedicated server: a frame once sys_ticrate has passed, sleeping until then
+			newtime = Sys_FloatTime ();
+			time = newtime - oldtime;
+
+			while (time < sys_ticrate.value )
+			{
+				Sys_Sleep();
+				newtime = Sys_FloatTime ();
+				time = newtime - oldtime;
+			}
+		}
+		else
+		{
+			// sys_win.c's loop: the time since the last frame began, a step, or more after a frame that waited
+			Oracle_Step ();
+			newtime = oracle_time;
+			time = newtime - oldtime;
+		}
+
+		Host_Frame (time);
 		oldtime = newtime;
 		Trace_Frame ();
 	}

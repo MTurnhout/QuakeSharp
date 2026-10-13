@@ -1,0 +1,6 @@
+# a dedicated server and two clients (design.md 11.5, step 3): quake1 runs -dedicated 3, typed at through its
+# console (@stdin lines), a frame every 4 steps of the clock (sys_ticrate); quake2 and quake3 connect by name, play,
+# talk; quake3 is kicked from the console and refused while banned; a level change; the server quits from its console
+-traceevents netded.host1.events -oracleframes 600 -dedicated 3
+-traceevents netded.host2.events -oracleframes 2400
+-traceevents netded.host3.events -oracleframes 2400

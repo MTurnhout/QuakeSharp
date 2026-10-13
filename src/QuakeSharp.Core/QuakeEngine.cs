@@ -65,6 +65,9 @@ public sealed partial class QuakeEngine
         this.video = video;
         this.winsock = winsock;
         com_argv = parms.argv;
+
+        // sys_win.c: WinMain, after COM_InitArgv
+        isDedicated = COM_CheckParm("-dedicated") != 0;
         edgetables =
         [
             new(false, 1, r_p0, r_p2, null, 2, r_p0, r_p1, r_p2),
@@ -122,11 +125,145 @@ public sealed partial class QuakeEngine
     public static QuakeException Sys_Error(string fmt, params ReadOnlySpan<PrintfArg> args) =>
         new(CFormat.Sprintf(fmt, args));
 
-    // sys_win.c: Sys_Printf
-    public void Sys_Printf(string fmt, params ReadOnlySpan<PrintfArg> args) => system.Printf(CFormat.Sprintf(fmt, args));
+    /// <summary>sys_win.c: isDedicated (-dedicated)</summary>
+    public readonly bool isDedicated;
+
+    // sys_win.c: Sys_Error's sc_return_on_enter; Sys_ConsoleInput's static text and len
+    private bool sc_return_on_enter;
+    private readonly byte[] sys_consoletext = new byte[256];
+    private int sys_consolelen;
+
+    // sys_win.c: CONSOLE_ERROR_TIMEOUT, the seconds to wait on Sys_Error running dedicated before exiting
+    private const double CONSOLE_ERROR_TIMEOUT = 60.0;
+
+    /// <summary>What a dedicated server's console is given (Sys_Printf, the echo of the keys typed), for the traces.</summary>
+    public Action<byte[]>? ConsoleWritten { get; set; }
+
+    // sys_win.c: Sys_Printf: a dedicated server's console shows it (WinQuake prints nothing otherwise); the system's
+    // debugging console (the tools' logs) gets it all
+    public void Sys_Printf(string fmt, params ReadOnlySpan<PrintfArg> args)
+    {
+        string text = CFormat.Sprintf(fmt, args);
+        system.Printf(text);
+        if (isDedicated)
+        {
+            Sys_ConsoleWrite(System.Text.Encoding.Latin1.GetBytes(text));
+        }
+    }
+
+    // sys_win.c: WriteFile (houtput, ...): a dedicated server's console
+    private void Sys_ConsoleWrite(byte[] text)
+    {
+        system.ConsoleWrite(text);
+        ConsoleWritten?.Invoke(text);
+    }
+
+    // sys_win.c: Sys_Error's part for a dedicated server, after the error ended the frame: the error in its console,
+    // then a wait for Enter, up to CONSOLE_ERROR_TIMEOUT seconds (the executable's; a trace ends at the error, as the
+    // oracle's)
+    public void Sys_ErrorDedicated(string text, bool wait)
+    {
+        if (!isDedicated)
+        {
+            return;
+        }
+
+        string text2 = CFormat.Sprintf("ERROR: %s\n", text);
+        Sys_ConsoleWrite("\n"u8.ToArray());
+        Sys_ConsoleWrite("***********************************\n"u8.ToArray());
+        Sys_ConsoleWrite(System.Text.Encoding.Latin1.GetBytes(text2));
+        Sys_ConsoleWrite("Press Enter to exit\n"u8.ToArray());
+        Sys_ConsoleWrite("***********************************\n"u8.ToArray());
+
+        if (!wait)
+        {
+            return;
+        }
+
+        double starttime = Sys_FloatTime();
+        sc_return_on_enter = true; // so Enter will get us out of here
+
+        while (Sys_ConsoleInput() == null && (Sys_FloatTime() - starttime) < CONSOLE_ERROR_TIMEOUT)
+        {
+        }
+    }
 
     // sys_win.c: Sys_FloatTime
     public double Sys_FloatTime() => system.FloatTime();
+
+    // sys_win.c: Sys_ConsoleInput: a line typed in a dedicated server's console, edited and echoed as WinQuake does
+    public string? Sys_ConsoleInput()
+    {
+        int ch;
+
+        if (!isDedicated)
+        {
+            return null;
+        }
+
+        while (true)
+        {
+            // GetNumberOfConsoleInputEvents, ReadConsoleInput: the next key released (AsciiChar, a CHAR: signed)
+            if (!system.ConsoleRead(out byte key))
+            {
+                break;
+            }
+
+            ch = (sbyte)key;
+            switch (ch)
+            {
+                case '\r':
+                    Sys_ConsoleWrite("\r\n"u8.ToArray());
+
+                    if (sys_consolelen != 0)
+                    {
+                        sys_consoletext[sys_consolelen] = 0;
+                        sys_consolelen = 0;
+                        return ConsoleText();
+                    }
+                    else if (sc_return_on_enter)
+                    {
+                        // special case to allow exiting from the error handler on Enter
+                        sys_consoletext[0] = (byte)'\r';
+                        sys_consolelen = 0;
+                        return ConsoleText();
+                    }
+
+                    break;
+
+                case '\b':
+                    Sys_ConsoleWrite("\b \b"u8.ToArray());
+                    if (sys_consolelen != 0)
+                    {
+                        sys_consolelen--;
+                    }
+
+                    break;
+
+                default:
+                    if (ch >= ' ')
+                    {
+                        Sys_ConsoleWrite([(byte)ch]);
+                        sys_consoletext[sys_consolelen] = (byte)ch;
+                        sys_consolelen = (sys_consolelen + 1) & 0xff;
+                    }
+
+                    break;
+            }
+        }
+
+        return null;
+    }
+
+    // Sys_ConsoleInput's text, up to its 0 (or its end: the static array starts zeroed)
+    private string ConsoleText()
+    {
+        int length = Array.IndexOf(sys_consoletext, (byte)0);
+        return System.Text.Encoding.Latin1.GetString(sys_consoletext, 0, length < 0 ? sys_consoletext.Length : length);
+    }
+
+    // sys_win.c: Sys_Sleep
+    public void Sys_Sleep() => system.Sleep();
 
     // sys_win.c: Sys_SendKeyEvents: the window's messages to vid_win.c's window procedure; closing the window quits
     // (WinQuake asks first). The CD drive's MM_MCINOTIFY messages come to the window procedure too:

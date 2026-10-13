@@ -37,6 +37,16 @@ catch (QuakeException e)
 
 static int Run(CommandLine commandLine)
 {
+    int quitAfter = commandLine.CheckParm("-quitafter");
+    double quitTime = quitAfter != 0 && quitAfter < commandLine.Argc - 1
+        ? double.Parse(commandLine.Argv(quitAfter + 1), CultureInfo.InvariantCulture)
+        : double.MaxValue;
+
+    if (commandLine.CheckParm("-dedicated") != 0)
+    {
+        return Dedicated(commandLine, quitTime);
+    }
+
     // a window until the engine sets its first mode
     using var window = new SdlWindow("QuakeSharp", 640, 480, fullscreen: false);
     using var presenter = new VulkanPresenter(
@@ -46,11 +56,6 @@ static int Run(CommandLine commandLine)
     {
         SquarePixels = commandLine.CheckParm("-noaspect") != 0,
     };
-
-    int quitAfter = commandLine.CheckParm("-quitafter");
-    double quitTime = quitAfter != 0 && quitAfter < commandLine.Argc - 1
-        ? double.Parse(commandLine.Argv(quitAfter + 1), CultureInfo.InvariantCulture)
-        : double.MaxValue;
 
     int record = commandLine.CheckParm("-recordevents");
     return record != 0 && record < commandLine.Argc - 1
@@ -102,6 +107,56 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     catch (QuitException)
     {
         return 0;
+    }
+}
+
+// sys_win.c: WinMain for a dedicated server (-dedicated): no window, video or sound; the console's text on standard
+// output and its input from standard input, edited and echoed by Sys_ConsoleInput; a frame once sys_ticrate has
+// passed, sleeping between. A Sys_Error shows in the console, which waits for Enter (up to a minute) before exiting.
+static int Dedicated(CommandLine commandLine, double quitTime)
+{
+    string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
+    using var console = new DedicatedConsole();
+    var system = new RealSystem(console);
+    // the virtual machine's Winsock, alone on its LAN, until the real network's comes (design.md §11.5, step 4)
+    var winsock = new VirtualWinsock(1, () => (long)(system.FloatTime() * 64));
+    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, winsock: winsock);
+
+    try
+    {
+        engine.Sys_Printf("Host_Init\n");
+        engine.Host_Init();
+
+        double oldtime = engine.Sys_FloatTime();
+        while (true)
+        {
+            double newtime = engine.Sys_FloatTime();
+            double time = newtime - oldtime;
+
+            while (time < engine.sys_ticrate.value)
+            {
+                engine.Sys_Sleep();
+                newtime = engine.Sys_FloatTime();
+                time = newtime - oldtime;
+            }
+
+            engine.Host_Frame((float)time);
+            oldtime = newtime;
+
+            if (newtime > quitTime)
+            {
+                throw engine.Sys_Quit();
+            }
+        }
+    }
+    catch (QuitException)
+    {
+        return 0;
+    }
+    catch (QuakeException e)
+    {
+        engine.Sys_ErrorDedicated(e.Message, wait: true);
+        return 1;
     }
 }
 
@@ -219,12 +274,31 @@ internal sealed class WindowVideo(SdlWindow window, VulkanPresenter presenter) :
     public void SetMode(int width, int height, bool fullscreen) => window.SetMode(width, height, fullscreen);
 }
 
-/// <summary>sys_win.c's Sys_Printf and Sys_FloatTime: the console's text on stdout, the time from a stopwatch.</summary>
-internal sealed class RealSystem : ISystem
+/// <summary>
+/// sys_win.c's Sys_Printf, Sys_FloatTime and Sys_Sleep, and a dedicated server's console: the console's text on stdout
+/// (a dedicated server's through its console), the time from a stopwatch.
+/// </summary>
+internal sealed class RealSystem(DedicatedConsole? console = null) : ISystem
 {
     private readonly Stopwatch clock = Stopwatch.StartNew();
 
-    public void Printf(string text) => Console.Write(text);
+    public void Printf(string text)
+    {
+        if (console == null)
+        {
+            Console.Write(text);
+        }
+    }
 
     public double FloatTime() => clock.Elapsed.TotalSeconds;
+
+    public void Sleep() => Thread.Sleep(1);
+
+    public void ConsoleWrite(ReadOnlySpan<byte> text) => console?.Write(text);
+
+    public bool ConsoleRead(out byte ch)
+    {
+        ch = 0;
+        return console != null && console.Read(out ch);
+    }
 }

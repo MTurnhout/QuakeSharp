@@ -31,6 +31,7 @@ public sealed class SharewareTests : IDisposable
             A 15cec9bb23d45893
             I f31eab16f93a6026
             U cbf29ce484222325 0
+            O cbf29ce484222325 0
             """,
         ["demo2"] = """
             F 4476 4475 40517c0000000000 854ecba8 56617
@@ -51,6 +52,7 @@ public sealed class SharewareTests : IDisposable
             A 95173324a36ac443
             I f31eab16f93a6026
             U cbf29ce484222325 0
+            O cbf29ce484222325 0
             """,
         ["demo3"] = """
             F 5269 5268 4054950000000000 4b3c629a 300387
@@ -71,6 +73,7 @@ public sealed class SharewareTests : IDisposable
             A 4459e022157a8973
             I f31eab16f93a6026
             U cbf29ce484222325 0
+            O cbf29ce484222325 0
             """,
     };
 
