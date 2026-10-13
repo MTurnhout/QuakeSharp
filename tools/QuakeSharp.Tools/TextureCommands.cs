@@ -10,10 +10,10 @@ namespace QuakeSharp.Tools;
 internal static class TextureCommands
 {
     /// <summary>
-    /// Every texture a pack can replace, as PNG under its pack name (decision 68): the BSPs' textures (once under
-    /// textures/ per name, under textures/&lt;map&gt;/ where a BSP's differs from the first seen), the skies with the
-    /// front layer's index 0 as alpha, every alias model's skins; with each lit texture its fullbright texels on black
-    /// (_glow) where it has any; and textures.txt, what was written and where it is used.
+    /// Every texture a pack can replace, as PNG under its pack name (decision 68): the BSPs' textures (of those
+    /// sharing a name, the one most BSPs have under textures/, each other under textures/&lt;map&gt;/), the skies with
+    /// the front layer's index 0 as alpha, every alias model's skins; with each lit texture its fullbright texels on
+    /// black (_glow) where it has any; and textures.txt, what was written and where it is used.
     /// </summary>
     public static int ExportTextures(string baseDir, string outDir, string[] engineArgs)
     {
@@ -21,8 +21,139 @@ internal static class TextureCommands
         FileSystem fs = Commands.Init(baseDir, engineArgs);
         Directory.CreateDirectory(outDir);
         byte[] palette = Commands.Load(fs, "gfx/palette.lmp")[..768];
-        List<string> names = [.. fs.ListFiles()];
         var written = new SortedDictionary<string, Entry>(StringComparer.Ordinal);
+        foreach (GameTexture t in Scan(fs).Textures)
+        {
+            WriteTexture(outDir, t.File, t.Name, t.Width, t.Height, t.Pixels, palette, written, t.Users);
+        }
+
+        var list = new StringBuilder();
+        list.Append("# QuakeSharp's texture export (design.md §11.7): file, size, what uses it\n");
+        foreach ((string file, Entry entry) in written)
+        {
+            list.Append($"{file}.png {entry.Width}x{entry.Height} {string.Join(' ', entry.Users)}\n");
+        }
+
+        File.WriteAllText(Path.Combine(outDir, "textures.txt"), list.ToString());
+        Console.WriteLine($"wrote {written.Count} textures to {outDir} (textures.txt lists them)");
+        return 0;
+    }
+
+    /// <summary>
+    /// What a pack (a game directory) replaces of the game's textures and what it lacks (with <c>-missing</c>, each
+    /// one), and its problems: a map's own texture missing where the shared replacement, made from another texture,
+    /// would be drawn; files no texture of the game has; sizes not a whole multiple of the game's; layers without
+    /// their texture; player.mdl's skins without both _pants and _shirt (players then drawn with the game's skin,
+    /// decision 69); files that do not decode.
+    /// </summary>
+    public static int CheckPack(string baseDir, string packDir, string[] engineArgs)
+    {
+        bool listMissing = engineArgs.Contains("-missing");
+        FileSystem fs = Commands.Init(baseDir, [.. engineArgs.Where(a => a != "-missing")]);
+        (List<GameTexture> textures, HashSet<string> known) = Scan(fs);
+        var pack = new EnhancedTexturePack([packDir]);
+        var problems = new List<string>();
+        var missing = new List<string>();
+        var images = new Dictionary<string, EnhancedImage?>(StringComparer.Ordinal);
+
+        EnhancedImage? Image(string file)
+        {
+            if (!images.TryGetValue(file, out EnhancedImage? image))
+            {
+                try
+                {
+                    image = EnhancedImage.Load(file);
+                }
+                catch (Exception e) when (e is InvalidDataException or IOException)
+                {
+                    problems.Add($"does not decode: {Rel(packDir, file)} ({e.Message})");
+                }
+
+                images[file] = image;
+            }
+
+            return image;
+        }
+
+        int replaced = 0;
+        foreach (GameTexture t in textures)
+        {
+            string? file = pack.Find(t.File);
+            string shared = EnhancedPackNames.SharedTexture(t.Name);
+            if (file == null && t.File.StartsWith("textures/", StringComparison.Ordinal) && t.File != shared && pack.Find(shared) != null)
+            {
+                problems.Add($"{t.File} missing: {t.Users[0]} would draw {shared}, made from another texture");
+            }
+
+            if (file == null)
+            {
+                missing.Add(t.File);
+                continue;
+            }
+
+            replaced++;
+            if (Image(file) is EnhancedImage image
+                && (image.Width % t.Width != 0 || image.Height % t.Height != 0 || image.Width / t.Width != image.Height / t.Height))
+            {
+                problems.Add($"{t.File}: {image.Width}x{image.Height} is not a whole multiple of the game's {t.Width}x{t.Height}");
+            }
+
+            if (t.File.StartsWith("progs/player.mdl_", StringComparison.Ordinal)
+                && (pack.Find(t.File + EnhancedPackNames.Pants) == null || pack.Find(t.File + EnhancedPackNames.Shirt) == null))
+            {
+                problems.Add($"{t.File}: without both {EnhancedPackNames.Pants} and {EnhancedPackNames.Shirt}, players are drawn with the game's skin");
+            }
+        }
+
+        string[] layers = [EnhancedPackNames.Glow, EnhancedPackNames.Luma, EnhancedPackNames.Norm, EnhancedPackNames.Gloss, EnhancedPackNames.Pants, EnhancedPackNames.Shirt];
+        foreach ((string name, string file) in pack.Files.OrderBy(f => f.Key, StringComparer.Ordinal))
+        {
+            string? layer = layers.FirstOrDefault(l => name.EndsWith(l, StringComparison.Ordinal));
+            string texture = layer == null ? name : name[..^layer.Length];
+            if (!known.Contains(texture))
+            {
+                problems.Add($"not a texture of the game: {Rel(packDir, file)}");
+            }
+            else if (layer != null && pack.Find(texture) == null)
+            {
+                problems.Add($"{Rel(packDir, file)}: a layer without its texture {texture}");
+            }
+
+            Image(file);
+        }
+
+        foreach (string problem in problems)
+        {
+            Console.WriteLine(problem);
+        }
+
+        if (listMissing)
+        {
+            foreach (string name in missing)
+            {
+                Console.WriteLine($"missing: {name}");
+            }
+        }
+
+        string more = listMissing ? "" : " (-missing lists them)";
+        Console.WriteLine($"{pack.Count} files; replaces {replaced} of the game's {textures.Count} textures, {missing.Count} missing{more}; {problems.Count} problems");
+        return 0;
+    }
+
+    private static string Rel(string root, string file) => Path.GetRelativePath(root, file).Replace('\\', '/');
+
+    /// <summary>A texture of the game under its pack name: <see cref="Name"/> is the BSP's texture name, or the
+    /// skin's pack name.</summary>
+    private sealed record GameTexture(string File, string Name, int Width, int Height, byte[] Pixels, string[] Users);
+
+    // The game's textures as a pack names them (of the BSPs' textures sharing a name, the one most BSPs have under
+    // textures/, each other under textures/<map>/ of every BSP that has it; every alias skin), and every name a pack
+    // may give them, in lower case (textures/<name> and textures/<map>/<name> for each BSP with the name; the skins)
+    private static (List<GameTexture> Textures, HashSet<string> Known) Scan(FileSystem fs)
+    {
+        List<string> names = [.. fs.ListFiles()];
+        var textures = new List<GameTexture>();
+        var known = new HashSet<string>(StringComparer.Ordinal);
 
         // each name's different textures, with the BSPs that have them, in the order first seen
         var variants = new Dictionary<string, List<Variant>>(StringComparer.Ordinal);
@@ -39,22 +170,22 @@ internal static class TextureCommands
                 }
 
                 same.Maps.Add(map);
+                known.UnionWith(EnhancedPackNames.WorldTexture(map, name).Select(n => n.ToLowerInvariant()));
             }
         }
 
-        // the one most BSPs have under textures/, every other under textures/<map>/ of each BSP that has it
         foreach ((string name, List<Variant> found) in variants)
         {
             Variant shared = found.MaxBy(v => v.Maps.Count)!;
             foreach (Variant v in found)
             {
-                IEnumerable<(string File, string[] Users)> files = v == shared
-                    ? [(EnhancedPackNames.SharedTexture(name), [.. v.Maps])]
-                    : v.Maps.Select(m => (EnhancedPackNames.MapTexture(m, name), new[] { m }));
-                foreach ((string file, string[] users) in files)
+                if (v == shared)
                 {
-                    WriteTexture(outDir, file, name, v.Width, v.Height, v.Pixels, palette, written, users);
+                    textures.Add(new GameTexture(EnhancedPackNames.SharedTexture(name), name, v.Width, v.Height, v.Pixels, [.. v.Maps]));
+                    continue;
                 }
+
+                textures.AddRange(v.Maps.Select(m => new GameTexture(EnhancedPackNames.MapTexture(m, name), name, v.Width, v.Height, v.Pixels, [m])));
             }
         }
 
@@ -63,20 +194,12 @@ internal static class TextureCommands
             foreach ((int skin, int frame, int width, int height, byte[] pixels) in Skins(Commands.Load(fs, model)))
             {
                 string file = EnhancedPackNames.Skin(model, skin, frame);
-                WriteTexture(outDir, file, file, width, height, pixels, palette, written, [model]);
+                textures.Add(new GameTexture(file, file, width, height, pixels, [model]));
+                known.Add(file.ToLowerInvariant());
             }
         }
 
-        var list = new StringBuilder();
-        list.Append("# QuakeSharp's texture export (design.md §11.7): file, size, what uses it\n");
-        foreach ((string file, Entry entry) in written)
-        {
-            list.Append($"{file}.png {entry.Width}x{entry.Height} {string.Join(' ', entry.Users)}\n");
-        }
-
-        File.WriteAllText(Path.Combine(outDir, "textures.txt"), list.ToString());
-        Console.WriteLine($"wrote {written.Count} textures to {outDir} (textures.txt lists them)");
-        return 0;
+        return (textures, known);
     }
 
     private sealed record Entry(int Width, int Height, string[] Users);

@@ -5,3 +5,5 @@
 *.dem binary
 *.lmp binary
 *.dat binary
+*.tga binary
+*.rgba binary

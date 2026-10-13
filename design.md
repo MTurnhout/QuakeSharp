@@ -1564,7 +1564,19 @@ files that do not decode.
    layer needs its base texture. The hand check of upscaled textures is the user's to make.*
 2. **The pack in Core**: `EnhancedTexturePack` (the directories, the lookup by name, the decoders) and
    `texture-pack-check`, which needs the decoders; unit tests with small PNG and TGA files written for the tests
-   (colour types, bit depths, interlacing, RLE; no game data).
+   (colour types, bit depths, interlacing, RLE; no game data). *Done: `EnhancedImage` decodes PNG (every colour type
+   and bit depth, the five filters, Adam7, tRNS, the chunks' CRCs checked; 16-bit samples by their high byte) and TGA
+   (colour-mapped, true colour and grey, raw and RLE, 8/15/16/24/32 bits, either origin), up to 8192×8192, to RGBA;
+   a file that does not decode is an `InvalidDataException`. `EnhancedTexturePack` lists the `textures/` and `progs/`
+   folders of its directories once when made (the folders found whatever their case), each name in lower case: the
+   first directory's file wins, PNG before TGA within one; `FindWorld` (the map's own, then the shared), `FindLayer`
+   (`_glow`, else `_luma`). `EnhancedImageTests`: 27 files written by ffmpeg 9.0.2 from a 13×7 picture (`Images/`,
+   each beside ffmpeg's own decoding as raw RGBA; every filter, 1-, 8- and 16-bit grey, grey with alpha, RGB, RGBA,
+   palettes, interlaced, TGA raw and RLE) decode as ffmpeg decodes them (16-bit and 5-bit samples within 1, where
+   ffmpeg rounds); 2- and 4-bit palettes, tRNS, a bottom-left and a right-to-left TGA, 16-bit TGA alpha and broken
+   files made in the test. `texture-pack-check` on a pack made from the export with faults planted (a sky resized
+   to 500×250, e1m1's own `sky4` removed, a file that does not decode, a name the game lacks, a `_norm` without its
+   texture, a map's folder in upper case) reports each fault and finds the upper-case folder.*
 3. **World textures**: the loader thread, the replacement uploaded in place of the game's colours, the fullbrights,
    water and sky; `enhanced_textures`; the comparison's numbers without a pack unchanged.
 4. **Alias skins**, players' colours.

@@ -4,4 +4,9 @@
     <ProjectReference Include="..\..\src\QuakeSharp.Core\QuakeSharp.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- reference images for EnhancedImageTests, written by ffmpeg (no game data) -->
+    <None Include="Images\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

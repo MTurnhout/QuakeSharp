@@ -11,6 +11,7 @@ try
         ["extract", var baseDir, var file, var output, .. var engineArgs] => Commands.Extract(baseDir, file, output, engineArgs),
         ["dump-graphics", var baseDir, var outDir, .. var engineArgs] => Commands.DumpGraphics(baseDir, outDir, engineArgs),
         ["export-textures", var baseDir, var outDir, .. var engineArgs] => TextureCommands.ExportTextures(baseDir, outDir, engineArgs),
+        ["texture-pack-check", var baseDir, var packDir, .. var engineArgs] => TextureCommands.CheckPack(baseDir, packDir, engineArgs),
         ["shot2png", var shot, var output] => Commands.ShotToPng(shot, output),
         ["trace", var baseDir, var output, .. var engineArgs] => TraceCommands.Trace(baseDir, output, engineArgs),
         ["netrun", var baseDir, var outDir, var game] => TraceCommands.NetRun(baseDir, outDir, game),
@@ -46,6 +47,9 @@ static int Usage()
                                                             every texture a texture pack can replace, as PNG
                                                             under its pack name (design.md §11.7), and
                                                             textures.txt listing them
+          quakesharp-tools texture-pack-check <quake-dir> <pack-dir> [-missing] [engine args]
+                                                            what a texture pack (a game directory) replaces,
+                                                            lacks, and its problems
           quakesharp-tools shot2png <in.shot> <out.png>     a frame the oracle wrote (-traceshot) as PNG
           quakesharp-tools shot-diff <a.shot> <b.shot> [out.png]
                                                             where two frames differ (the PNG: a, b, and a with
