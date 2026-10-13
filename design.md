@@ -1018,6 +1018,15 @@ queued per socket, broadcast to the LAN, and the error codes Windows gives (`WSA
 `WSAECONNRESET` after a datagram to a closed port, as today's Windows reports the ICMP answer: to be audited). The
 machine now has a name, so net_wins.c sets `hostname` to it and every trace changes once and is regenerated.
 
+**Waiting.** WinQuake waits for the network inside a frame, in loops that end on an answer or a time limit:
+`_Datagram_Connect` (2.5 s, three tries), `NET_SendToAll` (a level change, the end of a game) and
+`Host_ShutdownServer`'s flush (3 s). On a clock that only moves between frames they never end (§6.3), and no other
+host could answer during them. The virtual machine's rule, the same on both sides: a `recvfrom` that finds nothing on
+a socket that already found nothing since the clock last moved moves the clock one step (1/64 s) before it answers,
+the time a real machine spends waiting; datagrams due by then arrive first. A frame that waits so lasts several steps;
+`@udp` lines are keyed by the clock's step, which runs ahead of the frame number after a wait. An ordinary frame reads
+each socket until it is empty once, so it never waits.
+
 **Trace format 7** adds a line after `I`, and scripted input takes datagrams:
 
 | Line | Fields |
@@ -1029,8 +1038,9 @@ machine's port before the frame, as `@mouse` and `@key` arrive.
 
 **Games between hosts.** The oracle cannot run two engines in one process (its state is the C's globals), and two
 processes on real sockets would not be deterministic. So QuakeSharp's `NetRun` (Diagnostics) runs several engines in
-one process, each its own `VirtualWinsock` on one virtual LAN and one virtual clock, a datagram delivered at the
-receiver's next frame, each host with its own `-traceevents`; it writes each host's trace and an events file with the
+one process, each its own `VirtualWinsock` on one virtual LAN, in lockstep on one virtual clock: at each step every
+host runs a frame or, when waiting, one step of its wait; a datagram sent during a step arrives at the next. Each host
+has its own `-traceevents`; it writes each host's trace and an events file with the
 host's input and every datagram it received as `@udp` lines. The oracle replays each host alone from its file. When
 every host's trace matches the oracle's, the oracle's hosts given the same datagrams sent the same ones, so they would
 have played the same game together, frame for frame. A lossy LAN (a datagram dropped by a fixed rule) reaches
@@ -1043,7 +1053,8 @@ traces script it with `<frame> @stdin <text>` lines, typed into `Sys_ConsoleInpu
 
 **The real Winsock** (`SocketWinsock`, in the platform project): .NET UDP sockets with Winsock 1.1's semantics, on
 Windows and Linux alike: non-blocking, broadcast, the machine's name and first IPv4 address, `MSG_PEEK`, the errors
-mapped to Winsock's codes. `-recordevents` records every datagram that arrives as an `@udp` line, so a game played over
+mapped to Winsock's codes. `-recordevents` keeps the waiting rule on its virtual clock (a step waited is a step of real time), takes what
+the real sockets received at each step and records it as `@udp` lines, so a game played over
 a real network replays in the oracle and in `quakesharp-tools trace`. No IPv6 and no NAT traversal: the original
 protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
 
