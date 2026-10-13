@@ -3,7 +3,8 @@
 // lightmap times its style's value, R_AddDynamicLights' lights; bound, inverted and shifted), blended as
 // R_DrawSurfaceBlock8 blends across its blocks; then either the colormap's row of that light looked up for the texel
 // (the software's look) or the texel's colour times the light, up to twice as bright (true colour), through the
-// palette's shifts and gamma.
+// palette's shifts and gamma. With a pack's material (design.md §11.7, decision 71), each dynamic light's part of the
+// light shaped by the material's normal per pixel, and its gloss as a highlight.
 import frame;
 
 struct Surface
@@ -20,6 +21,7 @@ struct Surface
 
 [[vk::binding(0, 2)]] Texture2D<uint> textureIndices; // the BSP's four mip levels
 [[vk::binding(1, 2)]] Sampler2D textureColors;        // RGB, fullbright in alpha
+[[vk::binding(2, 2)]] Sampler2D textureMaterial;      // a pack's: the tangent space normal in RGB, the gloss in alpha
 
 struct DrawParams
 {
@@ -27,7 +29,7 @@ struct DrawParams
     float4 model1;
     float4 model2;
     float2 textureSize;
-    int flags;     // 4: the colours are a pack's (DRAW_REPLACED)
+    int flags;     // 4: the colours are a pack's (DRAW_REPLACED); 8: and a material of its (DRAW_MATERIAL)
     int pad;
 };
 
@@ -49,6 +51,7 @@ struct VertexOutput
     float2 st : TEXCOORD0;
     nointerpolation int surface : TEXCOORD1;
     float3 world : TEXCOORD2;
+    float3 local : TEXCOORD3; // in the model's own space, as the surfaces' planes and axes are
 };
 
 static const int SURF_PLANEBACK = 2;
@@ -58,10 +61,17 @@ static const float BACKFACE_EPSILON = 0.01;
 // the eye, in the model's space, more than BACKFACE_EPSILON in front of the plane, or behind it for SURF_PLANEBACK)
 bool facesEye(Surface surf)
 {
-    float3 eye = viewOrigin() - float3(draw.model0.w, draw.model1.w, draw.model2.w);
-    float3 local = (eye.x * draw.model0.xyz) + (eye.y * draw.model1.xyz) + (eye.z * draw.model2.xyz);
-    float d = dot(local, surf.plane.xyz) - surf.plane.w;
+    float d = dot(modelEye(), surf.plane.xyz) - surf.plane.w;
     return (surf.light.z & SURF_PLANEBACK) != 0 ? d < -BACKFACE_EPSILON : d > BACKFACE_EPSILON;
+}
+
+float3 modelOrigin() { return float3(draw.model0.w, draw.model1.w, draw.model2.w); }
+
+// the eye in the model's own space
+float3 modelEye()
+{
+    float3 eye = viewOrigin() - modelOrigin();
+    return (eye.x * draw.model0.xyz) + (eye.y * draw.model1.xyz) + (eye.z * draw.model2.xyz);
 }
 
 [shader("vertex")]
@@ -75,6 +85,7 @@ VertexOutput vertexMain(VertexInput input)
     o.st = input.st;
     o.surface = input.surface;
     o.world = world;
+    o.local = input.position;
     return o;
 }
 
@@ -92,6 +103,23 @@ int luxelLight(Surface surf, int s, int t, int smax, int size)
         return 0; // r_fullbright, or a world without light data: the blocks stay 0, the brightest
     }
 
+    uint block = staticBlock(surf, s, t, smax, size);
+    for (int l = 0; l < dlightCount(); l++)
+    {
+        float add;
+        if (dlightReaches(surf, l, s, t, add))
+        {
+            block = uint(int(block + add));
+        }
+    }
+
+    return lightFromBlock(block);
+}
+
+// r_surf.c: R_BuildLightMap's block for one luxel before the dynamic lights: the ambient light and each lightmap times
+// its style's value
+uint staticBlock(Surface surf, int s, int t, int smax, int size)
+{
     uint block = ambientLight() << 8;
     int offset = surf.light.x;
     for (int map = 0; map < 4 && offset >= 0; map++)
@@ -106,33 +134,38 @@ int luxelLight(Surface surf, int s, int t, int smax, int size)
         offset += size;
     }
 
-    // the dynamic lights, in the entity's own space (the software moves them by the entity's origin)
-    for (int l = 0; l < dlightCount(); l++)
-    {
-        float4 light = dlight(l);
-        float3 origin = light.xyz - float3(draw.model0.w, draw.model1.w, draw.model2.w);
-        float dist = dot(origin, surf.plane.xyz) - surf.plane.w;
-        float rad = light.w - abs(dist);
-        float minlight = dlightMinlight(l);
-        if (rad < minlight)
-        {
-            continue;
-        }
+    return block;
+}
 
-        minlight = rad - minlight;
-        float3 impact = origin - (surf.plane.xyz * dist);
-        float localS = dot(impact, surf.vecs0.xyz) + surf.vecs0.w - surf.extent.x;
-        float localT = dot(impact, surf.vecs1.xyz) + surf.vecs1.w - surf.extent.y;
-        int sd = abs(int(localS - (s * 16)));
-        int td = abs(int(localT - (t * 16)));
-        float d = sd > td ? sd + (td >> 1) : td + (sd >> 1);
-        if (d < minlight)
-        {
-            block = uint(int(block + ((rad - d) * 256)));
-        }
+// r_surf.c: R_AddDynamicLights for one light and luxel, in the entity's own space (the software moves the lights by
+// the entity's origin): whether it reaches the luxel, and what it adds to its block
+bool dlightReaches(Surface surf, int l, int s, int t, out float add)
+{
+    add = 0;
+    float4 light = dlight(l);
+    float3 origin = light.xyz - modelOrigin();
+    float dist = dot(origin, surf.plane.xyz) - surf.plane.w;
+    float rad = light.w - abs(dist);
+    float minlight = dlightMinlight(l);
+    if (rad < minlight)
+    {
+        return false;
     }
 
-    return lightFromBlock(block);
+    minlight = rad - minlight;
+    float3 impact = origin - (surf.plane.xyz * dist);
+    float localS = dot(impact, surf.vecs0.xyz) + surf.vecs0.w - surf.extent.x;
+    float localT = dot(impact, surf.vecs1.xyz) + surf.vecs1.w - surf.extent.y;
+    int sd = abs(int(localS - (s * 16)));
+    int td = abs(int(localT - (t * 16)));
+    float d = sd > td ? sd + (td >> 1) : td + (sd >> 1);
+    if (d < minlight)
+    {
+        add = (rad - d) * 256;
+        return true;
+    }
+
+    return false;
 }
 
 int lightFromBlock(uint block)
@@ -156,6 +189,68 @@ float surfaceLight(Surface surf, float2 st)
     float c = luxelLight(surf, l0.x, l1.y, smax, size);
     float d = luxelLight(surf, l1.x, l1.y, smax, size);
     return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+// The light at st with a pack's material (decision 71): surfaceLight's, but each dynamic light's part of each luxel
+// times how much more the pixel's normal faces the light than the surface itself does (a flat normal changes nothing;
+// the lightmaps' light, which has no direction, stays as it is); and each light's highlight on the gloss (Blinn-Phong,
+// exponent 32), as much of a block as the light's part at the pixel, in highlight
+float materialLight(Surface surf, float2 st, float3 local, float4 material, out float highlight)
+{
+    highlight = 0;
+    if (frameFullbright())
+    {
+        return 0;
+    }
+
+    int smax = (surf.extent.z >> 4) + 1;
+    int tmax = (surf.extent.w >> 4) + 1;
+    float2 l = clamp((st - float2(surf.extent.xy)) / 16.0, float2(0, 0), float2(smax - 1, tmax - 1));
+    int2 l0 = int2(floor(l));
+    int2 l1 = min(l0 + 1, int2(smax - 1, tmax - 1));
+    float2 f = l - float2(l0);
+    int size = smax * tmax;
+    int2 corners[4] = { l0, int2(l1.x, l0.y), int2(l0.x, l1.y), l1 };
+    float weights[4] = { (1 - f.x) * (1 - f.y), f.x * (1 - f.y), (1 - f.x) * f.y, f.x * f.y };
+    uint blocks[4];
+    for (int c = 0; c < 4; c++)
+    {
+        blocks[c] = staticBlock(surf, corners[c].x, corners[c].y, smax, size);
+    }
+
+    // the tangent frame: the texture's s axis (the image's right), its t axis (the image's down), the side drawn
+    float3 n = (surf.light.z & SURF_PLANEBACK) != 0 ? -surf.plane.xyz : surf.plane.xyz;
+    float3 sAxis = normalize(surf.vecs0.xyz - (n * dot(surf.vecs0.xyz, n)));
+    float3 tAxis = normalize(surf.vecs1.xyz - (n * dot(surf.vecs1.xyz, n)));
+    float3 tangent = (material.xyz * 2.0) - 1.0;
+    float3 normal = normalize((sAxis * tangent.x) - (tAxis * tangent.y) + (n * tangent.z));
+    float3 toEye = normalize(modelEye() - local);
+    for (int i = 0; i < dlightCount(); i++)
+    {
+        float3 toLight = normalize((dlight(i).xyz - modelOrigin()) - local);
+        float facing = max(0.0, 1.0 + dot(normal, toLight) - dot(n, toLight));
+        float part = 0;
+        for (int c = 0; c < 4; c++)
+        {
+            float add;
+            if (dlightReaches(surf, i, corners[c].x, corners[c].y, add))
+            {
+                blocks[c] = uint(int(blocks[c] + (add * facing)));
+                part += add * weights[c];
+            }
+        }
+
+        if (dot(n, toLight) > 0 && dot(normal, toLight) > 0)
+        {
+            highlight += part * material.w * pow(max(dot(normal, normalize(toLight + toEye)), 0.0), 32.0);
+        }
+    }
+
+    float la = lightFromBlock(blocks[0]);
+    float lb = lightFromBlock(blocks[1]);
+    float lc = lightFromBlock(blocks[2]);
+    float ld = lightFromBlock(blocks[3]);
+    return lerp(lerp(la, lb, f.x), lerp(lc, ld, f.x), f.y);
 }
 
 // the mip level the hardware would pick, for the palette indices (which cannot be filtered)
@@ -197,6 +292,7 @@ uint skyIndex(float3 world, float2 targetPixel)
 }
 
 static const int DRAW_REPLACED = 4;
+static const int DRAW_MATERIAL = 8;
 
 // a texel of a pack's sky with its colour times its alpha (so the clear texels' colour does not darken the edges)
 float4 premultiplied(int x, int y)
@@ -289,6 +385,17 @@ float4 fragmentMain(VertexOutput input) : SV_Target
         }
 
         return float4(shiftColor(textureColors.Sample(warped / 64.0).rgb), 1);
+    }
+
+    if ((draw.flags & DRAW_MATERIAL) != 0 && !colormapLighting())
+    {
+        float2 uv = input.st / draw.textureSize;
+        float highlight;
+        float light = materialLight(surf, input.st, input.local, textureMaterial.Sample(uv), highlight);
+        float4 texel = textureColors.Sample(uv);
+        float scale = ((255.0 * 256.0) - (4.0 * light)) / 32768.0;
+        float3 lit = (texel.rgb * lerp(scale, 1.0, texel.a)) + ((highlight / 32768.0) * (1.0 - texel.a));
+        return float4(shiftColor(lit), 1);
     }
 
     float light = surfaceLight(surf, input.st);

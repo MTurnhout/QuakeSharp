@@ -1520,7 +1520,7 @@ QuakeSpasm's and DarkPlaces', so packs made for them work:
 |---|---|---|
 | A world texture | `textures/<map>/<name>`, then `textures/<name>` | `<map>` is the BSP's name (`e1m1`): a map whose texture differs from another's of the same name. `*` in a name is `#` (`#water0`); `+0slip` stays as it is, so animated textures' frames are replaced one by one |
 | Its fullbright texels | `<name>_glow` or `<name>_luma` | Unlit, added to the lit colour (decision 70) |
-| Its normals, gloss | `<name>_norm`, `<name>_gloss` | Tangent space normals (alpha unused); gloss as the specular strength (decision 71) |
+| Its normals, gloss | `<name>_norm`, `<name>_gloss` | Tangent space normals, x the image's right and y its up (OpenGL's way; alpha unused); gloss as the specular strength (decisions 71, 74) |
 | The sky | `textures/<map>/sky<n>`, `textures/sky<n>` | The same layout as the BSP's (two layers side by side, the front one's index 0 the alpha) |
 | An alias skin | `progs/<model>.mdl_<skin>` | `<skin>` the skin's number; a skin group's frames `_<skin>_<frame>`; `_glow`, `_norm`, `_gloss` as above |
 | Players' colours | `progs/<model>.mdl_<skin>_pants`, `_shirt` | Grey layers over texels the colours leave black; each grey a place on the player's colour ramp (decision 73); an entity drawn with a colour translation uses the replacement only with both (decision 69) |
@@ -1536,7 +1536,7 @@ a replacement does not have.
 | World textures | The replacement's colours, lit by the same light (lightmaps, styles, dlights, overbright, the palette's shifts and gamma); turbulent surfaces warped as now; the sky's two layers from the replacement | Read by the loader, never through the game's files | Unit tests: the lookup's order (map, game, `id1`; user folder, Quake folder), `*` as `#`, case; the comparison without a pack unchanged |
 | Fullbrights | `_glow`/`_luma` unlit; without one, the game's fullbright texels (palette 224-255) scaled to the replacement's size and taken from its colours unlit, so lamps and lava still glow (decision 70) | GPU only | Unit tests of the mask's scaling |
 | Alias skins | Replacement skins, skin groups by their intervals as now; players' colours baked from `_pants` and `_shirt` per skin and colours (decision 73) | Read | By eye; unit tests of the names and the bake |
-| Materials | `_norm` and `_gloss` lit per pixel by the dynamic lights (r_light.c's falloff, as now, times the normal's facing; gloss as a highlight); the lightmaps' light, which has no direction, stays as it is (decision 71). `enhanced_materials`, on | GPU only | By eye; validation layer clean |
+| Materials | A world texture's `_norm` and `_gloss` lit per pixel by the dynamic lights (r_surf.c's falloff, as now, times the normal's facing; gloss as a highlight); the lightmaps' light, which has no direction, stays as it is (decision 71); alias skins' are not drawn (decision 74). `enhanced_materials`, on | GPU only | Unit tests of the maps' derivation and the material's making; by eye; validation layer clean |
 | Settings | `enhanced_textures` (1: a pack's textures where found), `enhanced_materials` (1), in `quakesharp.cfg` (decision 61) | Not the game's cvars | `EnhancedSettingsTests` |
 
 **The tools.** `quakesharp-tools export-textures <quake-dir> <out-dir> [engine args]` writes every texture a pack
@@ -1553,12 +1553,19 @@ coarse scale (the upscale, plus the game's texture resized and blurred, minus th
 the game's texels), as upscalers darken Quake's dark textures (step 1's hand check); a tiled export's middle cropped
 again; the alpha the upscale's where the game's texture has any. `quakesharp-tools texture-pack-check <quake-dir>
 <pack-dir> [engine args]` lists what a pack replaces, what it lacks, names the game has no texture for, sizes that are
-not a multiple of the game's, players' skins without both masks, and files that do not decode. A pack is made so:
+not a multiple of the game's, players' skins without both masks, and files that do not decode. `quakesharp-tools
+texture-pack-materials <pack-dir> [-strength <s>] [-smooth <sigma>] [-gloss <scale>] [-force]` derives material maps
+from a pack's colours, for an upscaler that makes colours only (decision 74): beside each world texture (not skies or
+turbulent ones, which are unlit) a `_norm`, its brightness as height smoothed by a Gaussian (σ 1 texel) and sloped by a
+Sobel filter wrapping round the texture, steepened 12 times (for a 4× pack: the dark textures' slopes are shallow), and a
+`_gloss`, three times the brightness times one less the saturation, squared (grey metal shines, brown wood and rust
+little); a layer the pack has already is kept. A pack is made so:
 
 ```
 quakesharp-tools export-textures <quake-dir> <export> -tiled
 realesrgan-ncnn-vulkan -i <export>/<folder> -o <upscaled>/<folder> -n realesrgan-x4plus   (each folder; or any upscaler)
 quakesharp-tools texture-pack-finish <export> <upscaled> <user folder or quake-dir>/id1
+quakesharp-tools texture-pack-materials <user folder or quake-dir>/id1                    (or a material generator's maps)
 quakesharp-tools texture-pack-check <quake-dir> <user folder or quake-dir>/id1
 ```
 
@@ -1639,7 +1646,28 @@ quakesharp-tools texture-pack-check <quake-dir> <user folder or quake-dir>/id1
    seen on an entity in a frame: WinQuake never draws the player's own entity (r_main.c, even with chase_active), and
    scripted deathmatch respawns left the bodies out of view; the translated path differs from the drawn one only by
    the bake's colours. The executable on demo1 under the validation layer with the pack: clean.*
-5. **Materials**: `_norm` and `_gloss` with the dynamic lights.
+5. **Materials**: `_norm` and `_gloss` with the dynamic lights. *Done: where the maps come from asked of the user
+   (decision 74): derived by `texture-pack-materials` from the colours, no download; the registered pack's 570 world
+   textures (764 files less the skies, turbulent textures, skins and layers) gave 1140 maps in 2 s.
+   `EnhancedMaterials` (Core) derives them, and makes a pack's material ready on the loader thread beside the colours
+   (`World`: RGB the `_norm`, alpha the `_gloss`'s brightest channel at the normals' size, a flat normal or no gloss
+   where one is missing, a full mip chain; none without the texture itself, for skies and turbulent textures). The
+   world has a texture set layout of its own now (binding 2 the material; the game's set and a pack's without one bind
+   a flat 1×1), so alias models and sprites keep theirs; `DrawParams.flags` 8 draws the material while
+   `enhanced_materials` is on. world.slang's light split as r_surf.c builds it, the lightmaps' block (`staticBlock`) and
+   each dynamic light's addition (`dlightReaches`), the same arithmetic as before; with a material, each light's
+   addition to each of the four luxels is scaled by 1 + N·L − N₀·L at the pixel (N the material's normal through the
+   surface's s and t axes and plane, N₀ the plane's, L towards the light; so a flat normal changes nothing), and its
+   highlight, Blinn-Phong with exponent 32 times the gloss, is as bright as the light's part there, unlit fullbright
+   texels left out. Unit tests: the derivation (flat, either slope's direction and size, the strength, wrapping, the
+   gloss of grey, colour and white) and the material's making (both maps at different sizes, one alone, none, a map's
+   own folder, skies and turbulent textures). enhanced-shot's frame list `dlights` lists the frames with dynamic lights.
+   Drawn: demo1 frame 600 (an explosion in front: the floor's metal strips catch its highlight, the bricks
+   their relief) and 880 (an explosion beside a wall: the stones' relief and sheen) with the pack and with it and its
+   maps; the default frames without a pack (demo1 300, 900, 1500, 2500) and with the colours-only pack (600, 880)
+   identical pixel for pixel to step 4's build, and the faithful comparison's numbers unchanged (97.5, 97.3, 98.9,
+   99.1% within 24). The executable on demo1 under the validation layer with the pack and its maps (1904 files): clean,
+   7.45 ms a frame.*
 6. **By hand**: a pack of e1's textures made with an upscaler, played through e1 in both lightings and switched;
    pictures described here; README's section on packs.
 
@@ -1724,6 +1752,7 @@ the faithful mode is unchanged.
 | 71 | Material maps (was D21) | Confirmed with the user: `_norm` and `_gloss` lit per pixel by the dynamic lights only (muzzle flashes, rockets, explosions, glowing items); the lightmaps' light stays flat, as it has no direction. Light direction for the lightmaps (DarkPlaces' "deluxemaps") is left out: it needs the maps' light compiled again by an outside tool or a direction guessed from the lights' entities, a milestone of its own if wanted (§11.7) | 2026-10-13 |
 | 72 | How packs are made (was D22) | Confirmed with the user: packs are made outside QuakeSharp: the tools export and check, the upscaling (by hand, RTX Remix's texture tools, an ESRGAN-type model, ...) is the user's; QuakeSharp downloads, ships and runs no model. RTX Remix's runtime is not used (it hooks Direct3D 9, QuakeSharp draws with Vulkan; its C API is a renderer of its own, a different project). No package: PNG through .NET's `ZLibStream` and TGA by QuakeSharp's own code (§11.7) | 2026-10-13 |
 | 73 | Players' colours from a pack's layers (milestone 13, step 4) | A `_shirt` or `_pants` layer's grey is read as a place on the player's colour ramp: the base palette's range (16-31, 96-111) gives each entry its brightness against the range's brightest, the grey falls on or between two entries, and the colour is the player's row's at those entries as CL_NewTranslation moves them (darker than the darkest entry: it darkened to black). So the colours keep the ramps' hues, which change along them, as the game's do; DarkPlaces' grey times one colour made Quake's orange pants olive. The bake is per skin and colours, on the loader thread (§11.7) | 2026-10-13 |
+| 74 | Material maps' making and lighting (milestone 13, step 5) | Confirmed with the user: normals and gloss for a pack whose upscaler makes colours only are derived by the tools (`texture-pack-materials`: brightness as height, a Sobel filter wrapping round the texture; gloss from brightness and want of colour), no download; an AI material generator (DeepBump and the like) is the user's own, as upscalers are (decision 72). Normals in tangent space with y the image's up (OpenGL's way). world.slang scales each dynamic light's part of each luxel by 1 + N·L − N₀·L (the material's normal against the plane's, so a flat normal draws as without one) and adds a Blinn-Phong highlight (exponent 32) times the gloss, as bright as the light's part. World surfaces only: the software adds a dynamic light to an alias model's point light as one number with no direction, before the clamps (r_main.c), so a skin's `_norm` and `_gloss` are not drawn (§11.7) | 2026-10-13 |
 
 ## 13. Open decisions
 

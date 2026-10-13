@@ -210,6 +210,86 @@ internal static class TextureCommands
         return 0;
     }
 
+    /// <summary>
+    /// Material maps for a pack's world textures, derived from their colours (design.md §11.7, step 5): beside each
+    /// texture under textures/ (not the sky's or turbulent ones, which are unlit, nor the layers) a _norm, its
+    /// brightness as height (<see cref="EnhancedMaterials.Normals"/>, wrapping as the texture repeats), and a _gloss
+    /// (<see cref="EnhancedMaterials.Gloss"/>); a layer the pack has already is kept unless <c>-force</c>.
+    /// </summary>
+    public static int MakeMaterials(string packDir, string[] options)
+    {
+        Commands.RefuseRepository(packDir);
+        double strength = 12, sigma = 1, gloss = 3;
+        bool force = false;
+        for (int i = 0; i < options.Length; i++)
+        {
+            switch (options[i])
+            {
+                case "-strength" when i + 1 < options.Length:
+                    strength = double.Parse(options[++i], System.Globalization.CultureInfo.InvariantCulture);
+                    break;
+                case "-smooth" when i + 1 < options.Length:
+                    sigma = double.Parse(options[++i], System.Globalization.CultureInfo.InvariantCulture);
+                    break;
+                case "-gloss" when i + 1 < options.Length:
+                    gloss = double.Parse(options[++i], System.Globalization.CultureInfo.InvariantCulture);
+                    break;
+                case "-force":
+                    force = true;
+                    break;
+                default:
+                    throw new Core.QuakeException($"texture-pack-materials: unknown option {options[i]}");
+            }
+        }
+
+        var pack = new EnhancedTexturePack([packDir]);
+        string[] layers = [EnhancedPackNames.Glow, EnhancedPackNames.Luma, EnhancedPackNames.Norm, EnhancedPackNames.Gloss,
+            EnhancedPackNames.Pants, EnhancedPackNames.Shirt];
+        var textures = pack.Files
+            .Where(f => f.Key.StartsWith("textures/", StringComparison.Ordinal))
+            .Where(f => !layers.Any(l => f.Key.EndsWith(l, StringComparison.Ordinal)))
+            .Where(f => !EnhancedPackNames.IsSky(f.Key[(f.Key.LastIndexOf('/') + 1)..]) && f.Key[f.Key.LastIndexOf('/') + 1] != '#')
+            .ToList();
+        int written = 0, kept = 0;
+        var failed = new System.Collections.Concurrent.ConcurrentBag<string>();
+        Parallel.ForEach(textures, texture =>
+        {
+            string stem = texture.Value[..^Path.GetExtension(texture.Value).Length];
+            EnhancedImage image;
+            try
+            {
+                image = EnhancedImage.Load(texture.Value);
+            }
+            catch (InvalidDataException e)
+            {
+                failed.Add($"{texture.Key}: {e.Message}");
+                return;
+            }
+
+            foreach ((string layer, Func<byte[]> make) in (ReadOnlySpan<(string, Func<byte[]>)>)
+                [(EnhancedPackNames.Norm, () => EnhancedMaterials.Normals(image.Rgba, image.Width, image.Height, strength, sigma, wrap: true)),
+                 (EnhancedPackNames.Gloss, () => EnhancedMaterials.Gloss(image.Rgba, image.Width, image.Height, gloss))])
+            {
+                if (!force && pack.FindLayer(texture.Key, layer) != null)
+                {
+                    Interlocked.Increment(ref kept);
+                    continue;
+                }
+
+                PngWriter.WriteRgba(stem + layer + ".png", image.Width, image.Height, make());
+                Interlocked.Increment(ref written);
+            }
+        });
+
+        foreach (string f in failed.Order(StringComparer.Ordinal))
+        {
+            Console.WriteLine($"skipped {f}");
+        }
+
+        Console.WriteLine($"wrote {written} maps for {textures.Count} textures in {packDir}; {kept} kept, {failed.Count} skipped");
+        return 0;
+    }
+
     // The upscale plus the game's texture (resized bilinearly to its size) blurred, minus the upscale blurred
     private static byte[] RestoreColour(EnhancedImage game, EnhancedImage big, double sigma)
     {

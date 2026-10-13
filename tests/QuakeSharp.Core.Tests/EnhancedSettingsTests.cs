@@ -17,6 +17,8 @@ public class EnhancedSettingsTests
         Assert.Equal(0, settings.Number("enhanced_lerpmodels"));
         Assert.Equal(0, settings.Number("enhanced_lerpmove"));
         Assert.Equal(0, settings.Number("enhanced_3d_sfx"));
+        Assert.Equal(1, settings.Number("enhanced_textures"));
+        Assert.Equal(1, settings.Number("enhanced_materials"));
     }
 
     [Fact]

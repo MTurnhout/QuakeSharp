@@ -189,7 +189,7 @@ public static class EnhancedReplacements
         }
     }
 
-    private static EnhancedImage? Load(string file)
+    internal static EnhancedImage? Load(string file)
     {
         try
         {

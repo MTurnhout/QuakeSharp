@@ -8,8 +8,9 @@ namespace QuakeSharp.Render.Vulkan;
 /// <summary>
 /// Texture packs in the enhanced view (design.md §11.7, milestone 13): a world texture's or an alias skin's replacement
 /// found, read and decoded on a loader thread (never the game thread, never through the game's files), uploaded by the
-/// render thread a few at a time, and drawn in its place in the true-colour look while enhanced_textures is on. Until
-/// then, and without a pack, the game's own texture is drawn.
+/// render thread a few at a time, and drawn in its place in the true-colour look while enhanced_textures is on; a world
+/// texture's _norm and _gloss with it, lit by the dynamic lights while enhanced_materials is on (step 5). Until then,
+/// and without a pack, the game's own texture is drawn.
 /// </summary>
 public sealed unsafe partial class VulkanPresenter
 {
@@ -36,6 +37,9 @@ public sealed unsafe partial class VulkanPresenter
     // world.slang's DrawParams.flags: the texture's colours are a pack's (the sky reads them then)
     private const int DrawReplaced = 4;
 
+    // world.slang's DrawParams.flags: the texture has a pack's material (normals, gloss) to light by the dynamic lights
+    private const int DrawMaterial = 8;
+
     // alias.slang's AliasParams.flags: the skin's colours are a pack's, the player's colours already in them
     private const int AliasReplaced = 2;
 
@@ -48,6 +52,11 @@ public sealed unsafe partial class VulkanPresenter
         private readonly ConcurrentDictionary<(string Model, int Skin, int Frame), EnhancedSkinLayers> playerSkins = new();
         private TextureLoader? loader;
         private bool useReplacements;
+        private bool useMaterials;
+
+        /// <summary>A replacement made ready by the loader: its colours' mip chain, and a world texture's material's
+        /// (normals in RGB, gloss in alpha) where the pack has one.</summary>
+        private sealed record Replacement(List<(int Width, int Height, byte[] Rgba)> Colors, List<(int Width, int Height, byte[] Rgba)>? Material);
 
         /// <summary>A texture on the GPU a pack's colours can replace once they are uploaded.</summary>
         private interface IReplaceable
@@ -55,7 +64,8 @@ public sealed unsafe partial class VulkanPresenter
             /// <summary>Gone (its level's models dropped): the loader skips it, its replacement is not uploaded.</summary>
             bool Disposed { get; }
 
-            void Replace(Image image);
+            /// <summary>The pack's colours, and the material's image where it has one (world textures only).</summary>
+            void Replace(Image image, Image? material);
         }
 
         // A brush model's textures asked of the pack, if there is one
@@ -71,7 +81,9 @@ public sealed unsafe partial class VulkanPresenter
             for (int i = 0; i < textures.Length; i++)
             {
                 EnhancedTexture texture = model.Textures[i];
-                loader.Request(textures[i], () => EnhancedReplacements.World(pack, map, texture));
+                loader.Request(textures[i], () => EnhancedReplacements.World(pack, map, texture) is { } colors
+                    ? new Replacement(colors, EnhancedMaterials.World(pack, map, texture))
+                    : null);
             }
         }
 
@@ -96,9 +108,10 @@ public sealed unsafe partial class VulkanPresenter
                     playerSkins[key] = layers;
                 }
 
-                return layers == null
-                    ? null
-                    : EnhancedReplacements.Skin(layers, gameSkin, model.SkinWidth, model.SkinHeight, basePalette, top, bottom);
+                return layers != null
+                    && EnhancedReplacements.Skin(layers, gameSkin, model.SkinWidth, model.SkinHeight, basePalette, top, bottom) is { } colors
+                    ? new Replacement(colors, null)
+                    : null;
             });
         }
 
@@ -118,14 +131,14 @@ public sealed unsafe partial class VulkanPresenter
                 return false;
             }
 
-            var ready = new List<(IReplaceable Target, List<(int Width, int Height, byte[] Rgba)> Mips)>();
+            var ready = new List<(IReplaceable Target, Replacement Replacement)>();
             long bytes = 0;
-            while (bytes < ReplacementBudget && loader.TryTake(out IReplaceable? target, out List<(int Width, int Height, byte[] Rgba)>? mips))
+            while (bytes < ReplacementBudget && loader.TryTake(out IReplaceable? target, out Replacement? replacement))
             {
                 if (!target!.Disposed)
                 {
-                    ready.Add((target, mips!));
-                    bytes += mips!.Sum(m => (long)m.Rgba.Length);
+                    ready.Add((target, replacement!));
+                    bytes += replacement!.Colors.Sum(m => (long)m.Rgba.Length) + (replacement.Material?.Sum(m => (long)m.Rgba.Length) ?? 0);
                 }
             }
 
@@ -134,40 +147,61 @@ public sealed unsafe partial class VulkanPresenter
                 return false;
             }
 
-            var uploads = new List<(IReplaceable Target, Image Image, HostBuffer Staging, int[] Offsets, List<(int Width, int Height, byte[] Rgba)> Mips)>();
-            foreach ((IReplaceable target, List<(int Width, int Height, byte[] Rgba)> mips) in ready)
+            var uploads = new List<(IReplaceable Target, MipUpload Colors, MipUpload? Material)>();
+            foreach ((IReplaceable target, Replacement replacement) in ready)
             {
-                var image = new Image(context, (uint)mips[0].Width, (uint)mips[0].Height, VkFormat.R8G8B8A8Unorm,
-                    VkImageUsageFlags.TransferDst | VkImageUsageFlags.Sampled, mipLevels: (uint)mips.Count);
-                var staging = new HostBuffer(context, (ulong)mips.Sum(m => m.Rgba.Length), VkBufferUsageFlags.TransferSrc);
-                var offsets = new int[mips.Count];
-                int at = 0;
-                for (int m = 0; m < mips.Count; m++)
-                {
-                    offsets[m] = at;
-                    mips[m].Rgba.AsSpan().CopyTo(new Span<byte>(staging.Mapped + at, mips[m].Rgba.Length));
-                    at += mips[m].Rgba.Length;
-                }
-
-                staging.Flush();
-                uploads.Add((target, image, staging, offsets, mips));
+                uploads.Add((target, new MipUpload(context, replacement.Colors), replacement.Material is { } m ? new MipUpload(context, m) : null));
             }
 
             Submit(cmd =>
             {
-                foreach ((_, Image image, HostBuffer staging, int[] offsets, List<(int Width, int Height, byte[] Rgba)> mips) in uploads)
+                foreach ((_, MipUpload colors, MipUpload? material) in uploads)
                 {
-                    GpuTexture.Copy(this, cmd, staging, image, mips.Count, m => (offsets[m], mips[m].Width, mips[m].Height));
+                    colors.Record(this, cmd);
+                    material?.Record(this, cmd);
                 }
             });
 
-            foreach ((IReplaceable target, Image image, HostBuffer staging, _, _) in uploads)
+            foreach ((IReplaceable target, MipUpload colors, MipUpload? material) in uploads)
             {
-                staging.Dispose();
-                target.Replace(image);
+                colors.Staging.Dispose();
+                material?.Staging.Dispose();
+                target.Replace(colors.Image, material?.Image);
             }
 
             return true;
+        }
+
+        /// <summary>A mip chain on its way to the GPU: its image, and its levels in a staging buffer.</summary>
+        private sealed class MipUpload
+        {
+            private readonly int[] offsets;
+            private readonly List<(int Width, int Height, byte[] Rgba)> mips;
+
+            public MipUpload(VulkanContext context, List<(int Width, int Height, byte[] Rgba)> mips)
+            {
+                this.mips = mips;
+                Image = new Image(context, (uint)mips[0].Width, (uint)mips[0].Height, VkFormat.R8G8B8A8Unorm,
+                    VkImageUsageFlags.TransferDst | VkImageUsageFlags.Sampled, mipLevels: (uint)mips.Count);
+                Staging = new HostBuffer(context, (ulong)mips.Sum(m => m.Rgba.Length), VkBufferUsageFlags.TransferSrc);
+                offsets = new int[mips.Count];
+                int at = 0;
+                for (int m = 0; m < mips.Count; m++)
+                {
+                    offsets[m] = at;
+                    mips[m].Rgba.AsSpan().CopyTo(new Span<byte>(Staging.Mapped + at, mips[m].Rgba.Length));
+                    at += mips[m].Rgba.Length;
+                }
+
+                Staging.Flush();
+            }
+
+            public Image Image { get; }
+
+            public HostBuffer Staging { get; }
+
+            public void Record(WorldRenderer owner, VkCommandBuffer cmd) =>
+                GpuTexture.Copy(owner, cmd, Staging, Image, mips.Count, m => (offsets[m], mips[m].Width, mips[m].Height));
         }
 
         /// <summary>
@@ -198,8 +232,9 @@ public sealed unsafe partial class VulkanPresenter
 
             public bool Disposed => disposed;
 
-            public void Replace(Image uploaded)
+            public void Replace(Image uploaded, Image? material)
             {
+                material?.Dispose(); // skins have no material (decision 74)
                 image = uploaded;
                 Set = owner.Allocate(pool, owner.textureSetLayout);
                 VkDescriptorImageInfo indicesInfo = new() { imageView = indicesView, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
@@ -224,8 +259,8 @@ public sealed unsafe partial class VulkanPresenter
         /// </summary>
         private sealed class TextureLoader : IDisposable
         {
-            private readonly BlockingCollection<(IReplaceable Target, Func<List<(int Width, int Height, byte[] Rgba)>?> Make)> requests = [];
-            private readonly ConcurrentQueue<(IReplaceable Target, List<(int Width, int Height, byte[] Rgba)> Mips)> results = new();
+            private readonly BlockingCollection<(IReplaceable Target, Func<Replacement?> Make)> requests = [];
+            private readonly ConcurrentQueue<(IReplaceable Target, Replacement Replacement)> results = new();
             private readonly Thread thread;
             private int pending;
 
@@ -235,7 +270,7 @@ public sealed unsafe partial class VulkanPresenter
                 thread.Start();
             }
 
-            public void Request(IReplaceable target, Func<List<(int Width, int Height, byte[] Rgba)>?> make)
+            public void Request(IReplaceable target, Func<Replacement?> make)
             {
                 Interlocked.Increment(ref pending);
                 requests.Add((target, make));
@@ -250,10 +285,10 @@ public sealed unsafe partial class VulkanPresenter
                 }
             }
 
-            public bool TryTake(out IReplaceable? target, out List<(int Width, int Height, byte[] Rgba)>? mips)
+            public bool TryTake(out IReplaceable? target, out Replacement? replacement)
             {
                 bool taken = results.TryDequeue(out var result);
-                (target, mips) = (result.Target, result.Mips);
+                (target, replacement) = (result.Target, result.Replacement);
                 return taken;
             }
 
@@ -266,11 +301,11 @@ public sealed unsafe partial class VulkanPresenter
 
             private void Run()
             {
-                foreach ((IReplaceable target, Func<List<(int Width, int Height, byte[] Rgba)>?> make) in requests.GetConsumingEnumerable())
+                foreach ((IReplaceable target, Func<Replacement?> make) in requests.GetConsumingEnumerable())
                 {
-                    if (!target.Disposed && make() is { } mips)
+                    if (!target.Disposed && make() is { } replacement)
                     {
-                        results.Enqueue((target, mips));
+                        results.Enqueue((target, replacement));
                     }
 
                     Interlocked.Decrement(ref pending);

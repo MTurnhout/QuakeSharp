@@ -57,6 +57,7 @@ public sealed unsafe partial class VulkanPresenter
         private readonly VkDescriptorSetLayout frameSetLayout;
         private readonly VkDescriptorSetLayout modelSetLayout;
         private readonly VkDescriptorSetLayout textureSetLayout;
+        private readonly VkDescriptorSetLayout worldTextureSetLayout;
         private readonly VkPipelineLayout pipelineLayout;
         private readonly VkDescriptorPool framePool;
         private readonly VkDescriptorSet[] frameSets = new VkDescriptorSet[FramesInFlight];
@@ -67,6 +68,7 @@ public sealed unsafe partial class VulkanPresenter
         private VkPipeline pipeline;
         private VkSampleCountFlags pipelineSamples;
         private EnhancedModelNumbering? numbering;
+        private Image? flatMaterial;
 
         public WorldRenderer(VulkanPresenter presenter)
         {
@@ -81,8 +83,13 @@ public sealed unsafe partial class VulkanPresenter
             textureSetLayout = presenter.CreateSetLayout(
                 (VkDescriptorType.SampledImage, 0),
                 (VkDescriptorType.CombinedImageSampler, 1));
+            // the world's own: a pack's material beside the colours (alias and sprite models have none)
+            worldTextureSetLayout = presenter.CreateSetLayout(
+                (VkDescriptorType.SampledImage, 0),
+                (VkDescriptorType.CombinedImageSampler, 1),
+                (VkDescriptorType.CombinedImageSampler, 2));
 
-            VkDescriptorSetLayout* layouts = stackalloc VkDescriptorSetLayout[3] { frameSetLayout, modelSetLayout, textureSetLayout };
+            VkDescriptorSetLayout* layouts = stackalloc VkDescriptorSetLayout[3] { frameSetLayout, modelSetLayout, worldTextureSetLayout };
             VkPushConstantRange range = new()
             {
                 stageFlags = VkShaderStageFlags.Vertex | VkShaderStageFlags.Fragment,
@@ -185,6 +192,7 @@ public sealed unsafe partial class VulkanPresenter
 
             UploadReplacements();
             useReplacements = options.Textures && options.Lighting == 0;
+            useMaterials = useReplacements && options.Materials;
 
             WriteParticles(particleBuffers[f], frame);
             SetParticles(options.Particles != 0);
@@ -269,11 +277,30 @@ public sealed unsafe partial class VulkanPresenter
                 api.vkDestroySampler(colorSampler);
             }
 
+            flatMaterial?.Dispose();
             api.vkDestroyDescriptorPool(framePool);
             api.vkDestroyPipelineLayout(pipelineLayout);
             api.vkDestroyDescriptorSetLayout(frameSetLayout);
             api.vkDestroyDescriptorSetLayout(modelSetLayout);
             api.vkDestroyDescriptorSetLayout(textureSetLayout);
+            api.vkDestroyDescriptorSetLayout(worldTextureSetLayout);
+        }
+
+        // A material that changes nothing (a flat normal, no gloss) for the sets without a pack's: world.slang reads it
+        // only with DrawMaterial, but every binding needs an image
+        private Image FlatMaterial()
+        {
+            if (flatMaterial == null)
+            {
+                var image = new Image(context, 1, 1, VkFormat.R8G8B8A8Unorm, VkImageUsageFlags.TransferDst | VkImageUsageFlags.Sampled);
+                using var staging = new HostBuffer(context, 4, VkBufferUsageFlags.TransferSrc);
+                ((ReadOnlySpan<byte>)[128, 128, 255, 0]).CopyTo(new Span<byte>(staging.Mapped, 4));
+                staging.Flush();
+                Submit(cmd => GpuTexture.Copy(this, cmd, staging, image, 1, _ => (0, 1, 1)));
+                flatMaterial = image;
+            }
+
+            return flatMaterial;
         }
 
         private void Model(EnhancedFrame frame, int id, EnhancedOptions options)
@@ -527,9 +554,9 @@ public sealed unsafe partial class VulkanPresenter
 
                 VkDescriptorPoolSize* sizes = stackalloc VkDescriptorPoolSize[3];
                 sizes[0] = new() { type = VkDescriptorType.StorageBuffer, descriptorCount = 2 };
-                // two sets a texture: the game's colours and a pack's (VulkanPresenter.Packs.cs)
+                // two sets a texture: the game's colours and a pack's (VulkanPresenter.Packs.cs), each with a material
                 sizes[1] = new() { type = VkDescriptorType.SampledImage, descriptorCount = (uint)Math.Max(1, 2 * model.Textures.Length) };
-                sizes[2] = new() { type = VkDescriptorType.CombinedImageSampler, descriptorCount = (uint)Math.Max(1, 2 * model.Textures.Length) };
+                sizes[2] = new() { type = VkDescriptorType.CombinedImageSampler, descriptorCount = (uint)Math.Max(1, 4 * model.Textures.Length) };
                 VkDescriptorPoolCreateInfo poolInfo = new() { maxSets = (uint)(1 + (2 * model.Textures.Length)), poolSizeCount = 3, pPoolSizes = sizes };
                 Check(context.Api.vkCreateDescriptorPool(&poolInfo, null, out pool), "vkCreateDescriptorPool");
                 modelSet = owner.Allocate(pool, owner.modelSetLayout);
@@ -578,7 +605,7 @@ public sealed unsafe partial class VulkanPresenter
                         M20 = transform[8], M21 = transform[9], M22 = transform[10], M23 = transform[11],
                         TextureWidth = t.Width,
                         TextureHeight = t.Height,
-                        Flags = replaced ? DrawReplaced : 0,
+                        Flags = (replaced ? DrawReplaced : 0) | (replaced && t.HasMaterial && renderer.useMaterials ? DrawMaterial : 0),
                     };
                     api.vkCmdPushConstants(cmd, renderer.pipelineLayout, VkShaderStageFlags.Vertex | VkShaderStageFlags.Fragment, 0, (uint)sizeof(DrawParams), &p);
                     api.vkCmdDrawIndexed(cmd, (uint)count, 1, (uint)first, 0, 0);
@@ -610,14 +637,15 @@ public sealed unsafe partial class VulkanPresenter
 
         /// <summary>
         /// A BSP texture on the GPU: its palette indices (the BSP's four mips) and its colours (a mip chain); once a
-        /// pack's replacement is uploaded, a second set with the same indices and the pack's colours.
+        /// pack's replacement is uploaded, a second set with the same indices and the pack's colours, and its material
+        /// where the pack has one.
         /// </summary>
         private sealed class GpuTexture : IReplaceable, IDisposable
         {
             private readonly WorldRenderer owner;
             private readonly VkDescriptorPool pool;
             private readonly Image indices, colors;
-            private Image? replacement;
+            private Image? replacement, material;
             private volatile bool disposed;
 
             public GpuTexture(WorldRenderer owner, VkDescriptorPool pool, EnhancedTexture texture, byte[] basePalette, bool fullMips)
@@ -652,7 +680,7 @@ public sealed unsafe partial class VulkanPresenter
                     Copy(owner, cmd, staging, colors, chain.Count, m => (colorOffsets[m], chain[m].Width, chain[m].Height));
                 });
 
-                Set = TextureSet(colors);
+                Set = TextureSet(colors, null);
             }
 
             public int Width { get; }
@@ -666,12 +694,17 @@ public sealed unsafe partial class VulkanPresenter
 
             public bool Disposed => disposed;
 
-            /// <summary>A pack's colours, uploaded, in place of the game's.</summary>
-            public void Replace(Image image)
+            /// <summary>Whether the pack's set has a material of the pack's.</summary>
+            public bool HasMaterial => material != null;
+
+            /// <summary>A pack's colours, uploaded, in place of the game's; its material, if it has one.</summary>
+            public void Replace(Image image, Image? materialImage)
             {
                 replacement?.Dispose();
+                material?.Dispose();
                 replacement = image;
-                ReplacedSet = TextureSet(image);
+                material = materialImage;
+                ReplacedSet = TextureSet(image, materialImage);
             }
 
             public void Dispose()
@@ -680,18 +713,26 @@ public sealed unsafe partial class VulkanPresenter
                 indices.Dispose();
                 colors.Dispose();
                 replacement?.Dispose();
+                material?.Dispose();
             }
 
-            // world.slang's set 2: the indices, and these colours through the colour sampler
-            private VkDescriptorSet TextureSet(Image colorImage)
+            // world.slang's set 2: the indices, these colours and this material (or the flat one) through the colour sampler
+            private VkDescriptorSet TextureSet(Image colorImage, Image? materialImage)
             {
-                VkDescriptorSet set = owner.Allocate(pool, owner.textureSetLayout);
+                VkDescriptorSet set = owner.Allocate(pool, owner.worldTextureSetLayout);
                 VkDescriptorImageInfo indicesInfo = new() { imageView = indices.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
                 VkDescriptorImageInfo colorsInfo = new() { sampler = owner.colorSampler, imageView = colorImage.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
-                VkWriteDescriptorSet* writes = stackalloc VkWriteDescriptorSet[2];
+                VkDescriptorImageInfo materialInfo = new()
+                {
+                    sampler = owner.colorSampler,
+                    imageView = (materialImage ?? owner.FlatMaterial()).View,
+                    imageLayout = VkImageLayout.ShaderReadOnlyOptimal,
+                };
+                VkWriteDescriptorSet* writes = stackalloc VkWriteDescriptorSet[3];
                 writes[0] = new() { dstSet = set, dstBinding = 0, descriptorCount = 1, descriptorType = VkDescriptorType.SampledImage, pImageInfo = &indicesInfo };
                 writes[1] = new() { dstSet = set, dstBinding = 1, descriptorCount = 1, descriptorType = VkDescriptorType.CombinedImageSampler, pImageInfo = &colorsInfo };
-                owner.context.Api.vkUpdateDescriptorSets(2, writes, 0, null);
+                writes[2] = new() { dstSet = set, dstBinding = 2, descriptorCount = 1, descriptorType = VkDescriptorType.CombinedImageSampler, pImageInfo = &materialInfo };
+                owner.context.Api.vkUpdateDescriptorSets(3, writes, 0, null);
                 return set;
             }
 

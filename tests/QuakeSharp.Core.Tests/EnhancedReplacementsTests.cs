@@ -163,7 +163,7 @@ public class EnhancedReplacementsTests
     // a palette whose every colour differs: index i is (i, 255 - i, i / 2)
     private static byte[] Palette() => [.. Enumerable.Range(0, 256).SelectMany(i => new[] { (byte)i, (byte)(255 - i), (byte)(i / 2) })];
 
-    private static EnhancedTexture Texture(string name, int width, int height, byte[] level0)
+    internal static EnhancedTexture Texture(string name, int width, int height, byte[] level0)
     {
         int size = width * height;
         byte[] pixels = [.. level0, .. new byte[(size / 4) + (size / 16) + (size / 64) + 3]];
@@ -181,7 +181,7 @@ public class EnhancedReplacementsTests
         [.. Enumerable.Range(0, count).SelectMany(_ => new[] { r, g, b, a })];
 
     // A 32-bit TGA from RGBA, top row first
-    private static byte[] Tga(int width, int height, byte[] rgba)
+    internal static byte[] Tga(int width, int height, byte[] rgba)
     {
         var header = new byte[18];
         header[2] = 2;

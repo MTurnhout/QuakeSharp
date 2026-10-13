@@ -13,6 +13,7 @@ try
         ["export-textures", var baseDir, var outDir, .. var engineArgs] => TextureCommands.ExportTextures(baseDir, outDir, engineArgs),
         ["texture-pack-check", var baseDir, var packDir, .. var engineArgs] => TextureCommands.CheckPack(baseDir, packDir, engineArgs),
         ["texture-pack-finish", var exportDir, var upscaledDir, var packDir] => TextureCommands.FinishPack(exportDir, upscaledDir, packDir),
+        ["texture-pack-materials", var packDir, .. var options] => TextureCommands.MakeMaterials(packDir, options),
         ["shot2png", var shot, var output] => Commands.ShotToPng(shot, output),
         ["trace", var baseDir, var output, .. var engineArgs] => TraceCommands.Trace(baseDir, output, engineArgs),
         ["netrun", var baseDir, var outDir, var game] => TraceCommands.NetRun(baseDir, outDir, game),
@@ -52,6 +53,10 @@ static int Usage()
           quakesharp-tools texture-pack-finish <export-dir> <upscaled-dir> <pack-dir>
                                                             a pack from an export and its upscales (the same
                                                             names): the game's colours kept, tiles cropped
+          quakesharp-tools texture-pack-materials <pack-dir> [-strength <s>] [-smooth <sigma>] [-gloss <scale>] [-force]
+                                                            _norm and _gloss for a pack's world textures from
+                                                            their colours (brightness as height; defaults
+                                                            12, 1, 3, for a 4x pack)
           quakesharp-tools texture-pack-check <quake-dir> <pack-dir> [-missing] [engine args]
                                                             what a texture pack (a game directory) replaces,
                                                             lacks, and its problems

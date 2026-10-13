@@ -15,7 +15,7 @@ internal static class EnhancedCommands
     // writes <frame>.software.png, <frame>.enhanced.png, <frame>.diff.png (the view's differing pixels in red over the
     // software frame in grey) and <frame>.default.png, and prints the share of the view's pixels that are the same
     // colour, and that are within 24 of it on every channel. <frames> "warp" instead lists the runs of frames whose view
-    // is warped as under water (r_dowarp), to choose frames from. -pack <game-dir> draws the default frame with a texture
+    // is warped as under water (r_dowarp), to choose frames from; "dlights" those with dynamic lights. -pack <game-dir> draws the default frame with a texture
     // pack's textures (design.md §11.7; the faithful comparison never uses them).
     public static int Shot(string baseDir, string outDir, string frameList, string[] args)
     {
@@ -24,10 +24,10 @@ internal static class EnhancedCommands
         args = packArg >= 0 ? [.. args[..packArg], .. args[Math.Min(args.Length, packArg + 2)..]] : args;
         Commands.RefuseRepository(outDir);
         Directory.CreateDirectory(outDir);
-        bool scanWarp = frameList == "warp";
-        var wanted = scanWarp ? [] : new HashSet<int>(frameList.Split(',').Select(f => int.Parse(f, CultureInfo.InvariantCulture)));
-        int last = scanWarp ? int.MaxValue : wanted.Max();
-        int warpFrom = 0;
+        bool scanWarp = frameList == "warp", scanDlights = frameList == "dlights";
+        var wanted = scanWarp || scanDlights ? [] : new HashSet<int>(frameList.Split(',').Select(f => int.Parse(f, CultureInfo.InvariantCulture)));
+        int last = scanWarp || scanDlights ? int.MaxValue : wanted.Max();
+        int warpFrom = 0, dlightsFrom = 0;
 
         string userDir = Path.Combine(Path.GetTempPath(), "quakesharp-trace", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(userDir);
@@ -58,6 +58,16 @@ internal static class EnhancedCommands
                     }
 
                     warpFrom = seen.Warp ? frame : 0;
+                }
+
+                if (scanDlights && capture.Latest is { } lit && lit.Dlights.Length > 0 != (dlightsFrom != 0))
+                {
+                    if (dlightsFrom != 0)
+                    {
+                        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"dlights: frames {dlightsFrom}-{frame - 1}"));
+                    }
+
+                    dlightsFrom = lit.Dlights.Length > 0 ? frame : 0;
                 }
 
                 if (wanted.Contains(frame) && capture.Latest is { } shot)

@@ -77,6 +77,7 @@ static int Run(CommandLine commandLine)
         LerpModels = settings.Number("enhanced_lerpmodels") != 0,
         LerpMove = settings.Number("enhanced_lerpmove") != 0,
         Textures = settings.Number("enhanced_textures") != 0,
+        Materials = settings.Number("enhanced_materials") != 0,
     });
     var mode = new EnhancedMode(renderer, enhancedSound: settings.Number("enhanced_sound") != 0,
         placement: settings.Number("enhanced_3d_sfx") != 0);
