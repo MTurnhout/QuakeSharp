@@ -1493,7 +1493,7 @@ the alias models' skins, and material maps (normals, gloss) that the dynamic lig
 is outside QuakeSharp: the tools export the game's textures under the names a pack uses and check a pack against the
 game; the upscaling between the two (by hand, or by AI tools such as RTX Remix's texture tools or an ESRGAN-type
 upscaler) is the user's, on their own machine. RTX Remix's runtime itself cannot be used: it hooks Direct3D 9 calls,
-and QuakeSharp draws with Vulkan (D22).
+and QuakeSharp draws with Vulkan (decision 72).
 
 **The rules.** §11.6's, unchanged, and:
 
@@ -1509,53 +1509,62 @@ and QuakeSharp draws with Vulkan (D22).
   or game data.
 - **Windows and Linux alike.** Names are looked up without regard to case (a pack's file names as their maker wrote
   them, the BSP's as id wrote them), and with `/` whatever the platform's separator; CI runs the pack's tests on both.
-- **No package** (D22): PNG is decoded by QuakeSharp's own code over .NET's `ZLibStream`, TGA (raw and RLE) by its
+- **No package** (decision 72): PNG is decoded by QuakeSharp's own code over .NET's `ZLibStream`, TGA (raw and RLE) by its
   own; one would be asked for first.
 
-**A pack** (D18) is loose files under `textures/` (world) and `progs/` (skins) in a game directory, in the user folder
+**A pack** (decision 68) is loose files under `textures/` (world) and `progs/` (skins) in a game directory, in the user folder
 (§9) first, then the Quake folder's; a mission pack (`-game`) looks in its own directory, then `id1`'s. The names are
 QuakeSpasm's and DarkPlaces', so packs made for them work:
 
 | What | File (`.png` or `.tga`) | Notes |
 |---|---|---|
 | A world texture | `textures/<map>/<name>`, then `textures/<name>` | `<map>` is the BSP's name (`e1m1`): a map whose texture differs from another's of the same name. `*` in a name is `#` (`#water0`); `+0slip` stays as it is, so animated textures' frames are replaced one by one |
-| Its fullbright texels | `<name>_glow` or `<name>_luma` | Unlit, added to the lit colour (D20) |
-| Its normals, gloss | `<name>_norm`, `<name>_gloss` | Tangent space normals (alpha unused); gloss as the specular strength (D21) |
+| Its fullbright texels | `<name>_glow` or `<name>_luma` | Unlit, added to the lit colour (decision 70) |
+| Its normals, gloss | `<name>_norm`, `<name>_gloss` | Tangent space normals (alpha unused); gloss as the specular strength (decision 71) |
 | The sky | `textures/<map>/sky<n>`, `textures/sky<n>` | The same layout as the BSP's (two layers side by side, the front one's index 0 the alpha) |
 | An alias skin | `progs/<model>.mdl_<skin>` | `<skin>` the skin's number; a skin group's frames `_<skin>_<frame>`; `_glow`, `_norm`, `_gloss` as above |
-| Players' colours | `progs/<model>.mdl_<skin>_pants`, `_shirt` | Grey masks, tinted by the entity's colours; an entity drawn with a colour translation uses the replacement only with both (D19) |
+| Players' colours | `progs/<model>.mdl_<skin>_pants`, `_shirt` | Grey masks, tinted by the entity's colours; an entity drawn with a colour translation uses the replacement only with both (decision 69) |
 
 A replacement's size may be any multiple of the game's (its texture coordinates stay the game's, scaled); its mip
 chain is made from it as §11.6's.
 
-**What it changes.** In the true-colour look only (D19): the colormap look keeps the palette indices it looks up, which
+**What it changes.** In the true-colour look only (decision 69): the colormap look keeps the palette indices it looks up, which
 a replacement does not have.
 
 | Enhancement | What | How it stays out of the game | Verified by |
 |---|---|---|---|
 | World textures | The replacement's colours, lit by the same light (lightmaps, styles, dlights, overbright, the palette's shifts and gamma); turbulent surfaces warped as now; the sky's two layers from the replacement | Read by the loader, never through the game's files | Unit tests: the lookup's order (map, game, `id1`; user folder, Quake folder), `*` as `#`, case; the comparison without a pack unchanged |
-| Fullbrights | `_glow`/`_luma` unlit; without one, the game's fullbright texels (palette 224-255) scaled to the replacement's size and taken from its colours unlit, so lamps and lava still glow (D20) | GPU only | Unit tests of the mask's scaling |
+| Fullbrights | `_glow`/`_luma` unlit; without one, the game's fullbright texels (palette 224-255) scaled to the replacement's size and taken from its colours unlit, so lamps and lava still glow (decision 70) | GPU only | Unit tests of the mask's scaling |
 | Alias skins | Replacement skins, skin groups by their intervals as now; players' colours through `_pants` and `_shirt` | Read | By eye; unit tests of the names |
-| Materials | `_norm` and `_gloss` lit per pixel by the dynamic lights (r_light.c's falloff, as now, times the normal's facing; gloss as a highlight); the lightmaps' light, which has no direction, stays as it is (D21). `enhanced_materials`, on | GPU only | By eye; validation layer clean |
+| Materials | `_norm` and `_gloss` lit per pixel by the dynamic lights (r_light.c's falloff, as now, times the normal's facing; gloss as a highlight); the lightmaps' light, which has no direction, stays as it is (decision 71). `enhanced_materials`, on | GPU only | By eye; validation layer clean |
 | Settings | `enhanced_textures` (1: a pack's textures where found), `enhanced_materials` (1), in `quakesharp.cfg` (decision 61) | Not the game's cvars | `EnhancedSettingsTests` |
 
-**The tools.** `quakesharp-tools export-textures <quake-dir> <out-dir> [-game <dir>]` writes every texture a pack could
-replace as PNG under its pack name: every BSP's textures (one under `textures/` per name, and under `textures/<map>/`
-where a map's differs from the first seen), the sky's layers as one image with the front's alpha, every alias model's
-skins; with each, its fullbright mask (`_glow`, the fullbright texels on black) where it has fullbright texels, and a
-list of what was written and from which maps and models. It builds on `dump-graphics`' reading and `PngWriter`, and
-refuses to write inside the repository as the other tools do: what it writes is game data, never committed.
-`quakesharp-tools texture-pack-check <quake-dir> <pack-dir> [-game <dir>]` lists what a pack replaces, what it lacks,
+**The tools.** `quakesharp-tools export-textures <quake-dir> <out-dir> [engine args]` writes every texture a pack
+could replace as PNG under its pack name: every BSP's textures (of the textures sharing a name, the one most BSPs have
+under `textures/`, each other under `textures/<map>/` of every BSP that has it), the sky's layers as one image with the
+front's alpha, every alias model's skins; with each lit one its fullbright mask (`_glow`, the fullbright texels on
+black) where it has fullbright texels; and `textures.txt`, what was written, its size and which BSPs and models use it.
+It refuses to write inside the repository as the other tools do: what it writes is game data, never committed.
+`quakesharp-tools texture-pack-check <quake-dir> <pack-dir> [engine args]` lists what a pack replaces, what it lacks,
 names the game has no texture for, sizes that are not a multiple of the game's, players' skins without both masks, and
 files that do not decode.
 
 **Porting order.** Each step builds with the tests green and is committed:
 
-1. **Export and check**: `export-textures`, `texture-pack-check`. Then by hand: a few textures of e1m1 upscaled and
-   looked at, before the renderer reads any (the question whether it is worth it, answered on real textures); D18's
-   names checked against a published pack's.
-2. **The pack in Core**: `EnhancedTexturePack` (the directories, the lookup by name, the decoders); unit tests with
-   small PNG and TGA files written for the tests (colour types, bit depths, interlacing, RLE; no game data).
+1. **Export**: `export-textures`, and the pack's names in Core (`EnhancedPackNames`). Then by hand: a few textures of
+   e1m1 upscaled and looked at, before the renderer reads any (the question whether it is worth it, answered on real
+   textures). *Done: `EnhancedPackNames` (unit-tested) gives the names; the tool reads the BSPs and models through the
+   search path as `dump-graphics` does and writes with `PngWriter`. The registered data: 758 files (textures, skins and
+   `_glow`s), 19 of them under a map's own folder: of the textures sharing a name, nine differ between BSPs (`sky4`,
+   19 BSPs with one and `dm3`, `e1m1`, `e2m1`, `e3m1`, `e4m1` with another; `plat_top1`, `metal5_2`, `metal5_4`,
+   `metal5_8`, `window03`, `door04_1`, `rock3_8`, `*water1`); with `-hipnotic`, 906. Decision 68's names checked
+   against DarkPlaces' documentation (Xonotic's wiki, "Materials"): `textures/<map>/<name>` before `textures/<name>`,
+   `progs/<model>.mdl_<skin>`, `_glow` or Tenebrae's `_luma`, `_norm` (height in alpha, unused here), `_gloss`;
+   `_pants` and `_shirt` are greyscale layers over texels the base skin leaves black, tinted and blended in (step 4); every
+   layer needs its base texture. The hand check of upscaled textures is the user's to make.*
+2. **The pack in Core**: `EnhancedTexturePack` (the directories, the lookup by name, the decoders) and
+   `texture-pack-check`, which needs the decoders; unit tests with small PNG and TGA files written for the tests
+   (colour types, bit depths, interlacing, RLE; no game data).
 3. **World textures**: the loader thread, the replacement uploaded in place of the game's colours, the fullbrights,
    water and sky; `enhanced_textures`; the comparison's numbers without a pack unchanged.
 4. **Alias skins**, players' colours.
@@ -1638,16 +1647,14 @@ the faithful mode is unchanged.
 | 65 | What milestone 12 leaves out (was D17) | Confirmed with the user: translucent water (`r_wateralpha`: the maps are not vised for it, and the server sends nothing it hides), `.lit` files, external textures, skyboxes, fog, GLQuake's planar shadows, screenshots of the enhanced frame, an in-game settings menu; and GPU tests: none in CI or the test projects (a software Vulkan such as lavapipe would be a download), the comparison tool runs by hand (§11.6) | 2026-10-13 |
 | 66 | The enhanced mode's seams (milestone 12, step 1) | `EnhancedCapture` on `engine.enhanced` (null in the faithful mode), called from draw.c's writes and `R_LineGraph` (the 2D mask, parallel to the screen's buffer), `R_RenderView_` after the warp (the view's pixels, `scr_vrect`), `V_UpdatePalette`'s build (the per-channel tables: the palette is rebuilt only when the shifts change) and `VID_Update` (the snapshot, `EnhancedFrame`, immutable, handed to the render thread). `EnhancedModeChangesNothing` runs every trace test again with it attached, switched off and on along the way, a guard on the clock's reads and `rand()`'s calls, the palette tables checked (§11.6) | 2026-10-13 |
 | 67 | The enhanced renderer and sound (milestone 12, steps 2-8) | The faithful presenter's frame split into begin, record and end, shared with the enhanced frame (one swapchain: mailbox for the faithful frames, FIFO or immediate for the enhanced ones by `enhanced_vsync`); models made ready in Core on first sight from the loaded models (brush, alias, sprite) and numbered anew per level; per-frame data as one buffer of words; the software's look reproduces its quirks that show (d_sky.c's sky mapping, the 16-pixel blocks' light, its stepped sky and water), the default look the true geometry; frames interpolated on the render thread between the last two snapshots, at most one game frame behind; the enhanced mixer at 44.1 kHz with a ring four times WinQuake's buffer; a headless presenter for the tools' comparison and benchmark (§11.6) | 2026-10-13 |
+| 68 | A texture pack's format (was D18) | Confirmed with the user: QuakeSpasm's and DarkPlaces' names (§11.7's table: `textures/<map>/<name>`, `textures/<name>`, `*` as `#`, `progs/<model>.mdl_<skin>`, `_glow`/`_luma`, `_norm`, `_gloss`, `_pants`/`_shirt`), so packs made for them work; PNG and TGA; loose files in a game directory of the user folder, then of the Quake folder, a mission pack's own before `id1`'s. Not in PAK or zip files, not DDS (§11.7) | 2026-10-13 |
+| 69 | Where replacements apply (was D19) | Confirmed with the user: the true-colour look only (the colormap look needs palette indices); world textures, skies and alias skins; an entity drawn with a colour translation (players) only with both `_pants` and `_shirt`. Sprites, the 2D (status bar, console, menus) and particles keep the game's. `enhanced_textures` on by default: without a pack it changes nothing (§11.7) | 2026-10-13 |
+| 70 | Fullbrights without a `_glow` (was D20) | Confirmed with the user: the game's fullbright texels scaled to the replacement's size, nearest, and those texels of the replacement drawn unlit, so lamps, lava and screens still glow (§11.7) | 2026-10-13 |
+| 71 | Material maps (was D21) | Confirmed with the user: `_norm` and `_gloss` lit per pixel by the dynamic lights only (muzzle flashes, rockets, explosions, glowing items); the lightmaps' light stays flat, as it has no direction. Light direction for the lightmaps (DarkPlaces' "deluxemaps") is left out: it needs the maps' light compiled again by an outside tool or a direction guessed from the lights' entities, a milestone of its own if wanted (§11.7) | 2026-10-13 |
+| 72 | How packs are made (was D22) | Confirmed with the user: packs are made outside QuakeSharp: the tools export and check, the upscaling (by hand, RTX Remix's texture tools, an ESRGAN-type model, ...) is the user's; QuakeSharp downloads, ships and runs no model. RTX Remix's runtime is not used (it hooks Direct3D 9, QuakeSharp draws with Vulkan; its C API is a renderer of its own, a different project). No package: PNG through .NET's `ZLibStream` and TGA by QuakeSharp's own code (§11.7) | 2026-10-13 |
 
 ## 13. Open decisions
 
-To confirm with the user before the milestones they affect; the proposals are the defaults until then (the
-earlier ones are settled in the decision log, marked "was D<n>"):
+To confirm with the user before the milestones they affect; the proposals are the defaults until then.
 
-| # | Question | Proposal |
-|---|---|---|
-| D18 | A texture pack's format (milestone 13) | QuakeSpasm's and DarkPlaces' names (§11.7's table: `textures/<map>/<name>`, `textures/<name>`, `*` as `#`, `progs/<model>.mdl_<skin>`, `_glow`/`_luma`, `_norm`, `_gloss`, `_pants`/`_shirt`), so packs made for them work; PNG and TGA; loose files in a game directory of the user folder, then of the Quake folder, a mission pack's own before `id1`'s. Not in PAK or zip files, not DDS |
-| D19 | Where replacements apply (milestone 13) | The true-colour look only (the colormap look needs palette indices); world textures, skies and alias skins; an entity drawn with a colour translation (players) only with both `_pants` and `_shirt`. Sprites, the 2D (status bar, console, menus) and particles keep the game's. `enhanced_textures` on by default: without a pack it changes nothing |
-| D20 | Fullbrights without a `_glow` (milestone 13) | The game's fullbright texels scaled to the replacement's size, nearest, and those texels of the replacement drawn unlit, so lamps, lava and screens still glow |
-| D21 | Material maps (milestone 13) | `_norm` and `_gloss` lit per pixel by the dynamic lights only (muzzle flashes, rockets, explosions, glowing items); the lightmaps' light stays flat, as it has no direction. Light direction for the lightmaps (DarkPlaces' "deluxemaps") is left out: it needs the maps' light compiled again by an outside tool or a direction guessed from the lights' entities, a milestone of its own if wanted |
-| D22 | How packs are made (milestone 13) | Outside QuakeSharp: the tools export and check, the upscaling (by hand, RTX Remix's texture tools, an ESRGAN-type model, ...) is the user's; QuakeSharp downloads, ships and runs no model. RTX Remix's runtime is not used (it hooks Direct3D 9, QuakeSharp draws with Vulkan; its C API is a renderer of its own, a different project). No package: PNG through .NET's `ZLibStream` and TGA by QuakeSharp's own code |
+None: every question raised here has been settled with the user and moved to the decision log, marked "was D<n>".

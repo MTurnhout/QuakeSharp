@@ -289,18 +289,18 @@ internal static class Commands
         PngWriter.WriteIndexed(path, width, height, pixels, palette, opaque);
     }
 
-    private static FileSystem Init(string baseDir, string[] engineArgs, Action<string>? conPrintf = null)
+    internal static FileSystem Init(string baseDir, string[] engineArgs, Action<string>? conPrintf = null)
     {
         var fs = new FileSystem(new CommandLine(["quake", .. engineArgs]), conPrintf ?? (_ => { }), _ => { });
         fs.InitFilesystem(baseDir);
         return fs;
     }
 
-    private static byte[] Load(FileSystem fs, string name) => fs.LoadFile(name) ?? throw new QuakeException($"can't find {name}");
+    internal static byte[] Load(FileSystem fs, string name) => fs.LoadFile(name) ?? throw new QuakeException($"can't find {name}");
 
-    private static int I32(byte[] data, int offset) => BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset));
+    internal static int I32(byte[] data, int offset) => BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset));
 
-    private static string CString(ReadOnlySpan<byte> field)
+    internal static string CString(ReadOnlySpan<byte> field)
     {
         int end = field.IndexOf((byte)0);
         return Encoding.Latin1.GetString(end < 0 ? field : field[..end]);

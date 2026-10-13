@@ -10,6 +10,7 @@ try
         ["files", var baseDir, .. var engineArgs] => Commands.Files(baseDir, engineArgs),
         ["extract", var baseDir, var file, var output, .. var engineArgs] => Commands.Extract(baseDir, file, output, engineArgs),
         ["dump-graphics", var baseDir, var outDir, .. var engineArgs] => Commands.DumpGraphics(baseDir, outDir, engineArgs),
+        ["export-textures", var baseDir, var outDir, .. var engineArgs] => TextureCommands.ExportTextures(baseDir, outDir, engineArgs),
         ["shot2png", var shot, var output] => Commands.ShotToPng(shot, output),
         ["trace", var baseDir, var output, .. var engineArgs] => TraceCommands.Trace(baseDir, output, engineArgs),
         ["netrun", var baseDir, var outDir, var game] => TraceCommands.NetRun(baseDir, outDir, game),
@@ -41,6 +42,10 @@ static int Usage()
           quakesharp-tools dump-graphics <quake-dir> <out-dir> [engine args]
                                                             write the palette, colormap, pictures, gfx.wad, map
                                                             textures, model skins and sprite frames as PNG
+          quakesharp-tools export-textures <quake-dir> <out-dir> [engine args]
+                                                            every texture a texture pack can replace, as PNG
+                                                            under its pack name (design.md §11.7), and
+                                                            textures.txt listing them
           quakesharp-tools shot2png <in.shot> <out.png>     a frame the oracle wrote (-traceshot) as PNG
           quakesharp-tools shot-diff <a.shot> <b.shot> [out.png]
                                                             where two frames differ (the PNG: a, b, and a with
