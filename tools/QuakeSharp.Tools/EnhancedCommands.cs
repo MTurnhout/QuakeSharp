@@ -17,11 +17,15 @@ internal static class EnhancedCommands
     // colour, and that are within 24 of it on every channel. <frames> "warp" instead lists the runs of frames whose view
     // is warped as under water (r_dowarp), to choose frames from; "dlights" those with dynamic lights. -pack <game-dir> draws the default frame with a texture
     // pack's textures (design.md §11.7; the faithful comparison never uses them).
+    // -lighting <0|1>, -textures <0|1> and -materials <0|1> set those enhanced settings for the default frame.
     public static int Shot(string baseDir, string outDir, string frameList, string[] args)
     {
         int packArg = Array.IndexOf(args, "-pack");
         string? packDir = packArg >= 0 && packArg + 1 < args.Length ? args[packArg + 1] : null;
         args = packArg >= 0 ? [.. args[..packArg], .. args[Math.Min(args.Length, packArg + 2)..]] : args;
+        (int lighting, args) = TakeSwitch(args, "-lighting", 0);
+        (int textures, args) = TakeSwitch(args, "-textures", 1);
+        (int materials, args) = TakeSwitch(args, "-materials", 1);
         Commands.RefuseRepository(outDir);
         Directory.CreateDirectory(outDir);
         bool scanWarp = frameList == "warp", scanDlights = frameList == "dlights";
@@ -44,7 +48,7 @@ internal static class EnhancedCommands
             }
 
             var faithful =new EnhancedOptions(Scale: 1, Msaa: 1, Widescreen: false, Filter: 0, Mipmaps: 0, Anisotropy: 1, Lighting: 1);
-            var defaults = new EnhancedOptions();
+            var defaults = new EnhancedOptions(Lighting: lighting) { Textures = textures != 0, Materials = materials != 0 };
 
             int frame = 0;
             foreach (IReadOnlyList<string> _ in run.Frames(quitAfterDemo: new Core.Common.CommandLine(["quake", .. args]).CheckParm("-tracequitafterdemo") != 0))
@@ -97,6 +101,15 @@ internal static class EnhancedCommands
         }
 
         return 0;
+    }
+
+    // A switch and its number taken out of the arguments (the default where it is not there)
+    private static (int, string[]) TakeSwitch(string[] args, string name, int fallback)
+    {
+        int at = Array.IndexOf(args, name);
+        return at >= 0 && at + 1 < args.Length
+            ? (int.Parse(args[at + 1], CultureInfo.InvariantCulture), [.. args[..at], .. args[(at + 2)..]])
+            : (fallback, args);
     }
 
     // enhanced-bench <quake-dir> <frame> <width>x<height> [trace args]: draws the enhanced frame of a trace's frame

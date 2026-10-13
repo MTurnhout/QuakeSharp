@@ -91,6 +91,58 @@ sees them (engine switches such as `-game <dir>`, `-rogue` or `-hipnotic` may fo
 and sprite frames as PNG. Write the output outside the repository (the tools refuse to write inside it): extracted
 game data must never be committed.
 
+## Texture packs
+
+The enhanced mode (Scroll Lock, or `-enhanced`) can draw **replacement textures** for the world, the skies and the
+alias models' skins, and normal and gloss maps that the dynamic lights (muzzle flashes, rockets, explosions) light per
+pixel. QuakeSharp ships none and runs no upscaler: a pack is made on your own machine from your own game, or taken from
+one made for QuakeSpasm or DarkPlaces, whose names it uses. Packs apply in the true-colour look only
+(`enhanced_lighting 0`); the colormap look and the faithful mode never use them, and without a pack nothing changes.
+
+**Where packs go.** Loose PNG or TGA files under `textures/` and `progs/` in a game directory: first in the user folder
+(`%APPDATA%\QuakeSharp\id1\`, `~/.config/QuakeSharp/id1/`), then in the Quake folder's (`id1/`; a mission pack's own
+directory comes before `id1`'s). Not in PAK or zip files, not DDS. Names are matched without regard to case.
+
+| What | File |
+|---|---|
+| A world texture | `textures/<map>/<name>`, else `textures/<name>` (`*` in a name is `#`: `#water0`) |
+| Fullbright texels, normals, gloss | `<name>_glow` (or `_luma`), `<name>_norm`, `<name>_gloss` |
+| The sky | `textures/sky4` (the BSP's two layers side by side) |
+| An alias skin | `progs/<model>.mdl_<skin>`, with the same layers |
+| Players' colours | `progs/player.mdl_<skin>_pants`, `_shirt` (grey layers; both are needed) |
+
+A replacement may be any multiple of the game's size. The tools below write and check these names.
+
+**Making one.** The `quakesharp-tools` commands (see Developer tools) write only outside the repository:
+
+```bash
+quakesharp-tools export-textures path/to/Quake export -tiled
+realesrgan-ncnn-vulkan -i export/<folder> -o upscaled/<folder> -n realesrgan-x4plus   # each folder; any upscaler will do
+quakesharp-tools texture-pack-finish export upscaled path/to/Quake/id1
+quakesharp-tools texture-pack-materials path/to/Quake/id1
+quakesharp-tools texture-pack-check path/to/Quake path/to/Quake/id1
+```
+
+`export-textures` writes every texture a pack can replace under its pack name (`-tiled` repeats world textures 3×3 so
+an upscaler sees their edges as they repeat); `texture-pack-finish` crops the tiling again and keeps the game's colour
+at a coarse scale under the upscale's detail, as upscalers darken Quake's dark textures; `texture-pack-materials`
+derives `_norm` and `_gloss` from the colours for an upscaler that makes colours only (an AI material generator's maps
+work as well; a layer a pack has is kept); `texture-pack-check` lists what the pack replaces and lacks and any file
+that does not decode or whose size is not a multiple of the game's. Real-ESRGAN's x4plus model draws metal, wood and
+signs sharply; its anime models do not suit Quake. Ground and rock textures are redrawn rather than sharpened, a
+matter of taste.
+
+**Settings** (`quakesharp.cfg` in the user folder, read at start):
+
+| Setting | Default | |
+|---|---|---|
+| `enhanced_textures` | 1 | a pack's textures where it has them |
+| `enhanced_materials` | 1 | a pack's normal and gloss maps, lit by the dynamic lights (world surfaces only) |
+| `enhanced_lighting` | 0 | 0 true colour with overbright (packs apply), 1 the colormap's 64 levels (they do not) |
+
+A pack is read on a loader thread: after a level starts, a few of its surfaces may show the game's textures for a
+moment.
+
 ## The reference oracle
 
 QuakeSharp is checked against WinQuake 1.09's C code built as a headless program that writes a trace of every frame;

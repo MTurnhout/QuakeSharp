@@ -1669,11 +1669,34 @@ quakesharp-tools texture-pack-check <quake-dir> <user folder or quake-dir>/id1
    99.1% within 24). The executable on demo1 under the validation layer with the pack and its maps (1904 files): clean,
    7.45 ms a frame.*
 6. **By hand**: a pack of e1's textures made with an upscaler, played through e1 in both lightings and switched;
-   pictures described here; README's section on packs.
+   pictures described here; README's section on packs. *Done: README's "Texture packs" (where packs go, the names, how to
+   make one, the settings). The check was made headless, with the user's go-ahead after a first try that drove the
+   executable's window with sent keys and so took the user's keyboard focus (decision 75): `enhanced-shot` now takes
+   `-lighting <0|1>`, `-textures <0|1>` and `-materials <0|1>` for its default frame, and was run over
+   `tools/oracle/events/e1.events`, the hand-played e1m1-into-e1m2 game, with the x4plus pack and its derived maps
+   (1904 files) at frames 300, 480, 969, 1644, 2504, 3386, 5000, 8660, 12000, 18000 and 24000 (dynamic lights at 424-536,
+   966-972, 1641-1647, 2501-2507, 4995-5006, 8651-8683 and others), four times: enhanced_lighting 0 (the defaults),
+   1, `-textures 0`, `-materials 0`. Seen: with lighting 0 the pack's stones, bricks, panels, riveted metal, wood, the
+   floor's cracked tiles and the signs' red arrows are sharp where the game's are blocks of 64² texels; torches, lamps
+   and signs keep glowing; the monsters, the weapon and the status bar keep the game's pixels (decision 69), so the
+   texture's detail against them is the clearest sign of the pack. Lighting 1 draws the game's textures and
+   the colormap's 64 levels, as decision 69 says, with the pack unused. `-textures 0` draws the game's textures in true colour, `-materials 0`
+   the pack's colours without maps; the three differ from the defaults only where a dynamic light reaches: with
+   `-materials 0` against the defaults (PSNR) the muzzle flashes' frames differ by 38.2 dB at frame 1644 (the riveted
+   wall and the floor's tile edges catch the flash's light by their relief), 49-57 dB at 969, 2504, 3386, 5000 and
+   8660 (small, far flashes), and nothing elsewhere. The materials' effect is real but subtle with the game's
+   dynamic lights, whose radius is short; it shows most with rockets and explosions (step 5's frames). No frame had a
+   seam, a dark ring or a missing texture; the first frames of a level draw the game's textures until the loader
+   catches up, as designed. The pack's world is one the game's lightmaps light flat: a pack changes the colours and the
+   sharpness, not the shadows.*
 
 **Done when** `EnhancedModeChangesNothing` passes on every trace; enhanced mode draws a pack's world textures, skins
 and materials, on Windows and Linux, and without a pack draws as milestone 12's (the comparison's numbers unchanged);
 the faithful mode is unchanged.
+
+**Milestone 13 is done** (steps 1-6): the pack's names and tools, the decoders and lookup, world textures, skins and
+players' colours, materials, the by-hand check and README; `EnhancedModeChangesNothing` and the comparison's numbers
+are as step 5 left them (steps 5 and 6 changed no game-side code).
 
 ## 12. Decision log
 
@@ -1753,6 +1776,7 @@ the faithful mode is unchanged.
 | 72 | How packs are made (was D22) | Confirmed with the user: packs are made outside QuakeSharp: the tools export and check, the upscaling (by hand, RTX Remix's texture tools, an ESRGAN-type model, ...) is the user's; QuakeSharp downloads, ships and runs no model. RTX Remix's runtime is not used (it hooks Direct3D 9, QuakeSharp draws with Vulkan; its C API is a renderer of its own, a different project). No package: PNG through .NET's `ZLibStream` and TGA by QuakeSharp's own code (§11.7) | 2026-10-13 |
 | 73 | Players' colours from a pack's layers (milestone 13, step 4) | A `_shirt` or `_pants` layer's grey is read as a place on the player's colour ramp: the base palette's range (16-31, 96-111) gives each entry its brightness against the range's brightest, the grey falls on or between two entries, and the colour is the player's row's at those entries as CL_NewTranslation moves them (darker than the darkest entry: it darkened to black). So the colours keep the ramps' hues, which change along them, as the game's do; DarkPlaces' grey times one colour made Quake's orange pants olive. The bake is per skin and colours, on the loader thread (§11.7) | 2026-10-13 |
 | 74 | Material maps' making and lighting (milestone 13, step 5) | Confirmed with the user: normals and gloss for a pack whose upscaler makes colours only are derived by the tools (`texture-pack-materials`: brightness as height, a Sobel filter wrapping round the texture; gloss from brightness and want of colour), no download; an AI material generator (DeepBump and the like) is the user's own, as upscalers are (decision 72). Normals in tangent space with y the image's up (OpenGL's way). world.slang scales each dynamic light's part of each luxel by 1 + N·L − N₀·L (the material's normal against the plane's, so a flat normal draws as without one) and adds a Blinn-Phong highlight (exponent 32) times the gloss, as bright as the light's part. World surfaces only: the software adds a dynamic light to an alias model's point light as one number with no direction, before the clamps (r_main.c), so a skin's `_norm` and `_gloss` are not drawn (§11.7) | 2026-10-13 |
+| 75 | Visual checks run headless (milestone 13, step 6) | Confirmed with the user: checks of the executable's look are made with `enhanced-shot` over a recorded events file (offscreen, no window, no input sent), never by driving the real window with sent keys, which took the user's keyboard focus; `enhanced-shot` takes `-lighting`, `-textures` and `-materials` for its default frame (§11.7) | 2026-10-13 |
 
 ## 13. Open decisions
 
