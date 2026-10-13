@@ -316,6 +316,9 @@ internal sealed class EnhancedMode(EnhancedRenderer renderer, SdlSoundDma? sound
     private readonly EnhancedMixer mixer = new() { Placement = placement };
     private QuakeEngine? engine;
 
+    // the last capture, whose models the next keeps (switching the mode back on need not make them all again)
+    private EnhancedCapture? last;
+
     public bool On { get; private set; }
 
     public EnhancedRenderer Renderer => renderer;
@@ -341,6 +344,12 @@ internal sealed class EnhancedMode(EnhancedRenderer renderer, SdlSoundDma? sound
         if (on)
         {
             var capture = new EnhancedCapture(engine) { Sound = enhancedSound ? mixer : null };
+            if (last != null)
+            {
+                capture.Inherit(last);
+            }
+
+            last = capture;
             capture.Captured += renderer.Submit;
             engine.enhanced = capture;
         }

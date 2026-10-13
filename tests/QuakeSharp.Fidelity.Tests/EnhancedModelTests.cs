@@ -116,6 +116,45 @@ public sealed class EnhancedModelTests : IDisposable
         Assert.Contains(frame.Entities, e => e.Id == EnhancedEntity.ViewModel && frame.Models[e.Model]?.Alias != null);
     }
 
+    // A capture that inherits the last one's models (Scroll Lock again in the same level) keeps its numbering and its
+    // numbers, so the render thread keeps the models it made and a pack's textures stay read
+    [Fact]
+    public void AnInheritingCaptureKeepsTheNumbering()
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        var run = new TraceRun(baseDir, userdir, ["+playdemo", "demo1", "-oracleframes", "1700"]);
+        var first = new EnhancedCapture(run.Engine);
+        EnhancedCapture? second = null;
+        run.Engine.enhanced = first;
+        int frame = 0;
+        foreach (IReadOnlyList<string> _ in run.Frames(quitAfterDemo: false, maxFrames: 1700))
+        {
+            frame++;
+            if (frame == 1500)
+            {
+                run.Engine.enhanced = null;
+            }
+            else if (frame == 1501)
+            {
+                second = new EnhancedCapture(run.Engine);
+                second.Inherit(first);
+                run.Engine.enhanced = second;
+            }
+        }
+
+        EnhancedFrame a = first.Latest ?? throw new InvalidOperationException("no frame");
+        EnhancedFrame b = second?.Latest ?? throw new InvalidOperationException("no frame");
+        Assert.Same(a.ModelNumbering, b.ModelNumbering);
+        Assert.Equal(a.World, b.World);
+        for (int n = 1; n < Math.Min(a.Models.Count, b.Models.Count); n++)
+        {
+            if (a.Models[n] != null && b.Models[n] != null)
+            {
+                Assert.Equal(a.Models[n]!.Name, b.Models[n]!.Name);
+            }
+        }
+    }
+
     // Scroll Lock switches the mode off and on in a game: the new capture numbers the level's models anew, from 1, in
     // the order it meets them, so its numbers name other models than the first capture's; its frames carry a
     // numbering of their own, or the render thread keeps what it made under the first one's numbers (models drawn as

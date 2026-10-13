@@ -84,6 +84,23 @@ public sealed class EnhancedCapture
         }
     }
 
+    /// <summary>
+    /// Takes over the models an earlier capture made ready and their numbering, so a mode switched off and on again
+    /// keeps what the renderer made of them (a new numbering has it drop every model and make them again, with each
+    /// texture of a pack read again). A level changed meanwhile is noticed as in a run: its world is not the one the
+    /// models were made for, and they start anew.
+    /// </summary>
+    public void Inherit(EnhancedCapture earlier)
+    {
+        worldOf = earlier.worldOf;
+        numbering = earlier.numbering;
+        models = earlier.models;
+        foreach (KeyValuePair<Model.Model, int> id in earlier.modelIds)
+        {
+            modelIds[id.Key] = id.Value;
+        }
+    }
+
     /// <summary>Raised on the game thread with each finished frame's snapshot.</summary>
     public event Action<EnhancedFrame>? Captured;
 
