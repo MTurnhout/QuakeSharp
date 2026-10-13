@@ -1,0 +1,9 @@
+1 name bob
+150 connect quake1
+600 +forward
+700 -forward
+720 +attack
+800 -attack
+950 say still here
+1000 net_stats
+2000 net_stats

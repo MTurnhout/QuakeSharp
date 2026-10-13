@@ -1,0 +1,10 @@
+1 name bob
+200 connect quake1
+600 say hi
+700 ban
+800 slist
+1000 test quake1
+1100 test2 quake1
+1200 net_stats
+1700 disconnect
+1800 connect nowhere

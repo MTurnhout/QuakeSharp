@@ -1,0 +1,5 @@
+# the network's command-line switches between three hosts (design.md 11.5): quake1 serves with -ip, -udpport and
+# -listen 4; quake2, without IPX (-noipx), connects to its port; quake3, without TCP/IP (-noudp), finds no server
+-traceevents netswitches.host1.events -oracleframes 1200 -ip 10.0.0.1 -udpport 26010 -listen 4
+-traceevents netswitches.host2.events -oracleframes 1200 -noipx
+-traceevents netswitches.host3.events -oracleframes 1200 -noudp

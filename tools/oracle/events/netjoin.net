@@ -1,0 +1,3 @@
+# a game between hosts (design.md 11.5): one command line per host, host 1 first
+-traceevents netjoin.host1.events -oracleframes 1200
+-traceevents netjoin.host2.events -oracleframes 1200

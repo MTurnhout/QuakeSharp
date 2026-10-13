@@ -265,6 +265,31 @@ public sealed class DemoTests : IDisposable
         RunFiles.AssertSame(game + ".trace", userdir, pack);
     }
 
+    // Games between hosts (design.md §11.5): tools/oracle/events/<game>.net played together on NetRun's virtual LAN,
+    // each host against the oracle's replay of it alone from the datagrams it received, its files too
+    [Theory]
+    [InlineData("netjoin")]
+    [InlineData("netdm")]
+    [InlineData("netloss")]
+    [InlineData("netcmds")]
+    [InlineData("netswitches")]
+    public void NetGamePlaysInSyncWithTheOracle(string game)
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        NetGame netGame = NetGame.Read(Path.Combine(RepositoryRoot(), "tools", "oracle", "events", game + ".net"));
+        IReadOnlyList<IReadOnlyList<string>> hosts = netGame.Hosts;
+        string[] references = [.. hosts.Select((_, i) => TraceLocator.RequireFile($"{game}.host{i + 1}.trace"))];
+        string[] userDirs = [.. hosts.Select((_, i) => Path.Combine(userdir, $"host{i + 1}"))];
+
+        var frames = hosts.Select(_ => new List<IReadOnlyList<string>>()).ToArray();
+        new NetRun(baseDir, userDirs, netGame).Run((host, lines) => frames[host - 1].Add(lines));
+        for (int i = 0; i < hosts.Count; i++)
+        {
+            AssertSameTrace(references[i], frames[i]);
+            RunFiles.AssertSame($"{game}.host{i + 1}.trace", userDirs[i]);
+        }
+    }
+
     private static string RepositoryRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

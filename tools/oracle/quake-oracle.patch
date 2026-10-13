@@ -52,7 +52,7 @@ index 550368e..7f86bd4 100644
  	if	(cls.demoplayback)
  	{
 diff --git a/common.c b/common.c
-index e07e6ce..ca085ec 100644
+index e07e6ce..aef9ec7 100644
 --- a/common.c
 +++ b/common.c
 @@ -862,8 +862,15 @@ void COM_FileBase (char *in, char *out)
@@ -71,6 +71,22 @@ index e07e6ce..ca085ec 100644
  	
  	if (s-s2 < 2)
  		strcpy (out,"?model?");
+@@ -1066,6 +1073,15 @@ void COM_InitArgv (int argc, char **argv)
+ 	{
+ 		i = 0;
+ 
++#ifdef ORACLE
++// the harness's switches (-trace..., -oracle..., -netunplug) and their values are left out: they and their paths differ
++// between the oracle's and QuakeSharp's runs of the same game, which the cmdline cvar shows (a rule a server sends)
++		if (Oracle_HarnessSwitch (argv, j, argc))
++		{
++			j += Oracle_HarnessSwitch (argv, j, argc) - 1;
++			continue;
++		}
++#endif
+ 		while ((n < (CMDLINE_LENGTH - 1)) && argv[j][i])
+ 		{
+ 			com_cmdline[n++] = argv[j][i++];
 diff --git a/d_edge.c b/d_edge.c
 index 52cc8eb..32f1041 100644
 --- a/d_edge.c

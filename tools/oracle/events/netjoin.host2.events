@@ -1,0 +1,7 @@
+200 connect quake1
+450 +forward
+500 -forward
+520 +attack
+560 -attack
+600 say hello
+900 disconnect

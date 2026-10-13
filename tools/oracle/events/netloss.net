@@ -1,0 +1,5 @@
+# two hosts on a lossy LAN (design.md 11.5): every fourth datagram the LAN carries is lost, so net_dgrm.c resends
+# (reliable messages, the connection's requests) and the server times out a client that never comes back
+lanloss 4
+-traceevents netloss.host1.events -oracleframes 2600
+-traceevents netloss.host2.events -oracleframes 2600

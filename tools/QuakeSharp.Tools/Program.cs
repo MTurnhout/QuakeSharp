@@ -12,6 +12,7 @@ try
         ["dump-graphics", var baseDir, var outDir, .. var engineArgs] => Commands.DumpGraphics(baseDir, outDir, engineArgs),
         ["shot2png", var shot, var output] => Commands.ShotToPng(shot, output),
         ["trace", var baseDir, var output, .. var engineArgs] => TraceCommands.Trace(baseDir, output, engineArgs),
+        ["netrun", var baseDir, var outDir, var game] => TraceCommands.NetRun(baseDir, outDir, game),
         ["shot-diff", var a, var b] => TraceCommands.ShotDiff(a, b, null),
         ["shot-diff", var a, var b, var output] => TraceCommands.ShotDiff(a, b, output),
         ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRVGQNWMPAIU"),
@@ -49,6 +50,10 @@ static int Usage()
                                                             a file into its game directory (id1, -rogue's,
                                                             -hipnotic's) first, <file>@<path> at that path
                                                             in it (maps/e1m1.pts)
+          quakesharp-tools netrun <quake-dir> <out-dir> <game.net>
+                                                            a game between hosts (tools/oracle/events/*.net):
+                                                            each host's trace, the datagrams it received (the
+                                                            oracle's -tracedatagrams) and its files
           quakesharp-tools trace-compare <a.trace> <b.trace> [letters]
                                                             the first frame at which each kind of line differs
                                                             (letters: which, e.g. FCEXSTR; all by default)

@@ -136,6 +136,11 @@ public sealed class TraceWriter
         DumpServer(sb);
         DumpSound(sb);
         DumpInput(sb);
+        if (engine.WinsockLibrary is Net.VirtualWinsock winsock)
+        {
+            sb.Append(winsock.LastDatagramLog);
+        }
+
         return sb.ToString();
     }
 

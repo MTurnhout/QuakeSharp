@@ -168,6 +168,7 @@ share it only where a trace shows the difference.
 | `d_sprite.c`: `D_SpriteDrawSpans` | A sprite clipped to the view's left edge can keep a vertex just left of it (u -1.16 after the clip's rounding), so a span starts at u -1: on the frame's first row its first pixel and depth are written before the frame and the z-buffer (the hunk's header in WinQuake; in the oracle, heap memory; underwater, the stack below the warp buffer). On the rows below, u -1 is the previous row's last pixel, as in the C (hiptour, hip2m6) | Writes before the arrays are dropped; nothing there is drawn. The oracle's frame and z-buffer start after padding, which takes them |
 | `d_edge.c`: `D_DrawSurfaces` with `r_drawflat` | A surface's flat colour is the low byte of its `msurface_t`'s address, which moves with every build | The surface's index in the frame's surface list; the oracle is patched to do the same (milestone 10, step 6) |
 | `model.c`: `Mod_Print` | `mcache` prints each model's cache address (`%8p`), moving with every build | 1 for a model with data, 0 without; the oracle is patched to print the same. QuakeSharp's `flush` evicts nothing (decision 22), so a model the oracle has flushed and not yet reloaded would show 0 there and 1 here: `hostcmds.events` shows the cache before flushing it |
+| `common.c`: `COM_InitArgv` | The `cmdline` cvar, a rule a server sends to `test2`, holds the command line, which differs between the oracle's and QuakeSharp's runs of the same game (the harness's switches, their paths); sys_win.c gives `argv[0]` empty | `argv[0]` empty on both sides, and the harness's switches (`-trace...`, `-oracle...`, `-netunplug`) with their values left out of `cmdline`; the oracle is patched to do the same (milestone 11, step 2) |
 
 ### 3.4 The executables
 
@@ -1086,7 +1087,33 @@ protocol (protocol 15, net_dgrm.c's port per connection), as WinQuake.
    joining a listen server through the menus (Join Game's search, the server list) and `connect`; three hosts in a
    deathmatch with chat (`say`, `say_team`, `tell`), frags, a level change, a client leaving, one timing out, `kick`,
    `ban`, `status`, `net_stats`, `test` and `test2`; the lossy LAN. What milestone 10's step 2 listed as "another
-   host" is reached or listed with why.
+   host" is reached or listed with why. *Done (decision 56): `NetRun` runs each host on a thread of its own that
+   holds the turn during its frame or one step of its wait; a game is an `events/<game>.net` file (a host's command
+   line per line, `lanloss <n>`, `-netunplug`, and `datagram` lines from no host of the game); `quakesharp-tools
+   netrun` writes each host's trace, datagrams (`.dgrams`), console (`.log`) and files; `Trace-Demos.ps1` replays each
+   host in the oracle from its datagrams, which stay outside the repository with the traces; `-tracedump` shows the
+   frame's datagrams on both sides. Five games, every host in sync on every line and every file (`DemoTests`):
+   `netjoin` (2 hosts, 1,200 frames), `netdm` (3 hosts: the menus' search and join, chat, `test` and `test2`, `status`,
+   `net_stats`, a kick, a ban refusing a connection, a level change, a client unplugged and timed out), `netloss` (a
+   lossy LAN: resends, duplicates, drops), `netcmds` (a full server, a connection refused by a host without a server,
+   one to an absent host, an unknown name, `maxplayers`, `listen`, `port`, `ban` with a mask, `net_stats *`, `slist`,
+   and a phantom's datagrams: another game's query, another protocol's connection, malformed and short packets,
+   unknown requests, a connection's duplicate and a crash's return, a bad response) and `netswitches` (`-ip`,
+   `-udpport`, `-listen 4`, `-noipx`, `-noudp`). Found on the way: `Test2_Poll` asked for the next rule with
+   `CCREP_RULE_INFO` instead of `CCREQ_RULE_INFO`, so the port's `test2` listed one rule; the `cmdline` cvar, a rule
+   the server sends, held the harnesses' different command lines (given a shared stand-in, §3.3); the virtual
+   `gethostbyname` took "quake1:26001" for quake1 where Windows resolves nothing. Also seen, as the C does on today's
+   Windows: a server that quits closes its sockets without a word, so its clients' next read gets the ICMP answer
+   ("Read error", then "lost server connection"); a client's `ban` reaches the server, which answers nothing. The
+   network layer is reached but for (net_dgrm.c 89%, net_main.c 91%, net_wins.c 68%):*
+   - *Winsock failing on a working machine: the library missing or not starting, the machine without a name, a socket,
+     `ioctlsocket`, `bind` or `setsockopt` failing, a `sendto` failing other than "would block" (the datagram driver's
+     "Write error" paths), and IPX beyond its failed start (net_wipx.c: today's Windows has none).*
+   - *Limits no game reaches: more connections than qsockets, a server list past its 8 entries or two servers of one
+     name, the switches' own errors (`-ip` without an address or with a bad one, `-port` without a number:
+     `Sys_Error`).*
+   - *What WinQuake never calls: `NET_CanSendUnreliableMessage`'s drivers, `WINS_StringToAddr`; and the dedicated
+     server's paths (step 3).*
 3. **The dedicated server**: sys_win.c's `-dedicated` in Core and the executable, `@stdin` on both sides; a dedicated
    server traced with remote clients, `Host_FindMaxClients`' lines, its `say`, `status` and `startdemos`.
 4. **The real Winsock**: `SocketWinsock`, the executable on it, `-recordevents`' datagrams. CI runs a test of two
@@ -1159,6 +1186,7 @@ server match the oracle on every frame for every host; the executable plays over
 | 53 | The shareware smoke test (milestone 10, step 7) | Chosen with the user, as decision 48 asked: the one URL is the Internet Archive's item `Quake_802`, file `quake106.zip` (MD5 `8cee4d03ee092909fdb6a4f84f0c1357`, 9,094,045 bytes); CI checks it, extracts `pak0.pak` from the LHA archive `resource.1` with 7-Zip on Windows and `lhasa` from apt on Linux, checks that and caches it; a failed download with nothing cached skips the test with a warning, not failing CI. The test keeps every trace line of the last frame of demo1-3, played from `pak0.pak` alone (§10, §11.4) | 2026-10-13 |
 | 54 | Scope of v1 (was D8) | Confirmed with the user: v1 is Quake and both mission packs (hipnotic, rogue) on the WinQuake engine; GLQuake and QuakeWorld come after v1 (§1, §11) | 2026-10-13 |
 | 55 | The virtual network (milestone 11, step 1) | net_win.c, net_wins.c and net_wipx.c are ported in Core over `IWinsock` and compiled unchanged in the oracle over `winsock_oracle.c` (no wsock32 linked; LoadLibrary and GetProcAddress renamed for those files); the virtual machine is `quake<n>` at 10.0.0.<n> on a LAN of 254 hosts (`-oraclehost`), the other hosts' datagrams come from `-tracedatagrams` keyed by the clock's step, trace format 7's `U` hashes what was sent and received. Waiting: a frame that reads the clock 1,000 times without it moving moves it a step at that read, on both sides, and the next frame's time is what passed, as sys_win.c computes it. Supersedes decision 33 (§6.5, §11.5) | 2026-10-13 |
+| 56 | Games between hosts (milestone 11, step 2) | `NetRun` plays a game's hosts together in one process, in lockstep on one virtual clock (each host on its own thread, holding the turn for a frame or a step of its wait; a datagram sent during a step arrives at the next); a game is `events/<game>.net` (hosts' command lines, `lanloss`, `-netunplug`, `datagram` lines from no host of the game). The oracle replays each host alone from the datagrams QuakeSharp's run gave it (derived from game data: kept with the traces, never committed); every host matching, the `U` line included, means the oracle's hosts would have played the same game. The `cmdline` cvar gets a shared stand-in (§3.3) (§11.5) | 2026-10-13 |
 
 ## 13. Open decisions
 

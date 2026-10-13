@@ -1,0 +1,16 @@
+1 name alice
+1 maxplayers
+1 listen
+1 port
+1 maxplayers 2
+2 map e1m1
+10 maxplayers 3
+1500 net_stats *
+1510 net_stats "10.0.0.2:49153"
+1520 ban 10.0.0.0 255.255.255.0
+1530 ban
+1540 ban 1 2 3
+1550 ban off
+1600 port 26001
+1610 port
+3400 status

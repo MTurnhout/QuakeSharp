@@ -1,0 +1,12 @@
+1 name carl
+1 color 13 3
+600 connect 10.0.0.1
+900 +attack
+1000 -attack
+1050 +left
+1090 -left
+1220 say_team hi team
+1650 connect quake1
+2150 connect quake1
+2300 +forward
+2360 -forward

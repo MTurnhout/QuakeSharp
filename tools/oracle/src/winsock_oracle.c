@@ -267,7 +267,9 @@ static struct hostent FAR * PASCAL FAR V_gethostbyname (const char FAR *name)
 
 	if (!_stricmp (name, "localhost"))
 		return HostEntry ("localhost", MakeAddr (127, 0, 0, 1));
-	if (!_strnicmp (name, "quake", 5) && IsDigit (name[5]))
+	// quake<n>, the whole name ("quake1:26001" resolves no more than on Windows)
+	if (!_strnicmp (name, "quake", 5) && IsDigit (name[5]) && strspn (name + 5, "0123456789") == strlen (name + 5)
+		&& strlen (name + 5) <= 3)
 	{
 		n = atoi (name + 5);
 		if (n >= 1 && n <= 254)
@@ -495,26 +497,67 @@ static void H_Int (int v)
 	H_Bytes (&v, 4);
 }
 
+// -tracedump's datagram lines: those of the frame running, and those of the frame last traced
+static char *datagram_log, *last_datagram_log;
+static int datagram_log_length, datagram_log_size, last_datagram_log_size;
+
 // the U line: 0 sent, 1 received, 2 the ICMP answer received; the socket's port, the other end, the bytes
 static void H_Datagram (int kind, int port, unsigned int addr, unsigned short addr_port, const unsigned char *data, int length)
 {
+	unsigned int a = ntohl (addr);
+	int i, need;
+
 	H_Int (kind);
 	H_Int (port);
-	H_Int ((int)ntohl (addr));
+	H_Int ((int)a);
 	H_Int (ntohs (addr_port));
 	H_Int (length);
 	H_Bytes (data, length);
 	datagram_count++;
+
+	need = datagram_log_length + 80 + length * 2;
+	if (need > datagram_log_size)
+	{
+		datagram_log_size = need * 2;
+		datagram_log = realloc (datagram_log, datagram_log_size);
+	}
+	datagram_log_length += sprintf (datagram_log + datagram_log_length, "datagram %d %d %u.%u.%u.%u:%u %d ", kind, port,
+		a >> 24, (a >> 16) & 0xff, (a >> 8) & 0xff, a & 0xff, ntohs (addr_port), length);
+	for (i = 0; i < length; i++)
+		datagram_log_length += sprintf (datagram_log + datagram_log_length, "%02x", data[i]);
+	datagram_log_length += sprintf (datagram_log + datagram_log_length, "\n");
 }
 
 unsigned long long Oracle_Datagrams (int *count)
 {
 	unsigned long long h = datagram_hash;
+	char *log;
+	int size;
 
 	*count = datagram_count;
 	datagram_hash = 0xcbf29ce484222325ULL;
 	datagram_count = 0;
+
+	// the frame's log becomes the last frame's
+	log = last_datagram_log;
+	size = last_datagram_log_size;
+	last_datagram_log = datagram_log;
+	last_datagram_log_size = datagram_log_size;
+	datagram_log = log;
+	datagram_log_size = size;
+	if (!last_datagram_log)
+	{
+		last_datagram_log = malloc (1);
+		last_datagram_log_size = 1;
+	}
+	last_datagram_log[datagram_log_length < last_datagram_log_size ? datagram_log_length : 0] = 0;
+	datagram_log_length = 0;
 	return h;
+}
+
+const char *Oracle_DatagramLog (void)
+{
+	return last_datagram_log ? last_datagram_log : "";
 }
 
 /*

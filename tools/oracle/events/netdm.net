@@ -1,0 +1,7 @@
+# a deathmatch between three hosts (design.md 11.5): quake1 serves, quake2 joins through the menus' search and is
+# unplugged at the end (quake1 sees it time out), quake3 connects by address, is kicked, refused while banned and
+# connects again by name; a level change in between. A connect waits about 100 steps for the server search, so
+# quake2's and quake3's frames run behind the clock
+-traceevents netdm.host1.events -oracleframes 3900
+-traceevents netdm.host2.events -oracleframes 3000 -netunplug
+-traceevents netdm.host3.events -oracleframes 3900

@@ -58,8 +58,18 @@ public class CommonTests
         Assert.Equal(1, cl.CheckParm("-game"));
         Assert.Equal(0, cl.CheckParm("quake"));
         Assert.Equal(" ", cl.Argv(cl.Argc));
-        Assert.Equal("quake -game mod +map e1m1 ", cl.Cmdline);
+        // sys_win.c gives argv[0] empty
+        Assert.Equal(" -game mod +map e1m1 ", cl.Cmdline);
         Assert.True(cl.standard_quake);
+    }
+
+    // the cmdline cvar leaves the traces' harness switches out, with their values, as the oracle does (design.md §3.3)
+    [Fact]
+    public void CmdlineLeavesTheHarnessSwitchesOut()
+    {
+        var cl = new CommandLine(["quake", "-trace", "a.trace", "-oraclevid", "640", "480", "-window", "-netunplug", "-oracleframes"]);
+        Assert.Equal(" -window ", cl.Cmdline);
+        Assert.Equal(1, cl.CheckParm("-trace"));
     }
 
     [Fact]

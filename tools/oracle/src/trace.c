@@ -1020,6 +1020,7 @@ static void Dump (void)
 	DumpServer (f);
 	DumpSound (f);
 	DumpInput (f);
+	fputs (Oracle_DatagramLog (), f);
 	fclose (f);
 }
 

@@ -1,0 +1,9 @@
+1 name alice
+1 maxplayers 2
+1 coop 1
+2 map e1m1
+900 say lossy
+1000 net_stats
+1300 changelevel e1m2
+2000 net_stats
+2100 kick bob

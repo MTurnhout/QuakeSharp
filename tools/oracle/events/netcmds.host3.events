@@ -1,0 +1,7 @@
+1 name carl
+400 connect quake1
+700 connect quake2
+900 connect quake9
+1100 connect quake9
+1500 connect "10.0.0.1:26001"
+1800 say joined

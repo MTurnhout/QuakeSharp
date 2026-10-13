@@ -1,0 +1,15 @@
+1 name alice
+1 maxplayers 8
+1 deathmatch 1
+2 map dm3
+1500 status
+1510 net_stats
+1520 say welcome
+1600 kick carl
+1700 ban 10.0.0.3
+1720 ban
+2100 ban off
+2600 changelevel dm4
+2900 net_messagetimeout 5
+2910 status
+3600 status

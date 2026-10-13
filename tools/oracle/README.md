@@ -82,6 +82,19 @@ game they start: rogue's capture the flag, then its one-flag, three-team and tag
 pack's end (`hipend.trace`: Armagon killed and the finale; `rogueend.trace`: the four buttons, the time machine
 destroyed and the finale).
 
+Games between hosts (design.md §11.5): each `events/<game>.net` gives a host's command line per line (host 1 first;
+`lanloss <n>` loses every n-th datagram on the LAN; `-netunplug` takes a host off the LAN when it has run its
+`-oracleframes`, so the others see it time out). `Trace-Demos.ps1` has QuakeSharp's `quakesharp-tools netrun` (the
+Release build, or `-Tools`) play them together on its virtual LAN, keeping in `netrun\` what each host received, then
+replays each host alone in the oracle (`-oraclehost <n> -tracedatagrams netrun\<game>.host<n>.dgrams`), writing
+`<game>.host<n>.trace`: `netjoin` (a client connecting by name to a listen server's deathmatch), `netdm` (three hosts:
+the menus' search, chat, `test` and `test2`, `status`, `net_stats`, a kick, a ban, a level change, a timeout),
+`netloss` (a lossy LAN) and `netcmds` (a full server, refused and failed connections, `maxplayers`, `listen`, `port`,
+`ban` with a mask, and a `datagram <step> <host> <port> <a.b.c.d:port> <hex>` line's packets from no host of the
+game: another program's requests, malformed ones, a bad response) and `netswitches` (`-ip`, `-udpport`, `-listen 4`,
+`-noipx`, `-noudp`). When every host matches QuakeSharp's, the oracle's hosts, given the same datagrams, sent the
+same ones (the `U` line): they would have played the same game together.
+
 ## How the oracle is built
 
 - **WinQuake's C, not its assembly.** The sources are copied and `quake-oracle.patch` applied: with `ORACLE` defined,
@@ -171,6 +184,9 @@ hooks for the traces that change nothing:
 | `-oraclevid <w> <h>` | Mode 0's size, the first windowed mode (320x200 to 1280x1024; 320x240 by default) |
 | `-oraclestep <n>` | Frames of 1/n s |
 | `-oracleverbose` | Print `Sys_Printf` (the console) to stdout |
+
+`argv[0]` is empty, as sys_win.c gives it, and these switches with their values are left out of the `cmdline` cvar
+(`quake-oracle.patch`), as QuakeSharp leaves them out: they and their paths differ between the two programs' runs.
 
 ## The trace format
 

@@ -34,7 +34,7 @@ public sealed class VirtualWinsock : IWinsock
     private readonly string hostName;
     private readonly uint hostAddr;
     private readonly VSocket?[] sockets = new VSocket?[MaxSockets];
-    private readonly Queue<Pending> remote = new();
+    private readonly LinkedList<Pending> remote = new();
     private readonly Queue<Pending> own = new();
     private int nextSocketNumber = FirstSocket;
     private int nextEphemeral = FirstEphemeral;
@@ -45,6 +45,9 @@ public sealed class VirtualWinsock : IWinsock
     // the U line: what was sent and received since it was last taken
     private ulong datagramHash = FNV_OFFSET;
     private int datagramCount;
+
+    // -tracedump's datagram lines of the frame running
+    private StringBuilder datagramLog = new();
 
     /// <param name="host">The machine's number on the virtual LAN (-oraclehost).</param>
     /// <param name="steps">The clock's steps so far (<see cref="Platform.VirtualSystem.Steps"/>).</param>
@@ -90,10 +93,26 @@ public sealed class VirtualWinsock : IWinsock
 
     /// <summary>
     /// Another host's datagram (or with data null, the ICMP answer to what the port's socket sent there), arriving at
-    /// the machine's port at a step of the clock; arrivals come in the order of their steps.
+    /// the machine's port at a step of the clock; at a step, arrivals come in the order they were given.
     /// </summary>
-    public void Arrive(long step, int port, uint fromAddr, ushort fromPort, byte[]? data) =>
-        remote.Enqueue(new Pending(step, port, new Datagram(data == null, fromAddr, fromPort, data ?? [])));
+    public void Arrive(long step, int port, uint fromAddr, ushort fromPort, byte[]? data)
+    {
+        var p = new Pending(step, port, new Datagram(data == null, fromAddr, fromPort, data ?? []));
+        LinkedListNode<Pending>? after = remote.Last;
+        while (after != null && after.Value.Step > step)
+        {
+            after = after.Previous;
+        }
+
+        if (after == null)
+        {
+            remote.AddFirst(p);
+        }
+        else
+        {
+            remote.AddAfter(after, p);
+        }
+    }
 
     /// <summary>
     /// -tracedatagrams' file: lines "&lt;step&gt; &lt;port&gt; &lt;a.b.c.d:port&gt; &lt;hex bytes&gt;" or "... reset", as
@@ -151,8 +170,16 @@ public sealed class VirtualWinsock : IWinsock
         count = datagramCount;
         datagramHash = FNV_OFFSET;
         datagramCount = 0;
+        LastDatagramLog = datagramLog.ToString();
+        datagramLog = new StringBuilder();
         return h;
     }
+
+    /// <summary>
+    /// -tracedump: the datagrams of the frame <see cref="Datagrams"/> last took, as "datagram &lt;kind&gt; &lt;port&gt;
+    /// &lt;a.b.c.d:port&gt; &lt;size&gt; &lt;bytes&gt;" lines (winsock_oracle.c's Oracle_DatagramLog).
+    /// </summary>
+    public string LastDatagramLog { get; private set; } = "";
 
     // ---- the hosts ----
 
@@ -163,15 +190,11 @@ public sealed class VirtualWinsock : IWinsock
             return new HostEnt("localhost", [MakeAddr(127, 0, 0, 1)]);
         }
 
-        if (name.Length > 5 && name.StartsWith("quake", StringComparison.OrdinalIgnoreCase) && char.IsAsciiDigit(name[5]))
+        // quake<n>, the whole name ("quake1:26001" resolves no more than on Windows)
+        if (name.Length > 5 && name.Length <= 8 && name.StartsWith("quake", StringComparison.OrdinalIgnoreCase)
+            && name[5..].All(char.IsAsciiDigit))
         {
-            // atoi: the leading digits
-            int n = 0;
-            for (int i = 5; i < name.Length && char.IsAsciiDigit(name[i]) && n < 1000; i++)
-            {
-                n = (n * 10) + (name[i] - '0');
-            }
-
+            int n = int.Parse(name[5..], CultureInfo.InvariantCulture);
             if (n >= 1 && n <= 254)
             {
                 return new HostEnt(HostName(n), [HostAddr(n)]);
@@ -254,9 +277,10 @@ public sealed class VirtualWinsock : IWinsock
         long now = steps();
         for (long step = deliveredStep + 1; step <= now; step++)
         {
-            while (remote.Count > 0 && remote.Peek().Step <= step)
+            while (remote.First != null && remote.First.Value.Step <= step)
             {
-                Pending p = remote.Dequeue();
+                Pending p = remote.First.Value;
+                remote.RemoveFirst();
                 ArriveAt(p.Port, p.Datagram);
             }
 
@@ -299,6 +323,12 @@ public sealed class VirtualWinsock : IWinsock
         }
 
         datagramCount++;
+
+        uint a = ntohl(addr);
+        datagramLog.Append(CultureInfo.InvariantCulture,
+            $"datagram {kind} {port} {a >> 24}.{(a >> 16) & 0xff}.{(a >> 8) & 0xff}.{a & 0xff}:{ntohs(addrPort)} {data.Length} ");
+        datagramLog.Append(Convert.ToHexStringLower(data));
+        datagramLog.Append('\n');
     }
 
     // ---- the sockets ----

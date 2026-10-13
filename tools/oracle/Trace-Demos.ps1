@@ -45,6 +45,17 @@ packs' loose config.cfg), run with -hipnotic and -rogue in their own game folder
                                           started from them (rogue: capture the flag, one flag, three teams, tag)
   hipend.trace, rogueend.trace            each pack's end: Armagon killed, the time machine destroyed; the finale
 
+Games between hosts (events/<game>.net, design.md §11.5), played together by QuakeSharp's netrun (-Tools), then each
+host replayed alone from the datagrams it received:
+  <game>.host<n>.trace                    netjoin: a client connecting by name to a listen server's deathmatch,
+                                          moving, firing, talking, leaving; netdm: three hosts, one joining
+                                          through the menus' search, chat, test and test2, status and net_stats, a
+                                          kick, a ban refusing a connection, a level change, a client unplugged
+                                          (-netunplug) timing out; netloss: two hosts on a lossy LAN (lanloss);
+                                          netcmds: the network's commands and refusals, with datagrams from no
+                                          host of the game (another program's requests, a bad response);
+                                          netswitches: -ip, -udpport, -listen 4, -noipx, -noudp
+
 .PARAMETER Oracle
 quake-oracle.exe, as Build-Oracle.ps1 builds it.
 
@@ -53,6 +64,9 @@ A Quake folder with the original id1/pak0.pak and id1/pak1.pak.
 
 .PARAMETER OutDir
 The folder for the traces, outside the repository.
+
+.PARAMETER Tools
+quakesharp-tools.exe (Release build by default), whose netrun plays the games between hosts.
 
 .PARAMETER Only
 Writes only the traces of these names (e.g. menus, commands.640x480); a run that reads the files of an earlier one
@@ -63,8 +77,10 @@ param(
     [Parameter(Mandatory = $true)] [string] $QuakeDir,
     [Parameter(Mandatory = $true)] [string] $OutDir,
     [int] $AttractFrames = 20000,
-    [string[]] $Only = @()
+    [string[]] $Only = @(),
+    [string] $Tools = ''
 )
+if (-not $Tools) { $Tools = Join-Path $PSScriptRoot '..\QuakeSharp.Tools\bin\Release\net10.0\quakesharp-tools.exe' }
 
 $ErrorActionPreference = 'Stop'
 # -Only a,b from powershell -File arrives as one string
@@ -214,5 +230,26 @@ foreach ($pack in $packs) {
             $inputs = @(Get-ChildItem (Join-Path $OutDir "${p}tour.files") -Filter '*.sav' | ForEach-Object { "${p}tour/$($_.Name)" })
         }
         Trace $name @("-$pack", '-traceevents', $events, '-oracleframes', "$($packGames[$pack][$game])") $inputs $pack
+    }
+}
+
+# games between hosts (design.md §11.5): events/<game>.net names each host's command line. QuakeSharp's netrun plays
+# them together on its virtual LAN and keeps what each host received; the oracle then replays each host alone from its
+# datagrams (-oraclehost <n> -tracedatagrams), writing <game>.host<n>.trace. The datagrams stay in netrun\.
+foreach ($net in Get-ChildItem (Join-Path $PSScriptRoot 'events') -Filter '*.net') {
+    $game = $net.BaseName
+    $hostLines = @(Get-Content $net.FullName | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') -and -not $_.StartsWith('lanloss') -and -not $_.StartsWith('datagram') })
+    $names = @(1..$hostLines.Count | ForEach-Object { "$game.host$_" })
+    if ($Only -and -not ($names | Where-Object { $Only -contains $_ })) { continue }
+    $netDir = Join-Path $OutDir 'netrun'
+    & $Tools netrun $QuakeDir $netDir $net.FullName | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "netrun failed on $game" }
+    for ($h = 1; $h -le $hostLines.Count; $h++) {
+        $arguments = @($hostLines[$h - 1] -split ' ' | Where-Object { $_ })
+        for ($i = 0; $i -lt $arguments.Count - 1; $i++) {
+            if ($arguments[$i] -eq '-traceevents') { $arguments[$i + 1] = Join-Path $net.DirectoryName $arguments[$i + 1] }
+        }
+        $arguments = @('-oraclehost', "$h", '-tracedatagrams', (Join-Path $netDir "$game.host$h.dgrams")) + $arguments
+        Trace "$game.host$h" $arguments
     }
 }

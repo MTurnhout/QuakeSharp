@@ -11,4 +11,8 @@ void Oracle_WinsockInit (void);
 // the trace's U line: the hash of what was sent and received since the last call, and how many
 unsigned long long Oracle_Datagrams (int *count);
 
+// -tracedump: the datagrams of the frame Oracle_Datagrams last took, as "datagram <kind> <port> <a.b.c.d:port> <size>
+// <bytes>" lines
+const char *Oracle_DatagramLog (void);
+
 #endif

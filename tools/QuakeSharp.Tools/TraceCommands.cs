@@ -125,6 +125,80 @@ internal static class TraceCommands
         return 0;
     }
 
+    // netrun <quake-dir> <out-dir> <game.net>: a game between hosts (design.md §11.5): for each host n,
+    // <game>.host<n>.trace, the datagrams it received (<game>.host<n>.dgrams, the oracle's -tracedatagrams), its
+    // console's text (<game>.host<n>.log) and its files (<game>.host<n>.files)
+    public static int NetRun(string baseDir, string outDir, string game)
+    {
+        Commands.RefuseRepository(outDir);
+        Directory.CreateDirectory(outDir);
+        string name = Path.GetFileNameWithoutExtension(game);
+        NetGame netGame = NetGame.Read(game);
+        IReadOnlyList<IReadOnlyList<string>> hosts = netGame.Hosts;
+        string root = Path.Combine(Path.GetTempPath(), "quakesharp-netrun", Guid.NewGuid().ToString("N"));
+        string[] userDirs = [.. hosts.Select((_, i) => Path.Combine(root, $"host{i + 1}"))];
+        var writers = new StreamWriter[hosts.Count];
+        var counts = new int[hosts.Count];
+        try
+        {
+            for (int i = 0; i < hosts.Count; i++)
+            {
+                string gameDir = Path.Combine(userDirs[i], TraceRun.GameDirectory([.. hosts[i]]));
+                Directory.CreateDirectory(gameDir);
+                writers[i] = new StreamWriter(Path.Combine(outDir, $"{name}.host{i + 1}.trace")) { NewLine = "\n" };
+            }
+
+            var logs = hosts.Select(_ => new System.Text.StringBuilder()).ToArray();
+            var run = new Core.Diagnostics.NetRun(baseDir, userDirs, netGame, (host, text) => logs[host - 1].Append(text));
+            run.Run((host, lines) =>
+            {
+                foreach (string line in lines)
+                {
+                    writers[host - 1].WriteLine(line);
+                }
+
+                counts[host - 1]++;
+            });
+
+            for (int i = 0; i < hosts.Count; i++)
+            {
+                writers[i].Dispose();
+                File.WriteAllText(Path.Combine(outDir, $"{name}.host{i + 1}.dgrams"), run.Datagrams(i + 1));
+                File.WriteAllText(Path.Combine(outDir, $"{name}.host{i + 1}.log"), logs[i].ToString());
+                string files = Path.Combine(outDir, $"{name}.host{i + 1}.files");
+                if (Directory.Exists(files))
+                {
+                    Directory.Delete(files, recursive: true);
+                }
+
+                Directory.CreateDirectory(files);
+                string gameDir = Path.Combine(userDirs[i], TraceRun.GameDirectory([.. hosts[i]]));
+                foreach (string file in Directory.EnumerateFiles(gameDir, "*", SearchOption.AllDirectories))
+                {
+                    string target = Path.Combine(files, Path.GetRelativePath(gameDir, file));
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    File.Copy(file, target);
+                }
+
+                Console.WriteLine($"{name}.host{i + 1}.trace: {counts[i]} frames");
+            }
+        }
+        finally
+        {
+            foreach (StreamWriter w in writers)
+            {
+                w?.Dispose();
+            }
+
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+
+        return 0;
+    }
+
     // trace-compare <a.trace> <b.trace> [letters]: the first frame at which each kind of line differs
     public static int Compare(string a, string b, string letters)
     {

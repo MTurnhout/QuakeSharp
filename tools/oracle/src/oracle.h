@@ -31,4 +31,11 @@ void oracle_srand (unsigned int seed);
 #define ORACLE_SCREEN_WIDTH		1920
 #define ORACLE_SCREEN_HEIGHT	1080
 
+/*
+ * sys_oracle.c: how many arguments from argv[j] are a switch of the harness's with its values (-trace..., -oracle...,
+ * -netunplug), 0 for one of the game's: common.c leaves them out of the cmdline cvar (quake-oracle.patch), as
+ * QuakeSharp's CommandLine does.
+ */
+int Oracle_HarnessSwitch (char **argv, int j, int argc);
+
 #endif

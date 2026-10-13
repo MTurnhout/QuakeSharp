@@ -715,7 +715,7 @@ public sealed partial class QuakeEngine
 
         // save space for the header, filled in later
         MSG_WriteLong(net_message, 0);
-        MSG_WriteByte(net_message, CCREP_RULE_INFO);
+        MSG_WriteByte(net_message, CCREQ_RULE_INFO);
         MSG_WriteString(net_message, name);
         SetControlHeader();
         dfunc.Write(test2Socket, net_message.data, net_message.cursize, clientaddr);

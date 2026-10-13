@@ -1,0 +1,28 @@
+# the network's commands and refusals between three hosts (design.md 11.5): a full server, a connection refused by a
+# host without a server (its ICMP answer), one to an absent host, an unknown name, maxplayers, listen, port, ban with a
+# mask, net_stats all, slist, test by a cached name; and datagrams from no host of the game (another program's):
+# a request for another game, an incompatible version, malformed and short packets, unknown requests, a bad response
+-traceevents netcmds.host1.events -oracleframes 3600
+-traceevents netcmds.host2.events -oracleframes 2600
+-traceevents netcmds.host3.events -oracleframes 2600
+# from 10.0.0.200, no host of the game, to quake1's server: a query for another game, a connection of another protocol
+# version, a short packet, a length that is not the packet's, a packet without the control flag, a control word of -1,
+# a player that is not there, a rule that does not exist, an unknown request, a connection for another game; then a
+# connection accepted, its request again within 2 s (the reply again), and from another port later (a client back
+# from a crash: its connection is closed)
+datagram 50 1 26000 10.0.0.200:5000 8000000c025155414b580003
+datagram 51 1 26000 10.0.0.200:5000 8000000c015155414b450002
+datagram 52 1 26000 10.0.0.200:5000 0102
+datagram 53 1 26000 10.0.0.200:5000 8000000a025155414b450003
+datagram 54 1 26000 10.0.0.200:5000 0001000c025155414b450003
+datagram 55 1 26000 10.0.0.200:5000 ffffffff
+datagram 56 1 26000 10.0.0.200:5000 800000060305
+datagram 57 1 26000 10.0.0.200:5000 8000000e046e6f6e657375636800
+datagram 58 1 26000 10.0.0.200:5000 800000057f
+datagram 59 1 26000 10.0.0.200:5000 8000000c015155414b580003
+datagram 60 1 26000 10.0.0.200:5000 8000000c015155414b450003
+datagram 62 1 26000 10.0.0.200:5000 8000000c015155414b450003
+datagram 200 1 26000 10.0.0.200:5001 8000000c015155414b450003
+# and to quake3's second connection to quake9 (its socket's port, 49156), an answer from quake9's address that is no
+# answer to a connection request: a bad response
+datagram 2000 3 49156 10.0.0.9:26000 8000000599

@@ -277,6 +277,26 @@ void Sys_SetFPCW (void)
 
 //=============================================================================
 
+// oracle.h: the harness's switches and how many values each takes
+int Oracle_HarnessSwitch (char **argv, int j, int argc)
+{
+	static const struct { const char *name; int values; } switches[] =
+	{
+		{"-trace", 1}, {"-traceevents", 1}, {"-tracedatagrams", 1}, {"-tracedump", 1}, {"-traceshot", 1},
+		{"-tracequitafterdemo", 0}, {"-oracleframes", 1}, {"-oraclevid", 2}, {"-oraclestep", 1}, {"-oraclehost", 1},
+		{"-oracleverbose", 0}, {"-netunplug", 0},
+	};
+	int i, n;
+
+	for (i = 0; i < (int)(sizeof(switches) / sizeof(switches[0])); i++)
+		if (!Q_strcmp (argv[j], (char *)switches[i].name))
+		{
+			n = 1 + switches[i].values;
+			return j + n <= argc ? n : argc - j;
+		}
+	return 0;
+}
+
 void Oracle_Units (int argc, char **argv);
 unsigned long long Oracle_Scenario (const char *path, int print);
 
@@ -286,6 +306,8 @@ int main (int argc, char **argv)
 	int t;
 	double oldtime, newtime;
 
+	// sys_win.c: argv[0] is empty (WinMain gets the command line without the program)
+	argv[0] = "";
 	COM_InitArgv (argc, argv);
 
 	// -oraclescenario <file> [-print]: one scenario (scenarios.c), then quit

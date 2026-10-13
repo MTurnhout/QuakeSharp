@@ -1,0 +1,30 @@
+1 name bob
+1 color 4 12
+100 @key 27 1
+101 @key 27 0
+130 @key 129 1
+131 @key 129 0
+160 @key 13 1
+161 @key 13 0
+190 @key 13 1
+191 @key 13 0
+220 @key 13 1
+221 @key 13 0
+300 @key 128 1
+301 @key 128 0
+330 @key 13 1
+331 @key 13 0
+500 @key 13 1
+501 @key 13 0
+900 +forward
+950 -forward
+960 +attack
+1100 -attack
+1200 say hello
+1240 tell carl psst
+1300 test quake1
+1400 test2 quake1
+2700 +forward
+2730 +right
+2800 -right
+2810 -forward
