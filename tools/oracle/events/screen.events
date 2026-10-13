@@ -1,0 +1,74 @@
+5 map e1m1
+60 god
+120 @key 45 1
+121 @key 45 0
+134 @key 45 1
+135 @key 45 0
+148 @key 45 1
+149 @key 45 0
+162 @key 45 1
+163 @key 45 0
+176 @key 45 1
+177 @key 45 0
+190 @key 45 1
+191 @key 45 0
+204 @key 45 1
+205 @key 45 0
+218 @key 45 1
+219 @key 45 0
+232 @key 45 1
+233 @key 45 0
+246 @key 61 1
+247 @key 61 0
+260 @key 61 1
+261 @key 61 0
+274 @key 61 1
+275 @key 61 0
+288 @key 61 1
+289 @key 61 0
+302 @key 61 1
+303 @key 61 0
+316 @key 61 1
+317 @key 61 0
+330 @key 61 1
+331 @key 61 0
+344 @key 61 1
+345 @key 61 0
+358 @key 61 1
+359 @key 61 0
+372 @key 61 1
+373 @key 61 0
+386 @key 61 1
+387 @key 61 0
+400 viewsize 20
+430 viewsize 130
+460 viewsize 100
+490 fov 5
+520 fov 200
+550 fov 90
+580 @key 255 1
+581 @key 255 0
+642 @key 255 1
+643 @key 255 0
+674 showpause 0
+684 @key 255 1
+685 @key 255 0
+746 @key 255 1
+747 @key 255 0
+778 showpause 1
+788 showturtle 1
+798 +forward
+800 host_framerate 0.2
+820 host_framerate 0
+822 -forward
+852 showturtle 0
+862 lcd_x 2
+864 +left
+924 -left
+926 lcd_yaw 10
+956 viewsize 110
+986 viewsize 100
+988 lcd_x 0
+990 lcd_yaw 0
+1020 changelevel nosuchmap
+4920 connect local

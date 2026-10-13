@@ -45,6 +45,10 @@ public sealed class TraceEvents : IInputEvents
                 return true;
             }
 
+            // taken before it is delivered: a key that waits for the next one (SCR_ModalMessage's loop sends the key
+            // events again) gets the lines after it, of the same frame
+            string nextEvent = this.nextEvent;
+            nextFrame = -1;
             if (nextEvent.StartsWith("@key ", StringComparison.Ordinal))
             {
                 string[] fields = nextEvent[5..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -79,8 +83,6 @@ public sealed class TraceEvents : IInputEvents
                 Engine?.Cbuf_AddText(nextEvent);
                 Engine?.Cbuf_AddText("\n");
             }
-
-            nextFrame = -1;
         }
 
         return true;

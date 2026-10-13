@@ -113,6 +113,8 @@ public sealed partial class QuakeEngine
         {
             UserDir = parms.userdir,
             WorkDir = parms.workdir,
+            BeginDisc = Draw_BeginDisc,
+            EndDisc = Draw_EndDisc,
         };
     }
 

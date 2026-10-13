@@ -147,6 +147,9 @@ public sealed partial class QuakeEngine
     // whether the window has been shown: Windows activates it then
     private bool window_shown;
 
+    // vid_win.c: backingbuf, what the loading disc covers (D_BeginDirectRect)
+    private readonly byte[] backingbuf = new byte[48 * 24];
+
     /// <summary>
     /// The frame, locked or not (the traces' V line, -traceshot and the platform's): the DIB or the full-screen memory
     /// DC, and its row length.
@@ -1230,6 +1233,94 @@ public sealed partial class QuakeEngine
                 windowed_mouse = (int)_windowed_mouse.value;
             }
         }
+    }
+
+    // vid_win.c: D_BeginDirectRect. The loading disc drawn into the screen's buffer around a file's read, what was
+    // under it kept, and the rectangle shown (FlipScreen: the platform's); every mode has one page
+    public void D_BeginDirectRect(int x, int y, byte[]? pbitmap, int width, int height)
+    {
+        int i, j, reps, repshift;
+
+        if (!vid_initialized)
+        {
+            return;
+        }
+
+        if (vid.aspect > 1.5)
+        {
+            reps = 2;
+            repshift = 1;
+        }
+        else
+        {
+            reps = 1;
+            repshift = 0;
+        }
+
+        VID_LockBuffer();
+
+        (byte[] direct, _) = VID_Frame();
+        if (direct.Length == 0)
+        {
+            throw Sys_Error("NULL vid.direct pointer");
+        }
+
+        for (i = 0; i < (height << repshift); i += reps)
+        {
+            for (j = 0; j < reps; j++)
+            {
+                int row = x + (((y << repshift) + i + j) * (int)vid.rowbytes);
+                direct.AsSpan(row, width).CopyTo(backingbuf.AsSpan((i + j) * 24, width));
+                pbitmap.AsSpan((i >> repshift) * width, width).CopyTo(direct.AsSpan(row, width));
+            }
+        }
+
+        VID_UnlockBuffer();
+
+        video?.PresentRect(direct, (int)vid.rowbytes, x, y, width, height << repshift);
+    }
+
+    // vid_win.c: D_EndDirectRect: what was under the disc put back, and shown
+    public void D_EndDirectRect(int x, int y, int width, int height)
+    {
+        int i, j, reps, repshift;
+
+        if (!vid_initialized)
+        {
+            return;
+        }
+
+        if (vid.aspect > 1.5)
+        {
+            reps = 2;
+            repshift = 1;
+        }
+        else
+        {
+            reps = 1;
+            repshift = 0;
+        }
+
+        VID_LockBuffer();
+
+        (byte[] direct, _) = VID_Frame();
+        if (direct.Length == 0)
+        {
+            throw Sys_Error("NULL vid.direct pointer");
+        }
+
+        for (i = 0; i < (height << repshift); i += reps)
+        {
+            for (j = 0; j < reps; j++)
+            {
+                int row = x + (((y << repshift) + i + j) * (int)vid.rowbytes);
+                backingbuf.AsSpan((i + j) * 24, width).CopyTo(direct.AsSpan(row, width));
+            }
+        }
+
+        VID_UnlockBuffer();
+
+        video?.PresentRect(direct, (int)vid.rowbytes, x, y, width, height << repshift);
     }
 
     // vid_win.c: AppActivate (the desktop is not palettized; the window is minimized only in the full-screen DIB modes,

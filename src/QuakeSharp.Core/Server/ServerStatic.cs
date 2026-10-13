@@ -88,6 +88,14 @@ public sealed class ServerStatic
     /// <summary>[maxclients]</summary>
     public ServerClient[] clients = [];
 
+    // what the C's pointer past the last slot points at (never active)
+    private readonly ServerClient pastClients = new();
+
+    /// <summary>&amp;svs.clients[i]: the C's loops over the clients (for (i=0, host_client = svs.clients ;
+    /// i&lt;svs.maxclients ; i++, host_client++)) leave host_client at the slot after the last, which a console command
+    /// may compare with (Host_Kick_f); past every slot, a slot that is never active.</summary>
+    public ServerClient Client(int i) => i < clients.Length ? clients[i] : pastClients;
+
     /// <summary>episode completion information</summary>
     public int serverflags;
 

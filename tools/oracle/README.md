@@ -53,6 +53,18 @@ deathmatch maps, the save and load menus, the refusals: 17,705 frames) and `load
 in a fresh run and played on: 12,905 frames); `record.trace` (with `-condebug`: demos recorded through a level change
 and an intermission, with a forced CD track, and cut by the end of the run, two screenshots), then each of its demos
 played back in a fresh run (`record.d1-d3.trace`) and `d1` as a timedemo (`record.timedemo.trace`).
+The rest of the UI (milestone 10, step 6): `console.trace` (typing at the console: completion, editing, the history,
+the line's limit, scrolling back, auto-repeat; the console in a game, `messagemode` and `messagemode2`,
+`con_notifytime`, `clear`, `unbind`, `wait`: 3,300 frames), `screen.trace` and `screen.640x480.trace` (the view's sizes
+and their bounds, the pause picture, the turtle on `host_framerate`'s long frames, `lcd_x`'s two views, a level that
+fails to load, then `Host_Error`: 4,980 frames), `sbar.trace` and `sbar.640x480.trace` (the faces with the powerups,
+their flashes, numbers past three digits and negative, e1m7's rune, a deathmatch's scores at each size and its
+intermission, coop's frags: 5,013 frames), `menuwalk.trace` (every menu's cursor past both ends, the options' sliders
+past their bounds, binding cancelled, a new game during a game answered no then yes, the save menu's refusals, the
+setup, LAN and game options' bounds, the quit menu, ending in its yes: 4,899 frames), `hostcmds.trace` (the commands no
+other run uses, their usage lines and refusals, a deathmatch's refused cheats: 8,880 frames) and `rdebug.trace` (the
+renderer's debug cvars and commands with `-surfcachesize 160`, `pointfile` reading `events/e1m1.pts`, put in the
+run's `maps`, `chase_active`, quad rockets: 1,787 frames).
 
 With the mission packs in `-QuakeDir` (`hipnotic/pak0.pak`, `rogue/pak0.pak`; only those PAKs are copied, never the
 packs' loose `config.cfg`, design.md decision 45), it also runs `-hipnotic` and `-rogue`, in their own game folders,
@@ -75,7 +87,8 @@ destroyed and the finale).
 - **Its other changes** (`quake-oracle.patch`, each under `ORACLE`): fixed substitutes for memory the C reads without
   owning it (design.md §3.3: `R_AliasDrawModel`'s `finalverts` start zeroed; `COM_FileBase` stops at the start of a
   name without `/`, where it read the memory before it; `soundinfo` prints 0 for the sound buffer's address, which
-  moves with every build; `CL_GetMessage`'s `f`, copied into the view angles when a demo ends, starts at 0;
+  moves with every build, `mcache` 1 or 0 for a model's cache address, and `r_drawflat` colours a surface by its place
+  in the frame's list instead of its address; `CL_GetMessage`'s `f`, copied into the view angles when a demo ends, starts at 0;
   `ED_ParseEpair`'s `string`, which a vector of fewer than three numbers is split past the copy into, starts zeroed: a
   rogue map's one-number `mangle`), and three
 hooks for the traces that change nothing:
@@ -106,10 +119,11 @@ hooks for the traces that change nothing:
   machine is the one Winquake.exe was audited on: a 1920x1080 desktop, the windowed modes 320x240 (`-oraclevid`'s size),
   640x480 and 800x600 (stretched), and DirectDraw's 8-bit full-screen modes 320x240, 640x480, 800x600 and 1024x768, one
   page each (drawn in a memory DC). The window's client area is at the screen's top left and gets the focus when first
-  shown. Not part of it: `-dibonly` and the full-screen DIB modes, the window's position, minimizing, an 8-bit desktop's
-  palette, and the loading disc (WinQuake draws it on the screen and restores it: never in the frame). The frame's and
-  the z-buffer's memory start after 64 bytes of padding: a sprite clipped to the view's left edge can write one pixel
-  and one depth value before them (design.md §3.3), which land there rather than in the heap's bookkeeping.
+  shown. The loading disc is drawn into the frame and taken out again around every file's read (`D_BeginDirectRect`,
+  `D_EndDirectRect`), with nothing shown: the frame is the same afterwards. Not part of it: `-dibonly` and the
+  full-screen DIB modes, the window's position, minimizing, and an 8-bit desktop's palette. The frame's and the
+  z-buffer's memory start after 64 bytes of padding: a sprite clipped to the view's left edge can write one pixel and
+  one depth value before them (design.md §3.3), which land there rather than in the heap's bookkeeping.
   `Trace-Demos.ps1` starts every run with `-startwindowed -noautostretch`: in mode 0.
 - `snd_oracle.c`: a 64 KB, 16-bit stereo, 11025 Hz buffer standing in for DirectSound's, whose play position follows
   the virtual clock. The mixer then paints the same samples at the same frames in every run, which the game depends on:
@@ -141,7 +155,7 @@ hooks for the traces that change nothing:
 | `-oracleframes <n>` | Quit after n frames |
 | `-traceshot <frame>` | Also write that frame (any number of times) as `<trace>.<frame>.shot`: width, height (32-bit), the palette, the pixels; `quakesharp-tools shot2png` makes a PNG of it |
 | `-tracedump <frame>` | Also write that frame's state (any number of times) field by field as `<trace>.<frame>.dump`, floats as their bits: the client's entities, then the server (`server` line), the QuakeC globals and every edict's header and fields by name (`global`, `edict` lines, strings quoted with `\xHH` escapes), the messages sent during the frame in hexadecimal (`message <sender> <reliable> <result> <size> <bytes>`), the sound (`sound`: the mixer's times, `channel` lines, `painted <from> <to> <bytes>`: the samples painted during the frame from the device's buffer, in hexadecimal) and the CD (`cd`: cd_win.c's state, `cdvolume` as its bits, the remap table, the drive's) and the mouse and joystick (`input`: the `I` line's fields by name); `quakesharp-tools trace` writes the same for QuakeSharp, to find the field behind a differing line |
-| `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it), `<frame> @mouse <dx> <dy>`, the mouse moved (the virtual cursor, then `IN_MouseEvent` as for `WM_MOUSEMOVE`), or `<frame> @buttons <state>`, the mouse buttons held (1 left, 2 right, 4 middle; `IN_MouseEvent`) |
+| `-traceevents <file>` | Scripted input: lines of `<frame> <console text>`, added to the command buffer before that frame runs (`+forward`, `-forward`, `impulse 8`...), `<frame> @key <key number> <1 or 0>`, a key going down or up (`Key_Event`, as the window procedure posts it), `<frame> @mouse <dx> <dy>`, the mouse moved (the virtual cursor, then `IN_MouseEvent` as for `WM_MOUSEMOVE`), or `<frame> @buttons <state>`, the mouse buttons held (1 left, 2 right, 4 middle; `IN_MouseEvent`). Each line is taken before it is delivered, so a key that waits for the next (`SCR_ModalMessage`'s loop calls `Sys_SendKeyEvents`) gets the lines after it of the same frame: the answer must be in the frame of the key that asks |
 | `-oraclevid <w> <h>` | Mode 0's size, the first windowed mode (320x200 to 1280x1024; 320x240 by default) |
 | `-oraclestep <n>` | Frames of 1/n s |
 | `-oracleverbose` | Print `Sys_Printf` (the console) to stdout |

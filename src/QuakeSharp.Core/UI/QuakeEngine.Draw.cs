@@ -515,15 +515,11 @@ public sealed partial class QuakeEngine
     // =============================================================================
 
     // draw.c: Draw_BeginDisc
-    // Draws the little blue disc in the corner of the screen. Call before beginning any disc IO. (vid_win.c draws it
-    // on the screen and restores what was under it: never in the frame.)
-    public void Draw_BeginDisc()
-    {
-    }
+    // Draws the little blue disc in the corner of the screen. Call before beginning any disc IO. (Before Draw_Init
+    // there is no disc: the C passes draw_disc->data's address, which D_BeginDirectRect does not read without a mode.)
+    public void Draw_BeginDisc() => D_BeginDirectRect((int)vid.width - 24, 0, draw_disc?.data, 24, 24);
 
     // draw.c: Draw_EndDisc
     // Erases the disc icon. Call after completing any disc IO
-    public void Draw_EndDisc()
-    {
-    }
+    public void Draw_EndDisc() => D_EndDirectRect((int)vid.width - 24, 0, 24, 24);
 }

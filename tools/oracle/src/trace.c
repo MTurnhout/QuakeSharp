@@ -1088,9 +1088,12 @@ void Trace_Frame (void)
 		Sys_Quit ();
 }
 
-// Sys_SendKeyEvents: the events of the frame about to run
+// Sys_SendKeyEvents: the events of the frame about to run. Each is taken before it is delivered, so a key that waits
+// for the next one (SCR_ModalMessage's loop calls Sys_SendKeyEvents) gets the lines after it, of the same frame
 void Trace_Events (void)
 {
+	char	event[1024];
+
 	while (events)
 	{
 		if (next_event_frame < 0)
@@ -1104,36 +1107,37 @@ void Trace_Events (void)
 		}
 		if (next_event_frame > trace_frame + 1)
 			return;
-		if (!Q_strncmp (next_event, "@key ", 5))
+		Q_strcpy (event, next_event);
+		next_event_frame = -1;
+		if (!Q_strncmp (event, "@key ", 5))
 		{
 			// a key event: "@key <key number> <1 down, 0 up>"
 			int key, down;
 
-			if (sscanf (next_event + 5, "%d %d", &key, &down) == 2)
+			if (sscanf (event + 5, "%d %d", &key, &down) == 2)
 				Key_Event (key, down);
 		}
-		else if (!Q_strncmp (next_event, "@mouse ", 7))
+		else if (!Q_strncmp (event, "@mouse ", 7))
 		{
 			// the mouse moved: "@mouse <dx> <dy>"
 			int dx, dy;
 
-			if (sscanf (next_event + 7, "%d %d", &dx, &dy) == 2)
+			if (sscanf (event + 7, "%d %d", &dx, &dy) == 2)
 				Oracle_MouseMove (dx, dy);
 		}
-		else if (!Q_strncmp (next_event, "@buttons ", 9))
+		else if (!Q_strncmp (event, "@buttons ", 9))
 		{
 			// the mouse buttons pressed: "@buttons <1 left | 2 right | 4 middle>"
 			int state;
 
-			if (sscanf (next_event + 9, "%d", &state) == 1)
+			if (sscanf (event + 9, "%d", &state) == 1)
 				Oracle_MouseButtons (state);
 		}
 		else
 		{
-			Cbuf_AddText (next_event);
+			Cbuf_AddText (event);
 			Cbuf_AddText ("\n");
 		}
-		next_event_frame = -1;
 	}
 }
 

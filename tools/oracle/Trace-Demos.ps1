@@ -22,7 +22,12 @@ when it quits, savegames, demos, screenshots, qconsole.log) is kept in <name>.fi
                         moving, its buttons and cvars, the joystick's cvars; video: every mode, from the console and the Video menu, with a
                         save, a demo and a screenshot across the changes), at
                         320x240; commands.640x480.trace the same at 640x480, sound.nosound.trace the sound game with
-                        -nosound -nocdaudio; saves: a save on every map, the save and load menus, the refusals
+                        -nosound -nocdaudio; saves: a save on every map, the save and load menus, the refusals;
+                        the rest of the UI: console (typing at it, messagemode), screen (sizes, pause, turtle, lcd_x,
+                        a failed load), sbar (powerups, sigils, deathmatch, coop), menuwalk (every menu's keys, a new
+                        game during a game, the quit menu's yes), hostcmds (the commands no other run uses); screen and
+                        sbar also at 640x480
+  rdebug.trace          the renderer's debug cvars and commands with -surfcachesize 160, events/e1m1.pts in maps/
   loads.trace           every save saves.trace's run wrote, loaded in turn and played on
   record.trace          demos recorded (events/record.events), two screenshots, with -condebug's qconsole.log;
                         record.d1-d3.trace: each demo played back, record.timedemo.trace: d1 as a timedemo
@@ -91,9 +96,9 @@ $packs = @('hipnotic', 'rogue' | Where-Object { CopyPak $_ 'pak0.pak' })
 $gameDirs = @('id1') + $packs
 
 # A run of the oracle: from game folders holding only the PAKs (and the files of earlier runs named in $inputs, as
-# "<run>/<file>", in the run's game folder $game), writing <name>.trace; what the run's game folder holds afterwards,
-# but the PAKs, is kept in <name>.files
-function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), [string] $game = 'id1') {
+# "<run>/<file>", in the run's game folder $game; and $place's files, path in the game folder = file), writing
+# <name>.trace; what the run's game folder holds afterwards, but the PAKs, is kept in <name>.files
+function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), [string] $game = 'id1', [hashtable] $place = @{}) {
     if ($Only -and $Only -notcontains $name) { return }
     foreach ($g in $gameDirs) {
         Get-ChildItem (Join-Path $base $g) | Where-Object { $_.Name -notin 'pak0.pak', 'pak1.pak' } | Remove-Item -Recurse
@@ -101,6 +106,11 @@ function Trace([string] $name, [string[]] $arguments, [string[]] $inputs = @(), 
     $gamedir = Join-Path $base $game
     foreach ($earlier in $inputs) {
         Copy-Item (Join-Path $OutDir ($earlier -replace '^([^/]+)/', '$1.files/')) $gamedir
+    }
+    foreach ($path in $place.Keys) {
+        $target = Join-Path $gamedir $path
+        New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+        Copy-Item $place[$path] $target
     }
     $trace = Join-Path $OutDir "$name.trace"
     # from the Quake folder with WinQuake's base directory ".": the console shows "./id1/pak0.pak", as QuakeSharp's
@@ -133,13 +143,21 @@ Trace 'menus.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-o
 Trace 'attract.config' @('-oracleframes', '600') @('menus/config.cfg')
 
 # the scripted games (design.md §11.1): the frames each runs for are in GameTests too
-$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500; 'saves' = 17705; 'mouse' = 1600; 'video' = 2500 }
+$games = [ordered]@{ 'start' = 2000; 'commands' = 3800; 'intermission' = 1900; 'finale' = 3100; 'netmenus' = 3000; 'tour' = 22200; 'e1' = 24500; 'sound' = 3500; 'saves' = 17705; 'mouse' = 1600; 'video' = 2500;
+    'console' = 3300; 'screen' = 4980; 'sbar' = 5013; 'menuwalk' = 5000; 'hostcmds' = 8880 }
 foreach ($game in $games.Keys) {
     $events = Join-Path $PSScriptRoot "events\$game.events"
     Trace $game @('-traceevents', $events, '-oracleframes', "$($games[$game])")
 }
 $events = Join-Path $PSScriptRoot 'events\commands.events'
 Trace 'commands.640x480' @('-oraclevid', '640', '480', '-traceevents', $events, '-oracleframes', '3800')
+foreach ($game in 'screen', 'sbar') {
+    $events = Join-Path $PSScriptRoot "events\$game.events"
+    Trace "$game.640x480" @('-oraclevid', '640', '480', '-traceevents', $events, '-oracleframes', "$($games[$game])")
+}
+# the renderer's debug cvars and commands, with a surface cache small enough to thrash and a point file beside the map
+$events = Join-Path $PSScriptRoot 'events\rdebug.events'
+Trace 'rdebug' @('-surfcachesize', '160', '-traceevents', $events, '-oracleframes', '1787') @() 'id1' @{ 'maps\e1m1.pts' = (Join-Path $PSScriptRoot 'events\e1m1.pts') }
 # the sound game without a sound device or a CD (WinQuake's -nosound and -nocdaudio)
 $events = Join-Path $PSScriptRoot 'events\sound.events'
 Trace 'sound.nosound' @('-nosound', '-nocdaudio', '-traceevents', $events, '-oracleframes', '3500')

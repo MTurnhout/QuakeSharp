@@ -71,6 +71,24 @@ index e07e6ce..ca085ec 100644
  	
  	if (s-s2 < 2)
  		strcpy (out,"?model?");
+diff --git a/d_edge.c b/d_edge.c
+index 52cc8eb..32f1041 100644
+--- a/d_edge.c
++++ b/d_edge.c
+@@ -195,7 +195,13 @@ void D_DrawSurfaces (void)
+ 			d_zistepv = s->d_zistepv;
+ 			d_ziorigin = s->d_ziorigin;
+ 
++#ifdef ORACLE
++// the colour is the low byte of the msurface_t's address, which depends on the build: the surface's place in the
++// frame's list instead, as QuakeSharp does
++			D_DrawSolidSurface (s, (int)(s - surfaces) & 0xFF);
++#else
+ 			D_DrawSolidSurface (s, (int)s->data & 0xFF);
++#endif
+ 			D_DrawZSpans (s->spans);
+ 		}
+ 	}
 diff --git a/in_win.c b/in_win.c
 index d8544fb..90f8367 100644
 --- a/in_win.c
@@ -132,6 +150,23 @@ index d8544fb..90f8367 100644
 +}
 +#endif
 \ No newline at end of file
+diff --git a/model.c b/model.c
+index e3bd9fb..5358056 100644
+--- a/model.c
++++ b/model.c
+@@ -1862,7 +1862,12 @@ void Mod_Print (void)
+ 	Con_Printf ("Cached models:\n");
+ 	for (i=0, mod=mod_known ; i < mod_numknown ; i++, mod++)
+ 	{
++#ifdef ORACLE
++// the cache's address depends on the build: print 1 for a model with data, 0 without, as QuakeSharp does
++		Con_Printf ("%8p : %s",(void *)(mod->cache.data != NULL), mod->name);
++#else
+ 		Con_Printf ("%8p : %s",mod->cache.data, mod->name);
++#endif
+ 		if (mod->needload & NL_UNREFERENCED)
+ 			Con_Printf (" (!R)");
+ 		if (mod->needload & NL_NEEDS_LOADED)
 diff --git a/net_main.c b/net_main.c
 index 5f5d2cf..5a28664 100644
 --- a/net_main.c

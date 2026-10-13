@@ -1,0 +1,84 @@
+5 map e1m1
+65 god
+67 impulse 9
+77 r_drawflat 1
+77 +left
+137 -left
+137 r_drawflat 0
+147 r_draworder 1
+147 +left
+207 -left
+207 r_draworder 0
+217 r_speeds 1
+217 +left
+237 -left
+237 r_speeds 0
+247 r_dspeeds 1
+247 +left
+267 -left
+267 r_dspeeds 0
+277 r_timegraph 1
+277 +left
+337 -left
+337 r_timegraph 0
+347 r_polymodelstats 1
+347 +left
+367 -left
+367 r_polymodelstats 0
+377 r_numsurfs 1
+377 +left
+387 -left
+387 r_numsurfs 0
+397 r_numedges 1
+397 +left
+407 -left
+407 r_numedges 0
+417 r_graphheight 4
+417 r_timegraph 1
+447 r_timegraph 0
+447 r_graphheight 15
+457 r_drawentities 0
+487 r_drawentities 1
+497 r_ambient -10
+527 r_ambient 0
+537 d_mipcap 5
+567 d_mipcap -1
+597 d_mipcap 0
+607 timerefresh
+627 pointfile
+747 chase_active 1
+747 +forward
+747 +left
+867 -left
+867 -forward
+869 chase_back 40
+869 chase_up 60
+869 chase_right 30
+929 +lookup
+959 -lookup
+989 chase_back 100
+989 chase_up 16
+989 chase_right 0
+989 chase_active 0
+989 centerview
+1019 r_maxsurfs 1
+1019 r_maxedges 1
+1019 r_reportsurfout 1
+1019 r_reportedgeout 1
+1019 map e1m1
+1119 god
+1121 +left
+1241 -left
+1251 r_maxsurfs 1000
+1251 r_maxedges 2000
+1251 r_reportsurfout 0
+1251 r_reportedgeout 0
+1251 map e1m1
+1351 god
+1353 impulse 9
+1355 impulse 255
+1357 impulse 7
+1367 +forward
+1487 -forward
+1487 +attack
+1687 -attack

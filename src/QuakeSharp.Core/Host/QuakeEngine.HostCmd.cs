@@ -1323,9 +1323,8 @@ public sealed partial class QuakeEngine
         }
         else
         {
-            for (i = 0; i < svs.maxclients; i++)
+            for (i = 0, host_client = svs.Client(0); i < svs.maxclients; i++, host_client = svs.Client(i))
             {
-                host_client = svs.clients[i];
                 if (!host_client.active)
                 {
                     continue;

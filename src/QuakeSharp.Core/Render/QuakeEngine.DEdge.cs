@@ -148,7 +148,8 @@ public sealed partial class QuakeEngine
                 d_zistepv = s.d_zistepv;
                 d_ziorigin = s.d_ziorigin;
 
-                // (the C's color is the low byte of the msurface_t's address: here the surface's index)
+                // the C's color is the low byte of the msurface_t's address, which depends on the build: the
+                // surface's place in the frame's list instead, as the oracle's patch has it
                 D_DrawSolidSurface(s, i & 0xFF);
                 D_DrawZSpans(s.spans);
             }

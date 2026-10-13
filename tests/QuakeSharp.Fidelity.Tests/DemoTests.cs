@@ -96,7 +96,10 @@ public sealed class DemoTests : IDisposable
     // (recorded with the executable's -recordevents) from the menu through e1m1 into e1m2, ending on the quit screen,
     // and the sound's (design.md §11.2): its commands and cvars, the CD's, the menu's volume sliders, a game's pause;
     // and the mouse's (design.md §11.4): taken and released, looking and moving, its buttons and cvars, the joystick's;
-    // and the video modes': every mode from the console and the Video menu, a save, a demo and a screenshot across them
+    // and the video modes': every mode from the console and the Video menu, a save, a demo and a screenshot across them;
+    // and the rest of the UI (design.md §11.4, step 6): typing at the console, messagemode and the notify lines;
+    // screen.c's sizes, pause, turtle, lcd_x and a level that fails to load; sbar.c's powerups, sigils, deathmatch and
+    // coop; every menu's keys and a new game during a game; and the commands no other run uses
     [Theory]
     [InlineData("start", 2000, 320, 240, "start.trace")]
     [InlineData("commands", 3800, 320, 240, "commands.trace")]
@@ -110,6 +113,13 @@ public sealed class DemoTests : IDisposable
     [InlineData("saves", 17705, 320, 240, "saves.trace")]
     [InlineData("mouse", 1600, 320, 240, "mouse.trace")]
     [InlineData("video", 2500, 320, 240, "video.trace")]
+    [InlineData("console", 3300, 320, 240, "console.trace")]
+    [InlineData("screen", 4980, 320, 240, "screen.trace")]
+    [InlineData("screen", 4980, 640, 480, "screen.640x480.trace")]
+    [InlineData("sbar", 5013, 320, 240, "sbar.trace")]
+    [InlineData("sbar", 5013, 640, 480, "sbar.640x480.trace")]
+    [InlineData("menuwalk", 5000, 320, 240, "menuwalk.trace")]
+    [InlineData("hostcmds", 8880, 320, 240, "hostcmds.trace")]
     public void GamePlaysInSyncWithTheOracle(string game, int frames, int width, int height, string trace)
     {
         string baseDir = GameDataLocator.RequireBaseDir();
@@ -165,6 +175,23 @@ public sealed class DemoTests : IDisposable
         var run = new TraceRun(baseDir, userdir, ["-traceevents", events, "-oracleframes", "12905"]);
         AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 12905));
         RunFiles.AssertSame("loads.trace", userdir);
+    }
+
+    // The renderer's debug cvars and commands (design.md §11.4, step 6), with a surface cache small enough to thrash and
+    // tools/oracle/events/e1m1.pts beside the map for pointfile, as Trace-Demos.ps1 puts it beside the oracle's
+    [Fact]
+    public void RendererDebugPlaysInSyncWithTheOracle()
+    {
+        string baseDir = GameDataLocator.RequireBaseDir();
+        string reference = TraceLocator.RequireFile("rdebug.trace");
+        string oracleEvents = Path.Combine(RepositoryRoot(), "tools", "oracle", "events");
+        Directory.CreateDirectory(Path.Combine(userdir, "id1", "maps"));
+        File.Copy(Path.Combine(oracleEvents, "e1m1.pts"), Path.Combine(userdir, "id1", "maps", "e1m1.pts"));
+
+        var run = new TraceRun(baseDir, userdir,
+            ["-surfcachesize", "160", "-traceevents", Path.Combine(oracleEvents, "rdebug.events"), "-oracleframes", "1787"]);
+        AssertSameTrace(reference, run.Frames(quitAfterDemo: false, maxFrames: 1787));
+        RunFiles.AssertSame("rdebug.trace", userdir);
     }
 
     // The sound game without a sound device or a CD (WinQuake's -nosound and -nocdaudio)

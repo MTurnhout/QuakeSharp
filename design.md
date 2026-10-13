@@ -162,7 +162,8 @@ share it only where a trace shows the difference.
 | `pr_cmds.c`: `PF_break` | Writes to the address -4 to stop in the debugger: the program crashes | A `Sys_Error` ("break statement") |
 | `snd_dma.c`: `S_SoundInfo_f` | `soundinfo` prints the DMA buffer's address (`0x%x dma buffer`): DirectSound's in WinQuake, a static array's in the oracle, moving with every build | 0; the oracle is patched to print 0 too |
 | `d_sprite.c`: `D_SpriteDrawSpans` | A sprite clipped to the view's left edge can keep a vertex just left of it (u -1.16 after the clip's rounding), so a span starts at u -1: on the frame's first row its first pixel and depth are written before the frame and the z-buffer (the hunk's header in WinQuake; in the oracle, heap memory; underwater, the stack below the warp buffer). On the rows below, u -1 is the previous row's last pixel, as in the C (hiptour, hip2m6) | Writes before the arrays are dropped; nothing there is drawn. The oracle's frame and z-buffer start after padding, which takes them |
-| `d_edge.c`: `D_DrawSurfaces` with `r_drawflat` | A surface's flat colour is the low byte of its `msurface_t`'s address | The surface's index in the frame's surface list |
+| `d_edge.c`: `D_DrawSurfaces` with `r_drawflat` | A surface's flat colour is the low byte of its `msurface_t`'s address, which moves with every build | The surface's index in the frame's surface list; the oracle is patched to do the same (milestone 10, step 6) |
+| `model.c`: `Mod_Print` | `mcache` prints each model's cache address (`%8p`), moving with every build | 1 for a model with data, 0 without; the oracle is patched to print the same. QuakeSharp's `flush` evicts nothing (decision 22), so a model the oracle has flushed and not yet reloaded would show 0 there and 1 here: `hostcmds.events` shows the cache before flushing it |
 
 ### 3.4 The executables
 
@@ -377,7 +378,10 @@ the executable's is real time, the tests' and the oracle's a **virtual clock** t
 (1/64 s by default: a binary fraction, exact in the `float` `Host_Frame` takes, and above `Host_FilterTime`'s 1/72 s
 cap so every call runs a frame), and every `Sys_FloatTime` call in the engine reads it (the host, `net_*`, the
 signon keepalives in `cl_parse.c`, `Host_Spawn`'s connect time). The executable renders and presents once per
-`Host_Frame`, as the original.
+`Host_Frame`, as the original. A loop that waits within a frame for real time to pass never ends on the virtual clock:
+`Host_ShutdownServer`'s flush of a client that cannot take a message (the original gives up after 3 s), a datagram
+connection's wait for an answer, `SCR_ModalMessage`'s wait for a key. The scripts keep clear of the first two; the
+dialog's answer comes in the frame of the key that asked (the scripted input is re-entrant).
 
 ### 6.4 Video modes and presentation
 
@@ -908,7 +912,61 @@ first and QuakeSharp follows them.
    defaults, binding and clearing keys, the quit messages), the renderer's debug cvars (`r_drawflat`, `r_draworder`,
    `r_speeds`, `r_timegraph`, `r_aliasstats`, `r_polymodelstats`, `r_reportsurfout`, `r_reportedgeout`, the
    `r_maxsurfs` and `r_maxedges` overflows, `r_waterwarp`, `d_subdiv16`, `chase_active`), and the server's rarer
-   commands. What no input can reach in the oracle's build is listed with the reason.
+   commands. What no input can reach in the oracle's build is listed with the reason. *Done: six scripted runs, each
+   in sync with the oracle on every line and every file: `console.events` (3,300 frames: completion, editing, the
+   history past both ends, the line's limit, scrolling back past both ends, auto-repeat, `wait`, `unbind`, `clear`,
+   the console in a game, `messagemode`, `messagemode2` and `con_notifytime`), `screen.events` (4,980, also at
+   640ื480: `sizeup` and `sizedown` past their bounds, the field of view's bounds, `showpause`, the turtle on
+   `host_framerate`'s long frames, `lcd_x`'s two views, a level that fails to load, "load failed." a minute later and
+   `Host_Error`), `sbar.events` (5,013, also at 640ื480: the faces with the ring, the pentagram and both, the quad,
+   their flashes and the time they wear off, numbers past three digits and negative, e1m7's rune, a deathmatch's scores
+   at each size, dead, its intermission, the mini overlay, coop's frags), `menuwalk.events` (4,899: every menu's
+   cursor past both ends, the sliders past their bounds, Go to console, Reset to defaults, Use Mouse skipped in a
+   full-screen mode, binding cancelled, a new game during a game answered no then yes, the save menu's refusals, the
+   setup's keys, the LAN and game options' bounds, the quit menu, last its yes), `hostcmds.events` (8,880: the
+   commands no other run uses with their usage lines and refusals, the buttons' key handling, a deathmatch's refused
+   cheats) and `rdebug.events` (1,787: the renderer's debug cvars and commands, a 160 KB surface cache that thrashes,
+   `pointfile` reading `events/e1m1.pts`, a synthetic file put in the run's `maps`, `chase_active`); hipmenus.events
+   gives hipnotic's proximity gun alone. Found on the way: the C's ten loops `for (i=0, host_client = svs.clients ;
+   i<svs.maxclients ; i++, host_client++)` leave `host_client` one past the last client and QuakeSharp's ports left it
+   on the last, so `kick` typed at the console, which WinQuake lets kick the local player (its check against kicking
+   yourself compares with that pointer), did nothing here (`svs.Client(i)` now stands for `&svs.clients[i]`);
+   `mcache` and `r_drawflat` show addresses, given stand-ins on both sides (ง3.3); the scripted input is now taken
+   before it is delivered, so `SCR_ModalMessage`'s question is answered within its frame; loops that wait for real
+   time never end on the virtual clock (ง6.3). Step 2's gap is closed: `D_BeginDirectRect` and `D_EndDirectRect` are
+   ported on both sides, the loading disc drawn into the frame and taken out again around every file's read (the frame
+   unchanged), and the executable shows it. The fidelity tests reach 17,686 of Core's 20,984 lines (84.3%) and 73.9%
+   of its branches (step 2: 77.3% and 65.2%). What they do not reach, and why:*
+   - *Unreachable on the oracle's machine, as on Winquake.exe's: serial and modem (no serial driver: their menus),
+     IPX (its start fails: its driver, the menus' entries), another host (the datagram driver's connections, `ban`,
+     `net_stats`, `test`, `test2`, the server list), a joystick (none plugged: `IN_ReadJoystick`, `IN_JoyMove`), the
+     focus and minimizing (`AppActivate` losing it, `S_BlockSound`, `IN_SetQuakeMouseState`, `block_drawing`,
+     `SCR_UpdateWholeScreen` on `WM_PAINT`), a mode that fails to set (`VID_RestoreOldMode`, `VID_SetDefaultMode`), a CD
+     track's end (`CDAudio_MessageHandler`: unit tests drive it), `-dedicated` (`Host_FindMaxClients`' lines, the
+     dedicated server's `say`, `status` and `startdemos`), sys_win.c's file functions, which unlock the frame
+     around a read (`VID_ForceUnlockedAndReturnState`, `VID_ForceLockState`: the oracle's are sys_null.c's), and the
+     mixer's 8-bit and mono transfers.*
+   - *What WinQuake never calls: `SCR_BringDownConsole`, `Chase_Reset`, `InsertLinkAfter`, `SV_CheckAllEnts`,
+     `SV_TruePointContents`, `S_AmbientOff`, `S_AmbientOn`, `S_ClearPrecache`, `R_TransformPlane`, `R_GenSkyTile`,
+     `D_log2`, `MaskForNum`, `Q_log2`, `W_GetLumpNum`, `D_DrawZPoint`, `D_FillRect`, `Cmd_CheckParm`,
+     `COM_LoadTempFile`, `Loop_CanSendUnreliableMessage`, mathlib.c's functions for GLQuake, the polygon drawing
+     (`D_DrawPoly`, `R_RenderPoly`, `R_ZDrawSubmodelPolys`, `R_DrawCulledPolys`: `r_drawpolys` is never set), and what
+     the server never sends (`svc_stopsound`: `S_StopSound`).*
+   - *What no progs call (id1's, hipnotic's, rogue's): the builtins `error`, `objerror`, `break`, `checkpos`,
+     `precache_file`, `coredump`, `traceon`, `traceoff`, `eprint`, `WriteChar`, `WriteShort`, `WriteAngle` and the
+     unused slots; so no QuakeC runtime error (`PR_RunError`, `PR_StackTrace`) and no statement trace
+     (`PR_PrintStatement`).*
+   - *What the game data has not: a `viewthing` (the `view*` commands find none: `PrintFrameName`), sprite groups
+     (`Mod_LoadSpriteGroup`), `EF_BRIGHTFIELD` (`R_EntityParticles`), a savegame with hexadecimal numbers (the C
+     runtime's `atof`).*
+   - *Play no script has: the water jump, a player stuck and freed, a pusher blocked, a client that waits more than 5 s
+     for its signon (`SV_SendNop`), `status`'s hours, the intermission's numbers past 999, a particle effect of 255
+     (`R_RunParticleEffect`'s 1,024), the mission packs' item flashes and rogue's team swatch digits, more surfaces,
+     edges or efrags in view than the stacks hold (`r_maxsurfs` and `r_maxedges` cannot go below them), and the
+     clamps that only extreme numbers reach (the gun's angles, the view's offsets, `Turbulent8`'s steps).*
+   - *Keys the console cannot get (HOME and END are not console keys: their bindings run), a carriage return in printed
+     text (nothing the game prints has one), `-listen` (a command line no run uses: it starts a deathmatch), and the
+     fatal paths (`Sys_Error`).*
 7. **The shareware smoke test** (ยง10's last row, decision 48): CI fetches `quake106.zip`, extracts its `pak0.pak` (the
    registered one, same MD5), and plays demo1-3 against the last lines of their traces, kept in the test.
 
@@ -973,6 +1031,7 @@ plays with the mouse, in every mode, and both mission packs.
 | 49 | Fidelity target version (was D4) | WinQuake 1.09 as the source has it, with the Microsoft CRT's `rand()`. Audited (ยง3.4): Winquake.exe's start-up lines (IPX, the joystick), its `joystick` cvar and its seven modes are emulated; its real-time `rand()` and its x87 and assembly rounding are documented; DOS quake.exe 1.08's differences (DJGPP's `rand()`, VGA's palette, its drivers) are documented, not emulated | 2026-10-12 |
 | 50 | Default video mode (was D7) | As Winquake.exe 1.09 on the audited machine: the game starts in mode 3, 320ร—240 full screen (vid_win.c's `vid_default` once DirectDraw offers modes), where the mouse is taken; `-window` is WinQuake's `-startwindowed` (mode 1, a 640ร—480 window showing 320ร—240 doubled). The oracle's runs, the traces and `-recordevents` start with `-startwindowed -noautostretch`: mode 0, a 320ร—240 window (`-oraclevid` its size), so the existing traces keep their frames and the recorded playthrough its windowed mouse (ยง6.4) | 2026-10-13 |
 | 51 | Mission packs' data and disc | The packs' MD5s are confirmed with Debian's game-data-packager: hipnotic's is the Scourge of Armagon CD's; Dissolution of Eternity has three original builds of one size (its CD, the 1998 mission packs CD that Steam ships, GOG's), all valid, the traces made from the user's. The fidelity tests copy the original PAKs into a folder of their own, as the oracle's holds only them. A pack plays its own CD's tracks (`rerelease/hipnotic/music`, `rerelease/rogue/music`), never id1's (ยง2, ยง7.2) | 2026-10-13 |
+| 52 | The rest of the UI (milestone 10, step 6) | Six scripted runs trace what no other run reached; what none reaches is listed in ง11.4 with why, not emulated. The scripted input is taken before it is delivered, so a modal question's key comes in the same frame; scripts keep clear of the loops that wait for real time (ง6.3); build-dependent addresses (`mcache`, `r_drawflat`) get stand-ins on both sides (ง3.3); a run may start with a synthetic file of the repository's beside the map (`events/e1m1.pts`, not game data); the loading disc is ported on both sides and shown by the executable | 2026-10-13 |
 
 ## 13. Open decisions
 

@@ -1738,8 +1738,9 @@ public sealed partial class QuakeEngine
         {
             mod = mod_known[i];
 
-            // %8p: the cache's address in C; here whether the model is cached
-            Con_Printf("%8s : %s", mod.cache != null ? "cached" : "", mod.name);
+            // %8p: the cache's address in C, which depends on the build; 1 for a model with data, 0 without, as the
+            // oracle prints it (tools/oracle/quake-oracle.patch)
+            Con_Printf("%08X : %s", mod.cache != null ? 1 : 0, mod.name);
             if ((mod.needload & NL_UNREFERENCED) != 0)
             {
                 Con_Printf(" (!R)");

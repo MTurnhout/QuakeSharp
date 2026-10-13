@@ -416,9 +416,8 @@ public sealed partial class QuakeEngine
         do
         {
             count = 0;
-            for (i = 0; i < svs.maxclients; i++)
+            for (i = 0, host_client = svs.Client(0); i < svs.maxclients; i++, host_client = svs.Client(i))
             {
-                host_client = svs.clients[i];
                 if (host_client.active && host_client.message.cursize != 0)
                 {
                     if (NET_CanSendMessage(host_client.netconnection))
@@ -450,9 +449,8 @@ public sealed partial class QuakeEngine
             Con_Printf("Host_ShutdownServer: NET_SendToAll failed for %u clients\n", count);
         }
 
-        for (i = 0; i < svs.maxclients; i++)
+        for (i = 0, host_client = svs.Client(0); i < svs.maxclients; i++, host_client = svs.Client(i))
         {
-            host_client = svs.clients[i];
             if (host_client.active)
             {
                 SV_DropClient(crash);

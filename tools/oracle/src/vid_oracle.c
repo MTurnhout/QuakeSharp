@@ -1413,15 +1413,85 @@ void	VID_Update (vrect_t *rects)
 ================
 D_BeginDirectRect, D_EndDirectRect
 
-vid_win.c draws the loading disc straight to the screen and restores what was under it: never in the frame.
+The loading disc: drawn into the screen's buffer around a file's read and taken out again, what was under it restored
+(every mode has one page). The frame is the same afterwards; FlipScreen would show the rectangle.
 ================
 */
+static byte	backingbuf[48*24];
+
 void D_BeginDirectRect (int x, int y, byte *pbitmap, int width, int height)
 {
+	int		i, j, reps, repshift;
+
+	if (!vid_initialized)
+		return;
+
+	if (vid.aspect > 1.5)
+	{
+		reps = 2;
+		repshift = 1;
+	}
+	else
+	{
+		reps = 1;
+		repshift = 0;
+	}
+
+	VID_LockBuffer ();
+
+	if (!vid.direct)
+		Sys_Error ("NULL vid.direct pointer");
+
+	for (i=0 ; i<(height << repshift) ; i += reps)
+	{
+		for (j=0 ; j<reps ; j++)
+		{
+			memcpy (&backingbuf[(i + j) * 24],
+					vid.direct + x + ((y << repshift) + i + j) * vid.rowbytes,
+					width);
+			memcpy (vid.direct + x + ((y << repshift) + i + j) * vid.rowbytes,
+					&pbitmap[(i >> repshift) * width],
+					width);
+		}
+	}
+
+	VID_UnlockBuffer ();
 }
 
 void D_EndDirectRect (int x, int y, int width, int height)
 {
+	int		i, j, reps, repshift;
+
+	if (!vid_initialized)
+		return;
+
+	if (vid.aspect > 1.5)
+	{
+		reps = 2;
+		repshift = 1;
+	}
+	else
+	{
+		reps = 1;
+		repshift = 0;
+	}
+
+	VID_LockBuffer ();
+
+	if (!vid.direct)
+		Sys_Error ("NULL vid.direct pointer");
+
+	for (i=0 ; i<(height << repshift) ; i += reps)
+	{
+		for (j=0 ; j<reps ; j++)
+		{
+			memcpy (vid.direct + x + ((y << repshift) + i + j) * vid.rowbytes,
+					&backingbuf[(i + j) * 24],
+					width);
+		}
+	}
+
+	VID_UnlockBuffer ();
 }
 
 

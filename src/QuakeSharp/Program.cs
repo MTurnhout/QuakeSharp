@@ -162,8 +162,52 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
 /// <summary>vid_win.c's screen: the frames through the presenter, the modes on the window.</summary>
 internal sealed class WindowVideo(SdlWindow window, VulkanPresenter presenter) : IVideoOutput
 {
-    public void Present(ReadOnlySpan<byte> pixels, int width, int height, int rowBytes, ReadOnlySpan<byte> palette) =>
+    // the frame last presented, which a rectangle (the loading disc) is shown over, and when
+    private readonly byte[] shownPalette = new byte[768];
+    private byte[] shown = [];
+    private int shownWidth, shownHeight;
+    private long shownAt;
+
+    public void Present(ReadOnlySpan<byte> pixels, int width, int height, int rowBytes, ReadOnlySpan<byte> palette)
+    {
+        if (shown.Length != width * height)
+        {
+            shown = new byte[width * height];
+        }
+
+        shownWidth = width;
+        shownHeight = height;
+        for (int y = 0; y < height; y++)
+        {
+            pixels.Slice(y * rowBytes, width).CopyTo(shown.AsSpan(y * width, width));
+        }
+
+        palette[..768].CopyTo(shownPalette);
         presenter.Present(pixels, width, height, rowBytes, palette);
+        shownAt = Stopwatch.GetTimestamp();
+    }
+
+    public void PresentRect(ReadOnlySpan<byte> pixels, int rowBytes, int x, int y, int width, int height)
+    {
+        if (x < 0 || y < 0 || x + width > shownWidth || y + height > shownHeight)
+        {
+            return;
+        }
+
+        for (int row = y; row < y + height; row++)
+        {
+            pixels.Slice((row * rowBytes) + x, width).CopyTo(shown.AsSpan((row * shownWidth) + x, width));
+        }
+
+        // a file's read is short: shown at most at the display's pace, so loading never waits for its refresh
+        if (Stopwatch.GetElapsedTime(shownAt) < TimeSpan.FromSeconds(1.0 / 60))
+        {
+            return;
+        }
+
+        presenter.Present(shown, shownWidth, shownHeight, shownWidth, shownPalette);
+        shownAt = Stopwatch.GetTimestamp();
+    }
 
     public void SetMode(int width, int height, bool fullscreen) => window.SetMode(width, height, fullscreen);
 }

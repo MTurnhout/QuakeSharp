@@ -1,0 +1,78 @@
+5 map dm3
+60 god
+60 noclip
+60 cl_forwardspeed 320
+60 cl_backspeed 320
+60 cl_sidespeed 320
+60 cl_upspeed 320
+64 +back
+143 -back
+144 +moveleft
+268 -moveleft
+269 +movedown
+276 -movedown
+397 +forward
+551 -forward
+552 +moveleft
+719 -moveleft
+720 +movedown
+791 -movedown
+912 host_framerate 0.1
+1112 impulse 255
+1212 host_framerate 0
+1272 impulse 2
+1282 give s 1500
+1322 give s -5
+1362 give h 3000
+1402 give h 100
+1412 give s 25
+1422 +showscores
+1432 +showscores
+1462 -showscores
+1492 map e1m7
+1552 god
+1552 noclip
+1556 +forward
+1648 -forward
+1849 viewsize 110
+1879 viewsize 100
+1909 disconnect
+1919 deathmatch 1
+1919 maxplayers 4
+1919 timelimit 0.5
+1923 map dm3
+2003 viewsize 100
+2023 @key 9 1
+2063 @key 9 0
+2084 viewsize 110
+2104 @key 9 1
+2144 @key 9 0
+2165 viewsize 120
+2185 @key 9 1
+2225 @key 9 0
+2246 viewsize 100
+2266 @key 9 1
+2306 @key 9 0
+2327 kill
+2447 @key 9 1
+2477 @key 9 0
+2498 +jump
+2503 -jump
+2563 +jump
+2568 -jump
+4043 +attack
+4048 -attack
+4348 +attack
+4353 -attack
+4553 disconnect
+4563 deathmatch 0
+4563 coop 1
+4563 timelimit 0
+4567 map e1m1
+4667 @key 9 1
+4707 @key 9 0
+4728 kill
+4848 +jump
+4853 -jump
+4953 viewsize 110
+4983 viewsize 100

@@ -47,7 +47,8 @@ static int Usage()
                                                             it (e.g. -tracequitafterdemo +playdemo demo1);
                                                             its files in <out>.files; -traceinput <file> puts
                                                             a file into its game directory (id1, -rogue's,
-                                                            -hipnotic's) first
+                                                            -hipnotic's) first, <file>@<path> at that path
+                                                            in it (maps/e1m1.pts)
           quakesharp-tools trace-compare <a.trace> <b.trace> [letters]
                                                             the first frame at which each kind of line differs
                                                             (letters: which, e.g. FCEXSTR; all by default)

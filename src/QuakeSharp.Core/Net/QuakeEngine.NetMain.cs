@@ -686,9 +686,8 @@ public sealed partial class QuakeEngine
         Span<bool> state1 = stackalloc bool[QuakeDef.MAX_SCOREBOARD];
         Span<bool> state2 = stackalloc bool[QuakeDef.MAX_SCOREBOARD];
 
-        for (i = 0; i < svs.maxclients; i++)
+        for (i = 0, host_client = svs.Client(0); i < svs.maxclients; i++, host_client = svs.Client(i))
         {
-            host_client = svs.clients[i];
             if (host_client.netconnection == null)
             {
                 // the C leaves this slot's states as the stack had them (design.md §3.3): done
@@ -722,9 +721,8 @@ public sealed partial class QuakeEngine
         while (count != 0)
         {
             count = 0;
-            for (i = 0; i < svs.maxclients; i++)
+            for (i = 0, host_client = svs.Client(0); i < svs.maxclients; i++, host_client = svs.Client(i))
             {
-                host_client = svs.clients[i];
                 if (!state1[i])
                 {
                     if (NET_CanSendMessage(host_client.netconnection))

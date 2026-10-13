@@ -1,0 +1,159 @@
+100 stopdemo
+120 stopdemo
+140 say hi
+150 status
+160 changelevel
+170 changelevel e1m2
+180 restart
+190 save
+200 save s9
+210 load
+220 load nosave
+230 name
+240 color
+250 color 20 20
+260 color 3
+270 alias
+280 alias abcdefghijklmnopqrstuvwxyz0123456789 echo long
+290 alias greet "echo hello"
+300 greet
+310 alias
+320 stuffcmds x
+330 exec
+340 exec nosuchfile.cfg
+350 bind
+360 bind nokey echo x
+370 bind k echo two words
+380 bind k
+390 unbind k
+400 startdemos demo1 demo2 demo3 demo1 demo2 demo3 demo1 demo2 demo3
+600 connect local
+660 map nosuchmap
+690 map e1m1 extra parms
+840 status
+860 cmd status
+880 name
+900 name two words
+920 name two words
+940 name player
+960 color
+980 color 4 11
+1000 say
+1020 say "quoted words here"
+1040 say abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij
+1060 say_team team words
+1080 tell player hello there
+1100 tell nobody hello
+1120 tell
+1140 kick
+1160 kick # 5
+1180 prespawn
+1200 spawn
+1220 begin
+1240 cmd prespawn
+1260 cmd spawn
+1280 cmd begin
+1300 cmd map e1m2
+1320 viewmodel progs/player.mdl
+1340 viewframe 1
+1360 viewnext
+1380 viewprev
+1400 entities
+1420 edict 1
+1440 edict 9999
+1460 edictcount
+1480 profile
+1500 mcache
+1520 flush
+1540 path
+1560 version
+1580 port
+1600 port 26001
+1620 port 26000
+1640 v_cshift 255 0 0 128
+1720 v_cshift
+1740 edicts
+1770 vid_minimize
+1790 slist
+1940 host_speeds 1
+1960 host_speeds 0
+1970 serverprofile 1
+2980 serverprofile 0
+2990 give 2
+3000 give 3
+3010 give 4
+3020 give 5
+3030 give 6
+3040 give 7
+3050 give 8
+3060 give 9
+3070 give 1
+3080 give n 50
+3090 give r 20
+3100 give c 30
+3110 give s 40
+3120 give h 80
+3130 give x 5
+3140 +use
+3160 -use
+3180 +speed
+3190 +forward
+3230 -forward
+3240 -speed
+3260 +klook
+3270 +forward
+3300 +back
+3330 -back
+3340 -forward
+3350 -klook
+3370 +strafe
+3380 +left
+3410 -left
+3420 -strafe
+3440 +lookdown
+3530 -lookdown
+3540 +lookup
+3660 -lookup
+3670 centerview
+3690 +forward 200
+3690 +forward 200
+3710 +forward 201
+3710 +forward 202
+3730 -forward 200
+3730 -forward 201
+3730 -forward 202
+3750 -forward 203
+3770 +moveleft
+3770 -moveleft
+3790 +moveleft
+3810 -moveleft
+3810 +moveleft
+3830 -moveleft
+7690 status
+7710 cmd status
+7730 give h -10
+7740 kill
+7750 give h 100
+7770 pausable 0
+7780 pause
+7810 pausable 1
+7830 kick player
+7890 map e1m1
+8040 kick # 1
+8100 disconnect
+8120 deathmatch 1
+8130 maxplayers 4
+8140 map dm1
+8290 god
+8310 notarget
+8330 noclip
+8350 fly
+8370 give 8
+8390 kill
+8410 disconnect
+8430 deathmatch 0
+8440 maxplayers 1
+8460 demos
+8760 quit
+8820 @key 27 1
+8821 @key 27 0

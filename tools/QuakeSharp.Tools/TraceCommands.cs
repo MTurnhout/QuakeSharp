@@ -9,9 +9,10 @@ internal static class TraceCommands
 {
     // trace <quake-dir> <out.trace> [args]: QuakeSharp's trace of a run, the oracle's switches read as it reads them
     // (-tracequitafterdemo, -oracleframes <n>, -oraclevid <w> <h>, -oraclestep <n>, -tracedump <frame>,
-    // -traceshot <frame>); -traceinput <file> (any number of times, not passed on) puts a file into the user folder's
-    // game directory (id1, or -rogue's, -hipnotic's) before the run, as Trace-Demos.ps1 puts an earlier run's files
-    // into the oracle's. What the run leaves there is kept in <out>.files, as the oracle's run's
+    // -traceshot <frame>); -traceinput <file>[@<path>] (any number of times, not passed on) puts a file into the user
+    // folder's game directory (id1, or -rogue's, -hipnotic's), at <path> in it if given (maps/e1m1.pts), before the
+    // run, as Trace-Demos.ps1 puts an earlier run's files into the oracle's. What the run leaves there is kept in
+    // <out>.files, as the oracle's run's
     public static int Trace(string baseDir, string output, string[] args)
     {
         Commands.RefuseRepository(output);
@@ -60,7 +61,10 @@ internal static class TraceCommands
             Directory.CreateDirectory(gameDir);
             foreach (string input in inputs)
             {
-                File.Copy(input, Path.Combine(gameDir, Path.GetFileName(input)));
+                int at = input.LastIndexOf('@');
+                string target = Path.Combine(gameDir, at < 0 ? Path.GetFileName(input) : input[(at + 1)..]);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(at < 0 ? input : input[..at], target);
             }
 
             var run = new TraceRun(baseDir, userDir, args, width, height, fps);
