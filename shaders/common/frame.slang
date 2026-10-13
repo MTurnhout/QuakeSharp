@@ -17,7 +17,13 @@ static const int DLIGHT_COUNT = 945;
 static const int LIGHTING = 946;        // 0 true colour, 1 the colormap
 static const int FULLBRIGHT = 947;
 static const int TIME = 948;            // cl.time as a float
-static const int COLORMAP = 960;        // 64 x 256 bytes
+static const int VIEW_ORIGIN = 949;     // r_refdef.vieworg: 3 floats
+static const int STEPPED = 952;         // 1: the sky and water move in the software's steps (its look)
+static const int VIEW_AXES = 953;       // vpn, vright, vup: 9 floats
+static const int SKY_MAP = 962;         // the frame's pixel of the view target's: u = x * a + b, v = y * c + d
+static const int SKY_SIZES = 966;       // max(vrect width, height), vid.width / 2, vid.height / 2
+static const int DEBUG_SURFACES = 1023; // 1: each pixel the number of its surface (the tools' debugging)
+static const int COLORMAP = 1024;       // 64 x 256 bytes
 
 public float4 project(float3 world)
 {
@@ -54,6 +60,28 @@ public bool frameFullbright() { return frameWords[FULLBRIGHT] != 0; }
 public bool colormapLighting() { return frameWords[LIGHTING] != 0; }
 
 public float frameTime() { return asfloat(frameWords[TIME]); }
+
+public float3 viewOrigin() { return float3(asfloat(frameWords[VIEW_ORIGIN]), asfloat(frameWords[VIEW_ORIGIN + 1]), asfloat(frameWords[VIEW_ORIGIN + 2])); }
+
+public bool stepped() { return frameWords[STEPPED] != 0; }
+
+public bool debugSurfaces() { return frameWords[DEBUG_SURFACES] != 0; }
+
+float word(int i) { return asfloat(frameWords[i]); }
+
+public float3 viewAxis(int axis) { int b = VIEW_AXES + (axis * 3); return float3(word(b), word(b + 1), word(b + 2)); }
+
+// d_sky.c: D_Sky_uv_To_st's ray for a pixel of the view target: the frame's pixel it shows, from the frame's centre,
+// 8192 / max(vrect's width, height) per pixel against 4096 ahead (not the view's own projection)
+public float3 softwareSkyRay(float2 targetPixel)
+{
+    float u = (targetPixel.x * word(SKY_MAP)) + word(SKY_MAP + 1);
+    float v = (targetPixel.y * word(SKY_MAP + 2)) + word(SKY_MAP + 3);
+    float temp = word(SKY_SIZES);
+    float wu = 8192.0 * (u - word(SKY_SIZES + 1)) / temp;
+    float wv = 8192.0 * (word(SKY_SIZES + 2) - v) / temp;
+    return (4096.0 * viewAxis(0)) + (wu * viewAxis(1)) + (wv * viewAxis(2));
+}
 
 float3 unpack(uint color) { return float3(color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff) / 255.0; }
 

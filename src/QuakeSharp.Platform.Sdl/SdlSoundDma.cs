@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using QuakeSharp.Core;
+using QuakeSharp.Core.Enhanced;
 using QuakeSharp.Core.Sound;
 using SDL;
 using static SDL.SDL3;
@@ -13,7 +14,9 @@ namespace QuakeSharp.Platform.Sdl;
 /// (design.md §7.1). With a clock (the executable's -recordevents), the position is the clock's instead, as the
 /// oracle's virtual device has it (snd_oracle.c), so the mix is the one a trace of the recorded game has; the device
 /// plays the buffer from that position, and without an audio device the buffer is there all the same, unheard (a
-/// replay has the virtual device whatever machine recorded it).
+/// replay has the virtual device whatever machine recorded it). In the enhanced mode (design.md §11.6, step 7) the
+/// device plays the enhanced mixer's ring at its 48 kHz instead, and the buffer's play position follows the time the
+/// device has played as before, so WinQuake's mixer paints as it would.
 /// </summary>
 public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
 {
@@ -28,6 +31,10 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
 
     // Bytes of the buffer the device has taken so far, wrapping (written on SDL's audio thread)
     private int playPosition;
+
+    // the enhanced mixer the device plays while it has the sound, and the frame of its ring the device has got to
+    private EnhancedMixer? enhanced;
+    private long enhancedFrame;
 
     /// <param name="speed">The mix rate (11025 Hz, as snd_win.c).</param>
     /// <param name="clock">A clock in seconds the play position follows (null: the device's own progress).</param>
@@ -68,7 +75,10 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
         }
 
         self = GCHandle.Alloc(this);
-        var spec = new SDL_AudioSpec { format = SDL_AudioFormat.SDL_AUDIO_S16LE, channels = shm.channels, freq = shm.speed };
+        enhancedFrame = 0;
+        var spec = enhanced != null
+            ? new SDL_AudioSpec { format = SDL_AudioFormat.SDL_AUDIO_F32LE, channels = 2, freq = EnhancedMixer.Rate }
+            : new SDL_AudioSpec { format = SDL_AudioFormat.SDL_AUDIO_S16LE, channels = shm.channels, freq = shm.speed };
         stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, &Fill, GCHandle.ToIntPtr(self));
         if (stream == null)
         {
@@ -119,6 +129,47 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
     public void Dispose() => Shutdown();
 
     /// <summary>
+    /// The enhanced mixer the device plays from now (null: WinQuake's buffer again): the stream's input becomes 32-bit
+    /// float stereo at 48 kHz (or 16-bit at the buffer's rate again), taken from where the device has got to.
+    /// </summary>
+    public void UseEnhanced(EnhancedMixer? mixer)
+    {
+        if (shm == null)
+        {
+            enhanced = mixer; // the stream opens for it (Init)
+            return;
+        }
+
+        if (stream != null)
+        {
+            SDL_LockAudioStream(stream);
+        }
+
+        try
+        {
+            // the ring's frame for the buffer's position (the two wrap together)
+            int bytesPerFrame = shm.channels * (shm.samplebits / 8);
+            enhancedFrame = EnhancedMixer.FrameOf(Volatile.Read(ref playPosition) / bytesPerFrame);
+
+            enhanced = mixer;
+            if (stream != null)
+            {
+                var spec = mixer != null
+                    ? new SDL_AudioSpec { format = SDL_AudioFormat.SDL_AUDIO_F32LE, channels = 2, freq = EnhancedMixer.Rate }
+                    : new SDL_AudioSpec { format = SDL_AudioFormat.SDL_AUDIO_S16LE, channels = shm.channels, freq = shm.speed };
+                SDL_SetAudioStreamFormat(stream, &spec, null);
+            }
+        }
+        finally
+        {
+            if (stream != null)
+            {
+                SDL_UnlockAudioStream(stream);
+            }
+        }
+    }
+
+    /// <summary>
     /// Silent while another program has the focus, as WinQuake's DirectSound buffer is (created without
     /// DSBCAPS_GLOBALFOCUS); the mixer goes on painting (design.md §7.1).
     /// </summary>
@@ -144,6 +195,12 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
             return;
         }
 
+        if (device.enhanced is { } mixer)
+        {
+            device.FillEnhanced(stream, mixer, additionalAmount);
+            return;
+        }
+
         int position = device.clock != null ? device.ClockPosition() : device.playPosition;
         int remaining = additionalAmount - (additionalAmount % 4);
         fixed (byte* buffer = shm.buffer)
@@ -158,5 +215,32 @@ public sealed unsafe class SdlSoundDma : ISoundDma, IDisposable
         }
 
         Volatile.Write(ref device.playPosition, position);
+    }
+
+    // The enhanced ring's frames from where the device has got to (the clock's, under -recordevents), and the buffer's
+    // play position moved by the same time
+    private void FillEnhanced(SDL_AudioStream* stream, EnhancedMixer mixer, int additionalAmount)
+    {
+        Dma shm = this.shm!;
+        int frames = additionalAmount / 8;
+        int bytesPerFrame = shm.channels * (shm.samplebits / 8);
+        if (clock != null)
+        {
+            enhancedFrame = EnhancedMixer.FrameOf(ClockPosition() / bytesPerFrame);
+        }
+
+        fixed (float* ring = mixer.Ring)
+        {
+            while (frames > 0)
+            {
+                int at = (int)(enhancedFrame & (EnhancedMixer.RingFrames - 1));
+                int chunk = Math.Min(frames, EnhancedMixer.RingFrames - at);
+                SDL_PutAudioStreamData(stream, (IntPtr)(ring + (at * 2)), chunk * 8);
+                enhancedFrame = (enhancedFrame + chunk) & (EnhancedMixer.RingFrames - 1);
+                frames -= chunk;
+            }
+        }
+
+        Volatile.Write(ref playPosition, (int)(enhancedFrame / EnhancedMixer.Upsample * bytesPerFrame) & (shm.buffer.Length - 1));
     }
 }

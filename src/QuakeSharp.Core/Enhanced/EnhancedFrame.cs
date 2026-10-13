@@ -38,6 +38,28 @@ public readonly record struct EnhancedEntity(
 
     /// <summary>Any other entity: not interpolated.</summary>
     public const int Other = int.MinValue;
+
+    /// <summary>
+    /// An alias model's lighting as r_alias.c's R_AliasSetupLighting leaves it (from R_DrawEntitiesOnList's or
+    /// R_DrawViewModel's R_LightPoint, dlights and clamps): r_ambientlight (a light of the software's surfaces' scale,
+    /// 0 the brightest), r_shadelight, and r_plightvec in the model's own space.
+    /// </summary>
+    public int LightAmbient { get; init; }
+
+    public float LightShade { get; init; }
+
+    public Vec3 LightVector { get; init; }
+
+    /// <summary>A player's colours (CL_NewTranslation's top and bottom: the skin's TOP_RANGE and BOTTOM_RANGE moved
+    /// to them); -1 for none.</summary>
+    public int Top { get; init; } = -1;
+
+    public int Bottom { get; init; } = -1;
+
+    /// <summary>The pose blended from (<see cref="EnhancedSmoothing"/>; -1: none), and how far to the entity's own.</summary>
+    public int PoseFrom { get; init; } = -1;
+
+    public float PoseBlend { get; init; }
 }
 
 /// <summary>A live particle: its slot in the pool, when it dies (a slot reused is another particle), where, its colour.</summary>
@@ -112,6 +134,9 @@ public sealed class EnhancedFrame
 
     /// <summary>Changes when the numbers start anew (a new level, or another capture): what was made of the models before goes.</summary>
     public int ModelGeneration { get; init; }
+
+    /// <summary>r_dowarp: the view was warped as under water (D_WarpScreen).</summary>
+    public bool Warp { get; init; }
 
     /// <summary>r_refdef.ambientlight (r_ambient's light added everywhere).</summary>
     public int AmbientLight { get; init; }
@@ -232,6 +257,7 @@ public sealed class EnhancedFrame
             Models = next.Models,
             ModelGeneration = next.ModelGeneration,
             AmbientLight = next.AmbientLight,
+            Warp = next.Warp,
             PixelAspect = next.PixelAspect,
             Entities = entities,
             Particles = particles,
@@ -284,6 +310,7 @@ public sealed class EnhancedFrame
             Models = Models,
             ModelGeneration = ModelGeneration,
             AmbientLight = AmbientLight,
+            Warp = Warp,
             PixelAspect = PixelAspect,
             Entities = Entities,
             Particles = Particles,
@@ -293,6 +320,45 @@ public sealed class EnhancedFrame
             Fullbright = Fullbright,
             WaterWarp = WaterWarp,
             ClearColor = ClearColor,
+        };
+    }
+
+    /// <summary>This frame with other entities (the same in everything else).</summary>
+    public EnhancedFrame WithEntities(EnhancedEntity[] entities)
+    {
+        EnhancedFrame copy = (EnhancedFrame)MemberwiseClone();
+        return new EnhancedFrame
+        {
+            Width = copy.Width,
+            Height = copy.Height,
+            Pixels = copy.Pixels,
+            Mask = copy.Mask,
+            Palette = copy.Palette,
+            ChannelTables = copy.ChannelTables,
+            ChannelTablesExact = copy.ChannelTablesExact,
+            Backtile = copy.Backtile,
+            BasePalette = copy.BasePalette,
+            Colormap = copy.Colormap,
+            BacktileWidth = copy.BacktileWidth,
+            BacktileHeight = copy.BacktileHeight,
+            Time = copy.Time,
+            ViewDrawn = copy.ViewDrawn,
+            View = copy.View,
+            InLevel = copy.InLevel,
+            World = copy.World,
+            Models = copy.Models,
+            ModelGeneration = copy.ModelGeneration,
+            AmbientLight = copy.AmbientLight,
+            Warp = copy.Warp,
+            PixelAspect = copy.PixelAspect,
+            Entities = entities,
+            Particles = copy.Particles,
+            Dlights = copy.Dlights,
+            LightStyles = copy.LightStyles,
+            DrawEntities = copy.DrawEntities,
+            Fullbright = copy.Fullbright,
+            WaterWarp = copy.WaterWarp,
+            ClearColor = copy.ClearColor,
         };
     }
 

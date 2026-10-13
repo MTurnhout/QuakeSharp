@@ -8,16 +8,19 @@ internal sealed unsafe class Swapchain : IDisposable
 {
     private readonly VulkanContext context;
 
-    public Swapchain(VulkanContext context, uint width, uint height, VkSwapchainKHR oldSwapchain)
+    /// <param name="vsync">null: mailbox where there is one, else FIFO (the faithful mode's: the game never waits for
+    /// the display); true: FIFO (the enhanced mode's vsync); false: immediate, else mailbox, else FIFO.</param>
+    public Swapchain(VulkanContext context, uint width, uint height, VkSwapchainKHR oldSwapchain, bool? vsync = null)
     {
         this.context = context;
+        Vsync = vsync;
 
         VkSurfaceCapabilitiesKHR capabilities;
         Check(context.InstanceApi.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context.PhysicalDevice, context.Surface, &capabilities),
             "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
 
         Format = ChooseFormat(out VkColorSpaceKHR colorSpace);
-        VkPresentModeKHR presentMode = ChoosePresentMode();
+        VkPresentModeKHR presentMode = ChoosePresentMode(vsync);
         Extent = capabilities.currentExtent.width != uint.MaxValue
             ? capabilities.currentExtent
             : new VkExtent2D(
@@ -70,6 +73,9 @@ internal sealed unsafe class Swapchain : IDisposable
 
     public VkFormat Format { get; }
 
+    /// <summary>What the swapchain was made for (see the constructor).</summary>
+    public bool? Vsync { get; }
+
     public VkExtent2D Extent { get; }
 
     public VkImage[] Images { get; }
@@ -106,12 +112,22 @@ internal sealed unsafe class Swapchain : IDisposable
         return formats[0].format;
     }
 
-    // Mailbox (no tearing, no waiting for the display) where there is one, else FIFO (vsync)
-    private VkPresentModeKHR ChoosePresentMode()
+    // Mailbox (no tearing, no waiting for the display) where there is one, else FIFO (vsync); or as asked
+    private VkPresentModeKHR ChoosePresentMode(bool? vsync)
     {
         context.InstanceApi.vkGetPhysicalDeviceSurfacePresentModesKHR(context.PhysicalDevice, context.Surface, out uint count);
         Span<VkPresentModeKHR> modes = new VkPresentModeKHR[count];
         context.InstanceApi.vkGetPhysicalDeviceSurfacePresentModesKHR(context.PhysicalDevice, context.Surface, modes);
+        if (vsync == true)
+        {
+            return VkPresentModeKHR.Fifo;
+        }
+
+        if (vsync == false && modes.Contains(VkPresentModeKHR.Immediate))
+        {
+            return VkPresentModeKHR.Immediate;
+        }
+
         return modes.Contains(VkPresentModeKHR.Mailbox) ? VkPresentModeKHR.Mailbox : VkPresentModeKHR.Fifo;
     }
 }

@@ -18,6 +18,9 @@ struct CompositeParams
     int2 tileSize;    // the backtile's (0: none)
     int widened;      // the view goes on beside the 2D
     int inLevel;      // the border's tile beside the 2D
+    float2 pixelScale; // the window's pixels per pixel of the frame
+    float warpPhase;  // D_WarpScreen's: cl.time * 20 (stepped in the software's look)
+    int warp;         // under water (r_dowarp): 1 smooth, 2 in the software's steps
 };
 
 [[vk::push_constant]] ConstantBuffer<CompositeParams> params;
@@ -34,13 +37,41 @@ float3 paletteColor(uint index)
     return float3(color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff) / 255.0;
 }
 
+// d_scan.c: D_WarpScreen: under water each pixel of the view is read from one moved along the other axis's sine (3 +
+// 3 sin, a cycle of 128 of the frame's pixels), the view shrunk by 6 pixels to make room
+float sineWarp(float i) { return 3.0 + (3.0 * sin(i * 3.14159 * 2.0 / 128.0)); }
+
+float2 viewUv(float2 p)
+{
+    float2 uv = (p - params.viewRect.xy) / params.viewRect.zw;
+    if (params.warp == 0)
+    {
+        return uv;
+    }
+
+    float2 size = params.viewRect.zw / params.pixelScale; // the view in the frame's pixels
+    float2 f = uv * size;
+    float2 moved;
+    if (params.warp == 2)
+    {
+        f = floor(f);
+        moved = float2(f.x + floor(sineWarp(params.warpPhase + f.y)), f.y + floor(sineWarp(params.warpPhase + f.x)));
+    }
+    else
+    {
+        moved = float2(f.x + sineWarp(params.warpPhase + f.y), f.y + sineWarp(params.warpPhase + f.x));
+    }
+
+    return moved / (size + 6.0);
+}
+
 [shader("fragment")]
 float4 fragmentMain(FullscreenVertex input) : SV_Target
 {
     float2 p = input.position.xy;
     float2 fp = (p - params.frameRect.xy) / params.frameRect.zw;
     bool inViewRect = all(p >= params.viewRect.xy) && all(p < params.viewRect.xy + params.viewRect.zw);
-    float3 viewColor = inViewRect ? view.Sample((p - params.viewRect.xy) / params.viewRect.zw).rgb : float3(0, 0, 0);
+    float3 viewColor = inViewRect ? view.Sample(viewUv(p)).rgb : float3(0, 0, 0);
 
     if (all(fp >= 0) && all(fp < 1))
     {
@@ -57,8 +88,8 @@ float4 fragmentMain(FullscreenVertex input) : SV_Target
     float2 framePixel = floor(fp * float2(params.frameSize));
     if (params.inLevel != 0 && params.tileSize.x > 0 && fp.y >= 0 && fp.y < 1)
     {
-        int2 t = int2(framePixel) % params.tileSize;
-        t = (t + params.tileSize) % params.tileSize;
+        float2 size = float2(params.tileSize);
+        int2 t = int2(framePixel - (size * floor(framePixel / size)));
         return float4(paletteColor(backtile.Load(int3(t, 0))), 1);
     }
 

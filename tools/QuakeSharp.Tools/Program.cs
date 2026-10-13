@@ -14,6 +14,7 @@ try
         ["trace", var baseDir, var output, .. var engineArgs] => TraceCommands.Trace(baseDir, output, engineArgs),
         ["netrun", var baseDir, var outDir, var game] => TraceCommands.NetRun(baseDir, outDir, game),
         ["enhanced-shot", var baseDir, var outDir, var frames, .. var engineArgs] => EnhancedCommands.Shot(baseDir, outDir, frames, engineArgs),
+        ["enhanced-bench", var baseDir, var frame, var size, .. var engineArgs] => EnhancedCommands.Bench(baseDir, frame, size, engineArgs),
         ["shot-diff", var a, var b] => TraceCommands.ShotDiff(a, b, null),
         ["shot-diff", var a, var b, var output] => TraceCommands.ShotDiff(a, b, output),
         ["trace-compare", var a, var b] => TraceCommands.Compare(a, b, "FCEDXSTRVGQNWMPAIUO"),
@@ -59,6 +60,8 @@ static int Usage()
                                                             the enhanced frame at faithful settings beside the
                                                             software frame, their differences and its default look
                                                             (needs a GPU)
+          quakesharp-tools enhanced-bench <quake-dir> <frame> <width>x<height> [trace args]
+                                                            the enhanced frame's time at that size (needs a GPU)
           quakesharp-tools trace-compare <a.trace> <b.trace> [letters]
                                                             the first frame at which each kind of line differs
                                                             (letters: which, e.g. FCEXSTR; all by default)

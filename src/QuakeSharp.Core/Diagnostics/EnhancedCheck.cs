@@ -35,7 +35,7 @@ internal sealed class EnhancedCheck
         bool on = number % 1000 is < 500 or >= 500 + OffFrames;
         if (on && engine.enhanced == null)
         {
-            var capture = new EnhancedCapture(engine) { EngineCounts = () => (system.Reads << 32) + engine.RandCalls };
+            var capture = new EnhancedCapture(engine) { EngineCounts = () => (system.Reads << 32) + engine.RandCalls, Sound = new EnhancedMixer() };
             capture.Captured += Captured;
             engine.enhanced = capture;
             previous = null;

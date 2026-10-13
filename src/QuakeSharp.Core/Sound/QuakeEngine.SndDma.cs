@@ -537,6 +537,8 @@ public sealed partial class QuakeEngine
     {
         int clear;
 
+        enhanced?.Sound?.Clear();
+
         if (sound_started == 0 || shm == null || shm.buffer.Length == 0)
         {
             return;
@@ -829,6 +831,13 @@ public sealed partial class QuakeEngine
         if (unchecked(endtime - (uint)soundtime) > (uint)samps)
         {
             endtime = unchecked((uint)(soundtime + samps));
+        }
+
+        // the enhanced mode's mixer paints the same span from the channels as they are before this paint moves them
+        if (enhanced?.Sound is { } enhancedSound)
+        {
+            enhancedSound.Listen(listener_origin, listener_forward, listener_right, cl.viewentity);
+            enhancedSound.Paint(channels, total_channels, paintedtime, (int)endtime, volume.value);
         }
 
         S_PaintChannels((int)endtime);

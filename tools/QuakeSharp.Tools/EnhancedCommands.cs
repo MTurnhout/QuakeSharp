@@ -14,13 +14,16 @@ internal static class EnhancedCommands
     // lighting, no MSAA, no widening) beside the software frame, and once more at the defaults, four times the size. It
     // writes <frame>.software.png, <frame>.enhanced.png, <frame>.diff.png (the view's differing pixels in red over the
     // software frame in grey) and <frame>.default.png, and prints the share of the view's pixels that are the same
-    // colour, and that are within 24 of it on every channel.
+    // colour, and that are within 24 of it on every channel. <frames> "warp" instead lists the runs of frames whose view
+    // is warped as under water (r_dowarp), to choose frames from.
     public static int Shot(string baseDir, string outDir, string frameList, string[] args)
     {
         Commands.RefuseRepository(outDir);
         Directory.CreateDirectory(outDir);
-        var wanted = new HashSet<int>(frameList.Split(',').Select(f => int.Parse(f, CultureInfo.InvariantCulture)));
-        int last = wanted.Max();
+        bool scanWarp = frameList == "warp";
+        var wanted = scanWarp ? [] : new HashSet<int>(frameList.Split(',').Select(f => int.Parse(f, CultureInfo.InvariantCulture)));
+        int last = scanWarp ? int.MaxValue : wanted.Max();
+        int warpFrom = 0;
 
         string userDir = Path.Combine(Path.GetTempPath(), "quakesharp-trace", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(userDir);
@@ -38,6 +41,16 @@ internal static class EnhancedCommands
             foreach (IReadOnlyList<string> _ in run.Frames(quitAfterDemo: new Core.Common.CommandLine(["quake", .. args]).CheckParm("-tracequitafterdemo") != 0))
             {
                 frame++;
+                if (scanWarp && capture.Latest is { } seen && seen.Warp != (warpFrom != 0))
+                {
+                    if (warpFrom != 0)
+                    {
+                        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"warped: frames {warpFrom}-{frame - 1}"));
+                    }
+
+                    warpFrom = seen.Warp ? frame : 0;
+                }
+
                 if (wanted.Contains(frame) && capture.Latest is { } shot)
                 {
                     presenter.SquarePixels = true;
@@ -52,6 +65,49 @@ internal static class EnhancedCommands
                     break;
                 }
             }
+        }
+        finally
+        {
+            Directory.Delete(userDir, recursive: true);
+        }
+
+        return 0;
+    }
+
+    // enhanced-bench <quake-dir> <frame> <width>x<height> [trace args]: draws the enhanced frame of a trace's frame
+    // offscreen at the defaults (4x MSAA, true colour, mip chains, anisotropy) 200 times at that size and prints the time
+    // each took on average, the read back of the picture included (needs a GPU)
+    public static int Bench(string baseDir, string frameText, string size, string[] args)
+    {
+        int wanted = int.Parse(frameText, CultureInfo.InvariantCulture);
+        int width = int.Parse(size.Split('x')[0], CultureInfo.InvariantCulture);
+        int height = int.Parse(size.Split('x')[1], CultureInfo.InvariantCulture);
+        string userDir = Path.Combine(Path.GetTempPath(), "quakesharp-trace", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(userDir);
+        try
+        {
+            var run = new TraceRun(baseDir, userDir, args);
+            var capture = new EnhancedCapture(run.Engine);
+            run.Engine.enhanced = capture;
+            using VulkanPresenter presenter = VulkanPresenter.Headless(enableValidation: false, Console.Error.WriteLine);
+            int frame = 0;
+            foreach (IReadOnlyList<string> _ in run.Frames(quitAfterDemo: false, maxFrames: wanted))
+            {
+                frame++;
+            }
+
+            EnhancedFrame shot = capture.Latest ?? throw new QuakeException("no frame");
+            var options = new EnhancedOptions();
+            _ = presenter.RenderEnhanced(shot, options, width, height); // models and targets made ready
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            const int Times = 200;
+            for (int i = 0; i < Times; i++)
+            {
+                _ = presenter.RenderEnhanced(shot, options, width, height);
+            }
+
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"frame {frame} at {width}x{height}: {clock.Elapsed.TotalMilliseconds / Times:F2} ms each, read back included"));
         }
         finally
         {

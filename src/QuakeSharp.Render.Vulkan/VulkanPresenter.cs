@@ -134,7 +134,7 @@ public sealed unsafe partial class VulkanPresenter : IVideoOutput, IDisposable
 
     private void PresentLocked(ReadOnlySpan<byte> pixels, int width, int height, int rowBytes, ReadOnlySpan<byte> palette)
     {
-        if (!BeginFrame(out int f, out uint imageIndex))
+        if (!BeginFrame(out int f, out uint imageIndex, vsync: null))
         {
             return;
         }
@@ -165,7 +165,7 @@ public sealed unsafe partial class VulkanPresenter : IVideoOutput, IDisposable
 
     // A frame begun: the swapchain fits the window, frame f's fence has passed (its staging buffer is free), an image
     // is acquired. False when there is nothing to draw on (minimised, or the swapchain was out of date).
-    private bool BeginFrame(out int f, out uint imageIndex)
+    private bool BeginFrame(out int f, out uint imageIndex, bool? vsync)
     {
         f = frame;
         imageIndex = 0;
@@ -180,9 +180,10 @@ public sealed unsafe partial class VulkanPresenter : IVideoOutput, IDisposable
             return false; // minimised
         }
 
-        if (swapchain == null || swapchain.Extent.width != windowWidth || swapchain.Extent.height != windowHeight)
+        if (swapchain == null || swapchain.Extent.width != windowWidth || swapchain.Extent.height != windowHeight
+            || swapchain.Vsync != vsync)
         {
-            RecreateSwapchain(windowWidth, windowHeight);
+            RecreateSwapchain(windowWidth, windowHeight, vsync);
         }
 
         VkDeviceApi api = context.Api;
@@ -193,7 +194,7 @@ public sealed unsafe partial class VulkanPresenter : IVideoOutput, IDisposable
         VkResult acquired = api.vkAcquireNextImageKHR(swapchain!.Handle, ulong.MaxValue, imageAcquired[f], VkFence.Null, &index);
         if (acquired == VkResult.ErrorOutOfDateKHR)
         {
-            RecreateSwapchain(windowWidth, windowHeight);
+            RecreateSwapchain(windowWidth, windowHeight, vsync);
             return false;
         }
 
@@ -253,7 +254,7 @@ public sealed unsafe partial class VulkanPresenter : IVideoOutput, IDisposable
         VkResult presented = api.vkQueuePresentKHR(context.Queue, &present);
         if (presented is VkResult.ErrorOutOfDateKHR or VkResult.SuboptimalKHR)
         {
-            RecreateSwapchain((int)swapchain.Extent.width, (int)swapchain.Extent.height);
+            RecreateSwapchain((int)swapchain.Extent.width, (int)swapchain.Extent.height, swapchain.Vsync);
         }
         else
         {
@@ -495,11 +496,11 @@ public sealed unsafe partial class VulkanPresenter : IVideoOutput, IDisposable
         context.Api.vkUpdateDescriptorSets(2, writes, 0, null);
     }
 
-    private void RecreateSwapchain(int width, int height)
+    private void RecreateSwapchain(int width, int height, bool? vsync)
     {
         context.WaitIdle();
         Swapchain? old = swapchain;
-        swapchain = new Swapchain(context, (uint)width, (uint)height, old?.Handle ?? VkSwapchainKHR.Null);
+        swapchain = new Swapchain(context, (uint)width, (uint)height, old?.Handle ?? VkSwapchainKHR.Null, vsync);
         if (old != null)
         {
             old.Dispose();

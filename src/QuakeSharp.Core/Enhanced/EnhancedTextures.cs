@@ -25,9 +25,14 @@ public static class EnhancedTextures
             return levels;
         }
 
-        int width = texture.Width, height = texture.Height;
-        byte[] rgba = Colors(texture.Pixels.AsSpan(0, width * height), basePalette);
-        levels.Add((width, height, rgba));
+        return Halve(Colors(texture.Pixels.AsSpan(0, texture.Width * texture.Height), basePalette), texture.Width, texture.Height);
+    }
+
+    /// <summary>A mip chain from full-size RGBA: each level halving down to 1x1, each texel the average of the four
+    /// below it.</summary>
+    public static List<(int Width, int Height, byte[] Rgba)> Halve(byte[] rgba, int width, int height)
+    {
+        var levels = new List<(int, int, byte[])> { (width, height, rgba) };
         while (width > 1 || height > 1)
         {
             int nw = Math.Max(1, width / 2), nh = Math.Max(1, height / 2);

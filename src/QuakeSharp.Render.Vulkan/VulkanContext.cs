@@ -300,8 +300,11 @@ internal sealed unsafe class VulkanContext : IDisposable
             pQueuePriorities = &priority,
         };
 
+        // the enhanced mode's particles read SV_InstanceID (SPIR-V's DrawParameters)
+        VkPhysicalDeviceVulkan11Features features11 = new() { shaderDrawParameters = true };
         VkPhysicalDeviceVulkan13Features features13 = new()
         {
+            pNext = &features11,
             dynamicRendering = true,
             synchronization2 = true,
         };

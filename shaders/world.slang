@@ -48,7 +48,21 @@ struct VertexOutput
     float4 position : SV_Position;
     float2 st : TEXCOORD0;
     nointerpolation int surface : TEXCOORD1;
+    float3 world : TEXCOORD2;
 };
+
+static const int SURF_PLANEBACK = 2;
+static const float BACKFACE_EPSILON = 0.01;
+
+// r_bsp.c: a surface is drawn only from the side it faces (R_RecursiveWorldNode, R_DrawSolidClippedSubmodelPolygons:
+// the eye, in the model's space, more than BACKFACE_EPSILON in front of the plane, or behind it for SURF_PLANEBACK)
+bool facesEye(Surface surf)
+{
+    float3 eye = viewOrigin() - float3(draw.model0.w, draw.model1.w, draw.model2.w);
+    float3 local = (eye.x * draw.model0.xyz) + (eye.y * draw.model1.xyz) + (eye.z * draw.model2.xyz);
+    float d = dot(local, surf.plane.xyz) - surf.plane.w;
+    return (surf.light.z & SURF_PLANEBACK) != 0 ? d < -BACKFACE_EPSILON : d > BACKFACE_EPSILON;
+}
 
 [shader("vertex")]
 VertexOutput vertexMain(VertexInput input)
@@ -56,9 +70,11 @@ VertexOutput vertexMain(VertexInput input)
     float4 p = float4(input.position, 1);
     float3 world = float3(dot(draw.model0, p), dot(draw.model1, p), dot(draw.model2, p));
     VertexOutput o;
-    o.position = project(world);
+    // a surface facing away: all its vertices outside the clip volume, so nothing of it is drawn
+    o.position = facesEye(surfaces[input.surface]) ? project(world) : float4(0, 0, -2, 1);
     o.st = input.st;
     o.surface = input.surface;
+    o.world = world;
     return o;
 }
 
@@ -153,10 +169,48 @@ int mipLevel(float2 st)
 uint textureIndex(float2 st)
 {
     int mip = mipLevel(st);
-    int2 size = max(int2(draw.textureSize) >> mip, int2(1, 1));
-    int2 texel = int2(floor(st / float(1 << mip)));
-    texel = ((texel % size) + size) % size;
+    float2 size = float2(max(int2(draw.textureSize) >> mip, int2(1, 1)));
+    // wrapped by floor, not %: the shader's % on negative numbers is not C's (r_surf.c adds tmax << 16 first)
+    float2 at = floor(st / float(1 << mip));
+    int2 texel = int2(at - (size * floor(at / size)));
     return textureIndices.Load(int3(texel, mip));
+}
+
+// r_sky.c and d_sky.c: the sky's two layers, the texture's right half behind and its left half in front (index 0
+// clear), seen along the view's ray flattened three times (D_Sky_uv_To_st's end[2] *= 3), the back scrolling 8 texels a
+// second and the front, moved again by R_MakeSky's shift, twice as fast; skytime is cl.time modulo 512
+uint skyIndex(float3 world, float2 targetPixel)
+{
+    float3 dir = stepped() ? softwareSkyRay(targetPixel) : world - viewOrigin();
+    dir.z *= 3;
+    dir = normalize(dir);
+    float time = frameTime();
+    float skytime = time - (floor(time / 512.0) * 512.0);
+    float scroll = skytime * 8.0;
+    float s = scroll + (6.0 * 63.0 * dir.x);
+    float t = scroll + (6.0 * 63.0 * dir.y);
+    float shift = stepped() ? floor(scroll) : scroll;
+    int2 back = int2(int(floor(s)) & 127, int(floor(t)) & 127);
+    int2 front = int2(int(floor(s + shift)) & 127, int(floor(t + shift)) & 127);
+    uint f = textureIndices.Load(int3(front, 0));
+    return f != 0 ? f : textureIndices.Load(int3(back.x + 128, back.y, 0));
+}
+
+// d_scan.c: D_DrawTurbulent8Span: each texel moved along the other axis's sine (r_turb_turb: 8 + 8 sin, a cycle of
+// 128 texels, 20 a second), from the surface's texturemins, in a 64x64 texture
+float sineTurb(float i) { return 8.0 + (8.0 * sin(i * 3.14159 * 2.0 / 128.0)); }
+
+float2 turbulent(Surface surf, float2 st)
+{
+    float2 rel = clamp(st - float2(surf.extent.xy), float2(0, 0), float2(surf.extent.zw) - (1.0 / 65536.0));
+    float phase = frameTime() * 20.0;
+    if (stepped())
+    {
+        phase = floor(phase);
+        return float2(rel.x + floor(sineTurb(phase + floor(rel.y))), rel.y + floor(sineTurb(phase + floor(rel.x))));
+    }
+
+    return float2(rel.x + sineTurb(phase + rel.y), rel.y + sineTurb(phase + rel.x));
 }
 
 [shader("fragment")]
@@ -164,11 +218,27 @@ float4 fragmentMain(VertexOutput input) : SV_Target
 {
     Surface surf = surfaces[input.surface];
     int flags = surf.light.z;
-
-    // sky and water: not lit (their own drawing comes with step 4)
-    if ((flags & (SURF_DRAWSKY | SURF_DRAWTURB)) != 0)
+    if (debugSurfaces())
     {
-        return float4(paletteColor(textureIndex(input.st)), 1);
+        return float4(float(input.surface & 0xff) / 255.0, float((input.surface >> 8) & 0xff) / 255.0, 1, 1);
+    }
+
+    // the sky and water are not lit: their texels as the palette shows them
+    if ((flags & SURF_DRAWSKY) != 0)
+    {
+        return float4(paletteColor(skyIndex(input.world, input.position.xy)), 1);
+    }
+
+    if ((flags & SURF_DRAWTURB) != 0)
+    {
+        float2 warped = turbulent(surf, input.st);
+        if (colormapLighting())
+        {
+            int2 texel = int2(floor(warped)) & 63;
+            return float4(paletteColor(textureIndices.Load(int3(texel, 0))), 1);
+        }
+
+        return float4(shiftColor(textureColors.Sample(warped / 64.0).rgb), 1);
     }
 
     float light = surfaceLight(surf, input.st);

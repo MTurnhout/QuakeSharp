@@ -69,8 +69,16 @@ static int Run(CommandLine commandLine)
     using var renderer = new EnhancedRenderer(presenter, new EnhancedOptions(
         settings.Number("enhanced_scale"), (int)settings.Number("enhanced_msaa"), settings.Number("enhanced_widescreen") != 0,
         (int)settings.Number("enhanced_filter"), (int)settings.Number("enhanced_mipmaps"), settings.Number("enhanced_anisotropy"),
-        (int)settings.Number("enhanced_lighting")));
-    var mode = new EnhancedMode(renderer);
+        (int)settings.Number("enhanced_lighting"), (int)settings.Number("enhanced_particles"))
+    {
+        Interpolate = settings.Number("enhanced_interpolate") != 0,
+        Vsync = settings.Number("enhanced_vsync") != 0,
+        MaxFps = (int)settings.Number("enhanced_maxfps"),
+        LerpModels = settings.Number("enhanced_lerpmodels") != 0,
+        LerpMove = settings.Number("enhanced_lerpmove") != 0,
+    });
+    var mode = new EnhancedMode(renderer, enhancedSound: settings.Number("enhanced_sound") != 0,
+        placement: settings.Number("enhanced_3d_sfx") != 0);
     window.ScrollLock = mode.Toggle;
 
     try
@@ -82,6 +90,12 @@ static int Run(CommandLine commandLine)
     }
     finally
     {
+        if (renderer.FramesDrawn > 0)
+        {
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"Enhanced mode: {renderer.FramesDrawn} frames drawn, {renderer.DrawingTime.TotalMilliseconds / renderer.FramesDrawn:F2} ms each"));
+        }
+
         // the switches set it for their run only
         if (!forRun)
         {
@@ -100,6 +114,7 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
     var system = new RealSystem();
     using var sound = new SdlSoundDma();
+    mode.Sound = sound;
     using var cd = new FileCdDrive(CdTracks.Find(".", commandLine));
     using var joysticks = new SdlJoysticks();
     // the real network (design.md §11.5)
@@ -202,6 +217,7 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     int frames = 0;
     using var recorder = new EventRecorder(window, path, () => frames);
     using var sound = new SdlSoundDma(clock: () => system.Time);
+    mode.Sound = sound;
     using var cd = new ListeningCdDrive(CdTracks.Find(".", commandLine));
     // the machine as the traces' virtual one, out through the real network: what arrives at each step is written to
     // the datagrams file beside the events, with the machine's name, address, ports and lookups (design.md §11.5)
@@ -270,8 +286,10 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
 /// The enhanced mode switched on and off (design.md §11.6): on, the engine has a capture whose snapshots go to the
 /// enhanced renderer, and the faithful frames are not shown; off, nothing of it runs.
 /// </summary>
-internal sealed class EnhancedMode(EnhancedRenderer renderer)
+internal sealed class EnhancedMode(EnhancedRenderer renderer, SdlSoundDma? sound = null, bool enhancedSound = true,
+    bool placement = false)
 {
+    private readonly EnhancedMixer mixer = new() { Placement = placement };
     private QuakeEngine? engine;
 
     public bool On { get; private set; }
@@ -298,7 +316,7 @@ internal sealed class EnhancedMode(EnhancedRenderer renderer)
 
         if (on)
         {
-            var capture = new EnhancedCapture(engine);
+            var capture = new EnhancedCapture(engine) { Sound = enhancedSound ? mixer : null };
             capture.Captured += renderer.Submit;
             engine.enhanced = capture;
         }
@@ -306,6 +324,16 @@ internal sealed class EnhancedMode(EnhancedRenderer renderer)
         {
             engine.enhanced = null;
         }
+
+        // the device plays the enhanced mixer's ring while the mode has the sound
+        sound?.UseEnhanced(on && enhancedSound ? mixer : null);
+    }
+
+    /// <summary>The device the enhanced sound plays on (made after the mode).</summary>
+    public SdlSoundDma? Sound
+    {
+        get => sound;
+        set => sound = value;
     }
 }
 

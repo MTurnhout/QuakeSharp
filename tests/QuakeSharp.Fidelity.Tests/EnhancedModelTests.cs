@@ -27,6 +27,7 @@ public sealed class EnhancedModelTests : IDisposable
     [Theory]
     [InlineData(null, "e1m1")]
     [InlineData(null, "start")]
+    [InlineData(null, "e1m5")]
     [InlineData("hipnotic", "hip1m1")]
     [InlineData("rogue", "r1m1")]
     public void TheModelIsTheBspFiles(string? pack, string map)

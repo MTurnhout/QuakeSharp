@@ -12,8 +12,28 @@ namespace QuakeSharp.Render.Vulkan;
 /// <param name="Mipmaps">Textures' mip levels: 0 the BSP's own four, 1 full chains (enhanced_mipmaps).</param>
 /// <param name="Anisotropy">Anisotropic filtering, 1 to 16 (enhanced_anisotropy).</param>
 /// <param name="Lighting">0 true colour with overbright, 1 the colormap (enhanced_lighting).</param>
+/// <param name="Particles">0 square, 1 round (enhanced_particles).</param>
 public sealed record EnhancedOptions(float Scale = 1, int Msaa = 4, bool Widescreen = true, int Filter = 0, int Mipmaps = 1,
-    float Anisotropy = 16, int Lighting = 0);
+    float Anisotropy = 16, int Lighting = 0, int Particles = 0)
+{
+    /// <summary>Frames between the game's at the display's pace (enhanced_interpolate).</summary>
+    public bool Interpolate { get; init; } = true;
+
+    /// <summary>Frames as the display shows them (enhanced_vsync), or as fast as <see cref="MaxFps"/> lets.</summary>
+    public bool Vsync { get; init; } = true;
+
+    /// <summary>The most frames a second without vsync (enhanced_maxfps; 0: no limit).</summary>
+    public int MaxFps { get; init; }
+
+    /// <summary>Alias models' poses blended (enhanced_lerpmodels).</summary>
+    public bool LerpModels { get; init; }
+
+    /// <summary>Monsters' steps smoothed (enhanced_lerpmove).</summary>
+    public bool LerpMove { get; init; }
+
+    /// <summary>Each pixel of the view the number of its surface (red the low byte, green the high; the tools' debugging).</summary>
+    public bool DebugSurfaces { get; init; }
+}
 
 /// <summary>
 /// The enhanced frame (design.md §11.6): the 3D view drawn at the window's resolution into its own multisampled target
@@ -40,7 +60,7 @@ public sealed unsafe partial class VulkanPresenter
 
     private void PresentEnhancedLocked(EnhancedFrame frame, EnhancedOptions options)
     {
-        if (!BeginFrame(out int f, out uint imageIndex))
+        if (!BeginFrame(out int f, out uint imageIndex, options.Vsync))
         {
             return;
         }
@@ -49,7 +69,7 @@ public sealed unsafe partial class VulkanPresenter
         (EnhancedLayout layout, HostBuffer buffer) = PrepareEnhanced(f, frame, options, windowWidth, windowHeight, swapchain.Format);
         VkCommandBuffer cmd = StartCommands(f);
         enhanced!.Record(cmd, f, buffer, frame, layout, swapchain.Images[imageIndex], swapchain.Views[imageIndex],
-            new VkRect2D(0, 0, (uint)windowWidth, (uint)windowHeight));
+            new VkRect2D(0, 0, (uint)windowWidth, (uint)windowHeight), options.Lighting != 0);
         EndFrame(f, imageIndex, cmd);
     }
 
@@ -64,7 +84,7 @@ public sealed unsafe partial class VulkanPresenter
         int viewHeight = Math.Max(1, (int)(layout.View.Height * scale));
         enhanced ??= new EnhancedTargets(this);
         enhanced.Ensure(frame, layout.Scale, viewWidth, viewHeight, options.Msaa, format);
-        enhanced.World.Prepare(f, frame, layout, options, enhanced.ViewSamples);
+        enhanced.World.Prepare(f, frame, layout, options, enhanced.ViewSamples, viewWidth, viewHeight);
 
         // the palette, the frame's pixels, its mask and the border's tile
         int pixels = frame.Width * frame.Height;
@@ -102,7 +122,7 @@ public sealed unsafe partial class VulkanPresenter
             using var readback = new HostBuffer(context, (ulong)(width * height * 4), VkBufferUsageFlags.TransferDst);
             VkCommandBuffer cmd = StartCommands(f);
             enhanced!.Record(cmd, f, buffer, frame, layout, target.Handle, target.View, new VkRect2D(0, 0, (uint)width, (uint)height),
-                VkImageLayout.TransferSrcOptimal);
+                options.Lighting != 0, VkImageLayout.TransferSrcOptimal);
             VkBufferImageCopy region = new()
             {
                 imageSubresource = new VkImageSubresourceLayers(VkImageAspectFlags.Color, 0, 0, 1),
@@ -285,7 +305,7 @@ public sealed unsafe partial class VulkanPresenter
         }
 
         public void Record(VkCommandBuffer cmd, int f, HostBuffer buffer, EnhancedFrame frame, EnhancedLayout layout,
-            VkImage target, VkImageView targetView, VkRect2D window, VkImageLayout finalLayout = VkImageLayout.PresentSrcKHR)
+            VkImage target, VkImageView targetView, VkRect2D window, bool stepped, VkImageLayout finalLayout = VkImageLayout.PresentSrcKHR)
         {
             VkDeviceApi api = context.Api;
             int pixels = frame.Width * frame.Height;
@@ -357,7 +377,7 @@ public sealed unsafe partial class VulkanPresenter
             };
             api.vkCmdBeginRendering(cmd, &viewInfo);
             presenter.SetViewport(cmd, viewRect);
-            World.Draw(cmd, f, frame);
+            World.Draw(cmd, f, frame, layout);
             api.vkCmdEndRendering(cmd);
             ToSampled(cmd, view.Handle, VkPipelineStageFlags2.ColorAttachmentOutput, VkAccessFlags2.ColorAttachmentWrite, VkImageLayout.ColorAttachmentOptimal);
 
@@ -384,6 +404,10 @@ public sealed unsafe partial class VulkanPresenter
                 TileY = frame.Backtile.Length > 0 ? tileHeight : 0,
                 Widened = layout.Widened ? 1 : 0,
                 InLevel = frame.InLevel ? 1 : 0,
+                PixelScaleX = (float)layout.Frame.Width / frameWidth,
+                PixelScaleY = (float)layout.Frame.Height / frameHeight,
+                WarpPhase = stepped ? QuakeSharp.Core.Numerics.X86.FtoI(frame.Time * 20) & 127 : (float)(frame.Time * 20 % 128),
+                Warp = frame.Warp && layout.HasView ? (stepped ? 2 : 1) : 0,
             };
             api.vkCmdPushConstants(cmd, compositePipelineLayout, VkShaderStageFlags.Fragment, 0, (uint)sizeof(CompositeParams), &compositeParams);
             presenter.SetViewport(cmd, window);
@@ -501,5 +525,8 @@ public sealed unsafe partial class VulkanPresenter
         public int TileX, TileY;
         public int Widened;
         public int InLevel;
+        public float PixelScaleX, PixelScaleY;
+        public float WarpPhase;
+        public int Warp;
     }
 }

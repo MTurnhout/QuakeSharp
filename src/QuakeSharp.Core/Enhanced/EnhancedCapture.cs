@@ -88,6 +88,9 @@ public sealed class EnhancedCapture
     /// <summary>Raised on the game thread with each finished frame's snapshot.</summary>
     public event Action<EnhancedFrame>? Captured;
 
+    /// <summary>The enhanced mode's mixer, while it has the sound (snd_dma.c's S_Update_ and S_ClearBuffer call it).</summary>
+    public EnhancedMixer? Sound { get; set; }
+
     /// <summary>The last snapshot taken.</summary>
     public EnhancedFrame? Latest { get; private set; }
 
@@ -210,21 +213,24 @@ public sealed class EnhancedCapture
             generation++;
         }
 
+        // the entities only with a view drawn in a level (the screen is also updated while a level loads, from
+        // Con_Printf, with the last level's entities and no world)
         var entities = new List<EnhancedEntity>(e.cl_numvisedicts + 1);
-        for (int i = 0; i < e.cl_numvisedicts; i++)
+        for (int i = 0; i < (viewDrawn && e.cl.worldmodel != null ? e.cl_numvisedicts : 0); i++)
         {
-            if (e.cl_visedicts[i] is { } ent)
+            // r_main.c: R_DrawEntitiesOnList: "don't draw the player"
+            if (e.cl_visedicts[i] is { } ent && !ReferenceEquals(ent, e.cl_entities[e.cl.viewentity]))
             {
-                entities.Add(Entity(ent));
+                entities.Add(Entity(ent, viewModel: false));
             }
         }
 
         // r_main.c: R_DrawViewModel's conditions
-        if (viewDrawn && e.r_drawviewmodel.value != 0 && !e.r_fov_greater_than_90
+        if (viewDrawn && e.cl.worldmodel != null && e.r_drawviewmodel.value != 0 && !e.r_fov_greater_than_90
             && (e.cl.items & QuakeDef.IT_INVISIBILITY) == 0 && e.cl.stats[QuakeDef.STAT_HEALTH] > 0
             && e.cl.viewent.model != null)
         {
-            entities.Add(Entity(e.cl.viewent));
+            entities.Add(Entity(e.cl.viewent, viewModel: true));
         }
 
         if (!ReferenceEquals(particlePool, e.particles))
@@ -295,6 +301,7 @@ public sealed class EnhancedCapture
             Models = models,
             ModelGeneration = generation,
             AmbientLight = r.ambientlight,
+            Warp = viewDrawn && e.r_dowarp,
             PixelAspect = e.vid.aspect,
             Entities = [.. entities],
             Particles = [.. particles],
@@ -307,17 +314,94 @@ public sealed class EnhancedCapture
         };
     }
 
-    private EnhancedEntity Entity(Entity ent)
+    private EnhancedEntity Entity(Entity ent, bool viewModel)
     {
         // the colour translation: a player's (cl.scores[n].translations) as n + 1, 0 for the normal colormap
         int colormap = 0;
+        int top = -1, bottom = -1;
         if (ent.colormap != null && engine.cl.scores != null && !ReferenceEquals(ent.colormap, engine.vid.colormap))
         {
             colormap = Array.FindIndex(engine.cl.scores, s => ReferenceEquals(s.translations, ent.colormap)) + 1;
+            if (colormap > 0)
+            {
+                // cl_parse.c: CL_NewTranslation's colours
+                top = engine.cl.scores[colormap - 1].colors & 0xf0;
+                bottom = (engine.cl.scores[colormap - 1].colors & 15) << 4;
+            }
         }
 
-        return new EnhancedEntity(entityIds.GetValueOrDefault(ent, EnhancedEntity.Other), ModelId(ent.model),
-            ent.origin, ent.angles, ent.frame, ent.skinnum, colormap, ent.effects, ent.syncbase);
+        var entity = new EnhancedEntity(entityIds.GetValueOrDefault(ent, EnhancedEntity.Other), ModelId(ent.model),
+            ent.origin, ent.angles, ent.frame, ent.skinnum, colormap, ent.effects, ent.syncbase)
+        {
+            Top = top,
+            Bottom = bottom,
+        };
+
+        return ent.model?.type == Model.modtype_t.mod_alias ? AliasLighting(entity, ent, viewModel) : entity;
+    }
+
+    // r_main.c: R_DrawEntitiesOnList's and R_DrawViewModel's lighting of an alias model, then r_alias.c's
+    // R_AliasSetupLighting (R_LightPoint writes nothing; the rest is copied)
+    private EnhancedEntity AliasLighting(EnhancedEntity entity, Entity ent, bool viewModel)
+    {
+        const int LIGHT_MIN = 5;
+        QuakeEngine e = engine;
+        int j = e.R_LightPoint(ent.origin);
+        if (viewModel && j < 24)
+        {
+            j = 24; // allways give some light on gun
+        }
+
+        int ambient = j;
+        int shade = j;
+        for (int lnum = 0; lnum < e.cl_dlights.Length; lnum++)
+        {
+            Dlight dl = e.cl_dlights[lnum];
+            if ((viewModel && dl.radius == 0) || dl.die < e.cl.time)
+            {
+                continue;
+            }
+
+            Common.Vec3 dist = default;
+            Common.MathLib.VectorSubtract(ent.origin, dl.origin, ref dist);
+            float add = dl.radius - Common.MathLib.Length(dist);
+            if (add > 0)
+            {
+                ambient = Numerics.X86.FtoI(ambient + add);
+            }
+        }
+
+        // clamp lighting so it doesn't overbright as much
+        if (ambient > 128)
+        {
+            ambient = 128;
+        }
+
+        if (ambient + shade > 192)
+        {
+            shade = 192 - ambient;
+        }
+
+        // r_alias.c: R_AliasSetupLighting
+        int r_ambientlight = Math.Max(ambient, LIGHT_MIN);
+        r_ambientlight = (255 - r_ambientlight) << QuakeEngine.VID_CBITS;
+        if (r_ambientlight < LIGHT_MIN)
+        {
+            r_ambientlight = LIGHT_MIN;
+        }
+
+        float r_shadelight = Math.Max(shade, 0) * QuakeEngine.VID_GRADES;
+
+        // the lighting vector ({-1, 0, 0}) into the model's frame of reference (R_AliasSetUpTransform's axes, the
+        // pitch turned the other way)
+        Common.Vec3 angles = default, forward = default, right = default, up = default;
+        angles[0] = -ent.angles[0];
+        angles[1] = ent.angles[1];
+        angles[2] = ent.angles[2];
+        Common.MathLib.AngleVectors(angles, ref forward, ref right, ref up);
+        var lightvec = new Common.Vec3(-forward[0], right[0], -up[0]);
+
+        return entity with { LightAmbient = r_ambientlight, LightShade = r_shadelight, LightVector = lightvec };
     }
 
     // The model's number, the model made ready the first time it is seen (the array of them replaced, not written, so
@@ -345,6 +429,22 @@ public sealed class EnhancedCapture
 
     private EnhancedModel Make(Model.Model model)
     {
+        // the model's data as loaded (model.c keeps it in the cache; QuakeSharp's cache never lets it go, design.md
+        // decision 22), read, never reloaded
+        if (model.type == Model.modtype_t.mod_alias)
+        {
+            return model.cache is Model.AliasHdr header
+                ? new EnhancedModel { Name = model.name, Alias = EnhancedAliasModel.Build(model, header) }
+                : new EnhancedModel { Name = model.name };
+        }
+
+        if (model.type == Model.modtype_t.mod_sprite)
+        {
+            return model.cache is Model.MSprite sprite
+                ? new EnhancedModel { Name = model.name, Sprite = EnhancedSpriteModel.Build(model, sprite) }
+                : new EnhancedModel { Name = model.name };
+        }
+
         if (model.type != Model.modtype_t.mod_brush)
         {
             return new EnhancedModel { Name = model.name };

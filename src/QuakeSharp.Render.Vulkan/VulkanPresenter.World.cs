@@ -29,7 +29,13 @@ public sealed unsafe partial class VulkanPresenter
         public const int Lighting = 946;
         public const int Fullbright = 947;
         public const int Time = 948;
-        public const int Colormap = 960;
+        public const int ViewOrigin = 949;
+        public const int Stepped = 952;
+        public const int ViewAxes = 953;
+        public const int SkyMap = 962;
+        public const int SkySizes = 966;
+        public const int DebugSurfaces = 1023;
+        public const int Colormap = 1024;
         public const int Count = Colormap + (64 * 256 / 4);
         public const int MaxDlights = 32;
     }
@@ -44,7 +50,7 @@ public sealed unsafe partial class VulkanPresenter
         public int Pad;
     }
 
-    private sealed class WorldRenderer : IDisposable
+    private sealed partial class WorldRenderer : IDisposable
     {
         private readonly VulkanPresenter presenter;
         private readonly VulkanContext context;
@@ -69,7 +75,7 @@ public sealed unsafe partial class VulkanPresenter
             VkDeviceApi api = context.Api;
             frameSetLayout = presenter.CreateSetLayout(VkShaderStageFlags.Vertex | VkShaderStageFlags.Fragment,
                 (VkDescriptorType.StorageBuffer, 0));
-            modelSetLayout = presenter.CreateSetLayout(
+            modelSetLayout = presenter.CreateSetLayout(VkShaderStageFlags.Vertex | VkShaderStageFlags.Fragment,
                 (VkDescriptorType.StorageBuffer, 0),
                 (VkDescriptorType.StorageBuffer, 1));
             textureSetLayout = presenter.CreateSetLayout(
@@ -98,6 +104,7 @@ public sealed unsafe partial class VulkanPresenter
             {
                 frameSets[i] = Allocate(framePool, frameSetLayout);
                 frameBuffers[i] = new HostBuffer(context, FrameWords.Count * 4, VkBufferUsageFlags.StorageBuffer);
+                particleBuffers[i] = new HostBuffer(context, MaxParticles * 16, VkBufferUsageFlags.StorageBuffer);
                 VkDescriptorBufferInfo info = new() { buffer = frameBuffers[i].Buffer, range = FrameWords.Count * 4 };
                 VkWriteDescriptorSet write = new()
                 {
@@ -109,13 +116,16 @@ public sealed unsafe partial class VulkanPresenter
                 };
                 api.vkUpdateDescriptorSets(1, &write, 0, null);
             }
+
+            CreateModelParts();
         }
 
         /// <summary>
         /// Before the frame's commands: the models it shows made ready (or all dropped when the numbering started anew),
         /// the pipeline for these samples, the frame's words written.
         /// </summary>
-        public void Prepare(int f, EnhancedFrame frame, EnhancedLayout layout, EnhancedOptions options, VkSampleCountFlags samples)
+        public void Prepare(int f, EnhancedFrame frame, EnhancedLayout layout, EnhancedOptions options, VkSampleCountFlags samples,
+            int targetWidth, int targetHeight)
         {
             if (frame.ModelGeneration != generation)
             {
@@ -126,6 +136,7 @@ public sealed unsafe partial class VulkanPresenter
                 }
 
                 models.Clear();
+                DisposeModelParts(all: false);
                 generation = frame.ModelGeneration;
             }
 
@@ -139,6 +150,7 @@ public sealed unsafe partial class VulkanPresenter
                 }
 
                 models.Clear();
+                DisposeModelParts(all: false);
                 if (colorSampler != VkSampler.Null)
                 {
                     context.Api.vkDestroySampler(colorSampler);
@@ -157,6 +169,7 @@ public sealed unsafe partial class VulkanPresenter
                 }
 
                 pipeline = CreateWorldPipeline(samples);
+                CreateModelPipelines(samples);
                 pipelineSamples = samples;
             }
 
@@ -166,14 +179,18 @@ public sealed unsafe partial class VulkanPresenter
                 foreach (EnhancedEntity e in frame.Entities)
                 {
                     Model(frame, e.Model, options);
+                    OtherModel(frame, e.Model);
                 }
             }
 
-            WriteFrameWords(frameBuffers[f], frame, layout, options);
+            WriteParticles(particleBuffers[f], frame);
+            SetParticles(options.Particles != 0);
+
+            WriteFrameWords(frameBuffers[f], frame, layout, options, targetWidth, targetHeight);
         }
 
         /// <summary>The world and the brush entities, inside the view's rendering.</summary>
-        public void Draw(VkCommandBuffer cmd, int f, EnhancedFrame frame)
+        public void Draw(VkCommandBuffer cmd, int f, EnhancedFrame frame, EnhancedLayout layout)
         {
             if (!frame.InLevel || !frame.ViewDrawn)
             {
@@ -191,14 +208,15 @@ public sealed unsafe partial class VulkanPresenter
                 world.Draw(cmd, this, 0, identity, 0, frame.Time);
             }
 
-            if (!frame.DrawEntities)
-            {
-                return;
-            }
-
             foreach (EnhancedEntity e in frame.Entities)
             {
                 if (e.Model <= 0 || e.Model >= frame.Models.Count || frame.Models[e.Model] is not { } model)
+                {
+                    continue;
+                }
+
+                // r_drawentities 0 leaves the entities out, but for the view model (R_DrawViewModel's own test)
+                if (!frame.DrawEntities && e.Id != EnhancedEntity.ViewModel)
                 {
                     continue;
                 }
@@ -213,6 +231,8 @@ public sealed unsafe partial class VulkanPresenter
                     parent.Draw(cmd, this, model.Submodel, transform, e.Frame, frame.Time);
                 }
             }
+
+            DrawModels(cmd, f, frame, layout);
         }
 
         public void Dispose()
@@ -227,6 +247,13 @@ public sealed unsafe partial class VulkanPresenter
             {
                 b.Dispose();
             }
+
+            foreach (HostBuffer b in particleBuffers)
+            {
+                b.Dispose();
+            }
+
+            DisposeModelParts(all: true);
 
             if (pipeline != VkPipeline.Null)
             {
@@ -255,7 +282,8 @@ public sealed unsafe partial class VulkanPresenter
             models[id] = new GpuBrushModel(this, brush, frame.BasePalette, options.Mipmaps != 0);
         }
 
-        private static void WriteFrameWords(HostBuffer buffer, EnhancedFrame frame, EnhancedLayout layout, EnhancedOptions options)
+        private static void WriteFrameWords(HostBuffer buffer, EnhancedFrame frame, EnhancedLayout layout, EnhancedOptions options,
+            int targetWidth, int targetHeight)
         {
             var words = new Span<uint>(buffer.Mapped, FrameWords.Count);
             words.Clear();
@@ -299,6 +327,41 @@ public sealed unsafe partial class VulkanPresenter
             bool worldUnlit = frame.World > 0 && frame.World < frame.Models.Count && frame.Models[frame.World]?.Brush is { LightData.Length: 0 };
             words[FrameWords.Fullbright] = frame.Fullbright || worldUnlit ? 1u : 0u;
             words[FrameWords.Time] = BitConverter.SingleToUInt32Bits((float)frame.Time);
+            for (int i = 0; i < 3; i++)
+            {
+                words[FrameWords.ViewOrigin + i] = BitConverter.SingleToUInt32Bits(frame.View.Origin[i]);
+            }
+
+            // the software's look moves the sky and water in its steps, as it lights by its colormap, and maps the sky as
+            // d_sky.c does: the view's axes, and the frame's pixel each of the view target's shows
+            words[FrameWords.Stepped] = (uint)options.Lighting;
+            words[FrameWords.DebugSurfaces] = options.DebugSurfaces ? 1u : 0u;
+            (double[] forward, double[] right, double[] up) = EnhancedCamera.AngleVectors(frame.View.Angles[0], frame.View.Angles[1], frame.View.Angles[2]);
+            double[][] axes = [forward, right, up];
+            for (int a = 0; a < 3; a++)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    words[FrameWords.ViewAxes + (a * 3) + i] = BitConverter.SingleToUInt32Bits((float)axes[a][i]);
+                }
+            }
+
+            if (layout.HasView)
+            {
+                double sx = (double)layout.Frame.Width / frame.Width, sy = (double)layout.Frame.Height / frame.Height;
+                double kx = (double)layout.View.Width / targetWidth, ky = (double)layout.View.Height / targetHeight;
+                float[] map = [(float)(kx / sx), (float)((layout.View.X - layout.Frame.X) / sx), (float)(ky / sy), (float)((layout.View.Y - layout.Frame.Y) / sy)];
+                float[] sizes = [Math.Max(frame.View.Width, frame.View.Height), frame.Width >> 1, frame.Height >> 1];
+                for (int i = 0; i < 4; i++)
+                {
+                    words[FrameWords.SkyMap + i] = BitConverter.SingleToUInt32Bits(map[i]);
+                }
+
+                for (int i = 0; i < 3; i++)
+                {
+                    words[FrameWords.SkySizes + i] = BitConverter.SingleToUInt32Bits(sizes[i]);
+                }
+            }
             if (frame.Colormap.Length >= 64 * 256)
             {
                 frame.Colormap.AsSpan(0, 64 * 256).CopyTo(MemoryMarshal.AsBytes(words.Slice(FrameWords.Colormap, 64 * 256 / 4)));
@@ -337,10 +400,17 @@ public sealed unsafe partial class VulkanPresenter
         }
 
         // world.slang into the view's target: its vertices, depth tested and written (reversed: nearer is greater)
-        private VkPipeline CreateWorldPipeline(VkSampleCountFlags samples)
+        private VkPipeline CreateWorldPipeline(VkSampleCountFlags samples) =>
+            CreateViewPipeline("world", pipelineLayout, samples, (uint)sizeof(EnhancedBrushVertex),
+                [(VkFormat.R32G32B32Sfloat, 0), (VkFormat.R32G32Sfloat, 12), (VkFormat.R32Sint, 20)]);
+
+        // A pipeline of a shader drawing into the view's target, depth tested and written; vertices of the given stride
+        // and attributes (none: the shader makes its own)
+        private VkPipeline CreateViewPipeline(string shader, VkPipelineLayout layout, VkSampleCountFlags samples, uint stride,
+            (VkFormat Format, uint Offset)[] vertexAttributes)
         {
             VkDeviceApi api = context.Api;
-            byte[] spirv = LoadShader("world");
+            byte[] spirv = LoadShader(shader);
             VkShaderModule module;
             fixed (byte* code = spirv)
             {
@@ -351,16 +421,18 @@ public sealed unsafe partial class VulkanPresenter
             VkPipelineShaderStageCreateInfo* stages = stackalloc VkPipelineShaderStageCreateInfo[2];
             stages[0] = new() { stage = VkShaderStageFlags.Vertex, module = module, pName = EntryVertex };
             stages[1] = new() { stage = VkShaderStageFlags.Fragment, module = module, pName = EntryFragment };
-            VkVertexInputBindingDescription binding = new() { binding = 0, stride = (uint)sizeof(EnhancedBrushVertex), inputRate = VkVertexInputRate.Vertex };
-            VkVertexInputAttributeDescription* attributes = stackalloc VkVertexInputAttributeDescription[3];
-            attributes[0] = new() { location = 0, binding = 0, format = VkFormat.R32G32B32Sfloat, offset = 0 };
-            attributes[1] = new() { location = 1, binding = 0, format = VkFormat.R32G32Sfloat, offset = 12 };
-            attributes[2] = new() { location = 2, binding = 0, format = VkFormat.R32Sint, offset = 20 };
-            VkPipelineVertexInputStateCreateInfo vertexInput = new()
+            VkVertexInputBindingDescription binding = new() { binding = 0, stride = stride, inputRate = VkVertexInputRate.Vertex };
+            VkVertexInputAttributeDescription* attributes = stackalloc VkVertexInputAttributeDescription[Math.Max(1, vertexAttributes.Length)];
+            for (int i = 0; i < vertexAttributes.Length; i++)
+            {
+                attributes[i] = new() { location = (uint)i, binding = 0, format = vertexAttributes[i].Format, offset = vertexAttributes[i].Offset };
+            }
+
+            VkPipelineVertexInputStateCreateInfo vertexInput = vertexAttributes.Length == 0 ? new() : new()
             {
                 vertexBindingDescriptionCount = 1,
                 pVertexBindingDescriptions = &binding,
-                vertexAttributeDescriptionCount = 3,
+                vertexAttributeDescriptionCount = (uint)vertexAttributes.Length,
                 pVertexAttributeDescriptions = attributes,
             };
             VkPipelineInputAssemblyStateCreateInfo inputAssembly = new() { topology = VkPrimitiveTopology.TriangleList };
@@ -403,7 +475,7 @@ public sealed unsafe partial class VulkanPresenter
                 pDepthStencilState = &depth,
                 pColorBlendState = &blend,
                 pDynamicState = &dynamic,
-                layout = pipelineLayout,
+                layout = layout,
             };
             VkPipeline created;
             Check(api.vkCreateGraphicsPipelines(VkPipelineCache.Null, 1, &info, &created), "vkCreateGraphicsPipelines");
@@ -584,7 +656,7 @@ public sealed unsafe partial class VulkanPresenter
                 colors.Dispose();
             }
 
-            private static void Copy(WorldRenderer owner, VkCommandBuffer cmd, HostBuffer staging, Image image, int levels,
+            public static void Copy(WorldRenderer owner, VkCommandBuffer cmd, HostBuffer staging, Image image, int levels,
                 Func<int, (int Offset, int Width, int Height)> level)
             {
                 owner.presenter.Barrier(cmd, image.Handle, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal,
