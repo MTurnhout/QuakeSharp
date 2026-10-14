@@ -21,7 +21,10 @@ public sealed class EnhancedInputGameTests : IDisposable
             Directory.Delete(userdir, recursive: true);
         }
 
-        File.Delete(events);
+        if (File.Exists(events))
+        {
+            File.Delete(events);
+        }
     }
 
     private (float Yaw, float Pitch, int Weapon) Play(EnhancedInput? input)
