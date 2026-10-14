@@ -1784,6 +1784,9 @@ and QuakeSharp takes the episode out of it itself.
 - **The LHA reader** (`LhaArchive`, Core, QuakeSharp's own as decision 72 asks): level 0 and 1 headers, stored and LH5
   members (Okumura's ar002: Huffman-coded literals, lengths and distances in an 8 KB window), each checked by its
   CRC-16; a self-extractor's stub before the first header skipped (resource.1 has LHA's SFX in front).
+- **No console on Windows**: the executable is a GUI program (WinExe), so a double-click opens the game's window
+  alone; `WindowsConsole` attaches its text to the terminal it was started from, if any, and gives a dedicated server a
+  console window of its own (it reads what is typed), unless its input and output are piped.
 - **The user folder** is made if the system's application data folder is missing (.NET gave an empty path for it on a
   Linux without `~/.config`, and the user folder became one in the current folder).
 - **The build** (`.github/workflows/release.yml`): on a version tag `v*`, for Windows (win-x64) and Linux (linux-x64),

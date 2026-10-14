@@ -24,6 +24,7 @@ using QuakeSharp.Render.Vulkan;
 // replays the same in the oracle and in quakesharp-tools trace (with -traceevents <file> -oracleframes <the frames it
 // reports>, from the same command line). Its network is the traces' virtual machine with this one's name and address,
 // out through the real network; what arrives is written beside the events (<file>.dgrams, for -tracedatagrams).
+WindowsConsole.Prepare(dedicated: args.Contains("-dedicated"));
 string[] switches = args.Contains("-recordevents") ? ["-startwindowed", "-noautostretch"]
     : args.Contains("-window") ? ["-startwindowed"]
     : [];

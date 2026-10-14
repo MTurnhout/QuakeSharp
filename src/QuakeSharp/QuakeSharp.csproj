@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- a GUI program on Windows, so no console opens before the window (WindowsConsole) -->
+    <OutputType>WinExe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>QuakeSharp</RootNamespace>
     <AssemblyName>QuakeSharp</AssemblyName>
     <!-- Nothing depends on the user's culture, and the Linux builds need no ICU library -->
