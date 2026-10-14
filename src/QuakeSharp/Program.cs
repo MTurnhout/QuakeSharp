@@ -62,7 +62,7 @@ static int Run(CommandLine commandLine)
     };
 
     // the enhanced mode's settings, and its renderer drawing on a thread of its own
-    string settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp", "quakesharp.cfg");
+    string settingsPath = Path.Combine(GameFolder.UserFolder(), "quakesharp.cfg");
     EnhancedSettings settings = EnhancedSettings.Load(settingsPath);
     bool forRun = commandLine.CheckParm("-enhanced") != 0 || commandLine.CheckParm("-faithful") != 0;
     bool enhanced = commandLine.CheckParm("-enhanced") != 0 || (commandLine.CheckParm("-faithful") == 0 && settings.Enhanced);
@@ -74,8 +74,7 @@ static int Run(CommandLine commandLine)
             Rumble = settings.Number("enhanced_gamepad_rumble") != 0,
         },
         placement: settings.Number("enhanced_3d_sfx") != 0, reverb: settings.Number("enhanced_reverb"));
-    var enhancedWindow = new EnhancedWindow(window, settings, renderer,
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp"));
+    var enhancedWindow = new EnhancedWindow(window, settings, renderer, GameFolder.UserFolder());
     mode.Window = enhancedWindow;
     window.ScrollLock = mode.Toggle;
     window.AltEnter = enhancedWindow.ToggleFullscreen;
@@ -115,15 +114,16 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
     double quitTime)
 {
     // what the game writes goes to the user's folder (design.md §9)
-    string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
+    string userdir = GameFolder.UserFolder();
     var system = new RealSystem();
+    string baseDir = GameFolder.Find(commandLine, userdir, system.Printf);
     using var sound = new SdlSoundDma();
     mode.Sound = sound;
-    using var cd = new FileCdDrive(CdTracks.Find(".", commandLine));
+    using var cd = new FileCdDrive(CdTracks.Find(baseDir, commandLine));
     using var joysticks = new SdlJoysticks();
     // the real network (design.md §11.5)
     using var winsock = new SocketWinsock();
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, window, sound,
+    var engine = new QuakeEngine(new QuakeParms(baseDir, commandLine) { userdir = userdir }, system, window, sound,
         new WindowVideo(window, presenter, mode), cd, mouse: window, joysticks: joysticks, winsock: winsock);
     mode.Attach(engine, enhanced);
 
@@ -188,11 +188,12 @@ static EnhancedTexturePack? TexturePack(QuakeEngine engine, string userdir, stri
 // passed, sleeping between. A Sys_Error shows in the console, which waits for Enter (up to a minute) before exiting.
 static int Dedicated(CommandLine commandLine, double quitTime)
 {
-    string userdir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp");
+    string userdir = GameFolder.UserFolder();
     using var console = new DedicatedConsole();
     var system = new RealSystem(console);
+    string baseDir = GameFolder.Find(commandLine, userdir, system.Printf);
     using var winsock = new SocketWinsock();
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, winsock: winsock);
+    var engine = new QuakeEngine(new QuakeParms(baseDir, commandLine) { userdir = userdir }, system, winsock: winsock);
 
     try
     {
@@ -245,7 +246,8 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     using var recorder = new EventRecorder(window, path, () => frames);
     using var sound = new SdlSoundDma(clock: () => system.Time);
     mode.Sound = sound;
-    using var cd = new ListeningCdDrive(CdTracks.Find(".", commandLine));
+    string baseDir = GameFolder.Find(commandLine, GameFolder.UserFolder(), Console.Write);
+    using var cd = new ListeningCdDrive(CdTracks.Find(baseDir, commandLine));
     // the machine as the traces' virtual one, out through the real network: what arrives at each step is written to
     // the datagrams file beside the events, with the machine's name, address, ports and lookups (design.md §11.5)
     string datagrams = Path.ChangeExtension(path, ".dgrams");
@@ -253,7 +255,7 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     var winsock = new VirtualWinsock(network.Name, network.Addr, () => system.Steps, network);
     network.Winsock = winsock;
     // the window takes the mouse as in a game; no joystick, as the oracle has none
-    var engine = new QuakeEngine(new QuakeParms(".", commandLine) { userdir = userdir }, system, recorder, sound,
+    var engine = new QuakeEngine(new QuakeParms(baseDir, commandLine) { userdir = userdir }, system, recorder, sound,
         new WindowVideo(window, presenter, mode), cd, mouse: window, winsock: winsock);
     mode.Attach(engine, enhanced);
 
@@ -278,8 +280,7 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
     {
         engine.Sys_Printf("Host_Init\n");
         engine.Host_Init();
-        presenter.TexturePack = TexturePack(engine, userdir,
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp"));
+        presenter.TexturePack = TexturePack(engine, userdir, GameFolder.UserFolder());
         double oldtime = system.Time;
         while (true)
         {

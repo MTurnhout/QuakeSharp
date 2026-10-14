@@ -26,9 +26,15 @@ See [design.md](design.md) for the full design and milestones.
 > executable plays with the keyboard and the mouse, in every mode, with either mission pack, and over a real network
 > with Winquake.exe 1.09 and QuakeSpasm, on Windows and Linux.
 
+## Playing
+
+A release (see the repository's Releases) plays at once: unpack it and run QuakeSharp. It carries id Software's
+shareware Quake 1.06, `quake106.zip`, untouched and under id's own licence; QuakeSharp unpacks the first episode from
+it the first time it runs. To play the full game, run QuakeSharp from your Quake folder or copy it there.
+
 ## Game data
 
-QuakeSharp contains no game data. You need your own Quake: `id1/pak0.pak` and `id1/pak1.pak` from an original
+The repository contains no game data. You need your own Quake: `id1/pak0.pak` and `id1/pak1.pak` from an original
 release (1.06 or later), or the shareware's `id1/pak0.pak` alone (`quake106.zip`, the first episode). The mission
 packs need their `hipnotic/pak0.pak` or `rogue/pak0.pak` too (`-hipnotic`, `-rogue`). The 2021 rerelease ships
 modified data in its `rerelease/` folder; the Steam install keeps the original PAKs in `id1/`.
@@ -43,7 +49,8 @@ git clone --recurse-submodules <repo-url>
 dotnet build QuakeSharp.slnx
 ```
 
-Like WinQuake, QuakeSharp looks for `id1/` in the current directory (`-basedir <dir>` names another):
+Like WinQuake, QuakeSharp looks for `id1/` in the current directory (`-basedir <dir>` names another); without one
+there, in its own folder, and then for the shareware's `quake106.zip` beside it (as a release has it):
 
 ```bash
 cd path/to/Quake

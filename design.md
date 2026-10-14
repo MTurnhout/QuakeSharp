@@ -623,6 +623,7 @@ registered data's, byte for byte).
 | 13 | Texture packs | Enhanced mode draws replacement textures from a pack (QuakeSpasm's and DarkPlaces' names): the world's textures, skies and alias skins at any resolution, their fullbrights, and normal and gloss maps lit by the dynamic lights; the tools export the game's textures for a pack's maker and check a pack. The faithful mode, and enhanced mode without a pack, untouched. *Plan: §11.7* |
 | 14 | Enhanced input | The enhanced mode's mouse (taken by the window as soon as it has the focus, free look, the wheel changing weapons) and game controller (analog sticks, triggers, bindings, menu navigation), the faithful mode's mouse and joystick exactly WinQuake's. *Plan: §11.8* |
 | 15 | Enhanced extras | The enhanced mode's smoothed 2D, bloom, vignette and FXAA, a filtered sky, a pointer in the menus, rumble, Alt+Enter and a remembered window, PNG screenshots, the frame rate in the title, reverb. *Plan: §11.9* |
+| 16 | Releases | A playable release for Windows and Linux with id's shareware archive untouched beside the executable, unpacked by QuakeSharp on first run. *Plan: §11.10* |
 | Later | | QuakeWorld, release builds (single file, NativeAOT) |
 
 ### 11.1 Milestone 7: the plan
@@ -1766,6 +1767,38 @@ and without the bloom); and the fidelity suite unchanged. Alt+Enter, Print Scree
 frame rate, the pointer's own events and the rumble reach the window or the device only, and are not driven here
 (decision 75): the player is the check.
 
+### 11.10 Releases with the shareware
+
+A release plays at once, with no game data to find or copy (decision 78). id's shareware licence (SLICNSE.TXT, in
+quake106.zip) lets anyone give the shareware away free of charge, "the Software as a whole", with the licence beside
+it; it does not let a part of it (a bare `pak0.pak`) be given alone. So a release carries the whole archive, untouched,
+and QuakeSharp takes the episode out of it itself.
+
+- **The archive**: `quake106.zip` (MD5 `8cee4d03...1357`, decision 53), beside the executable, as id released it.
+- **First run** (`GameFolder`, the executable's): as WinQuake, the current folder or `-basedir`'s; when the current
+  folder has no `id1/`, the executable's own folder if it has one (a double-click from anywhere, or QuakeSharp copied
+  into a Quake folder); otherwise, with `quake106.zip` beside the executable, `SharewareInstaller` (Core) unpacks
+  `id1/pak0.pak` from the LHA archive `resource.1` inside it into the user folder's `shareware` (checked against the
+  catalogue's MD5, written whole under a temporary name first), with `slicnse.txt`, `licinfo.txt` and `readme.txt`
+  beside it, and plays from there.
+- **The LHA reader** (`LhaArchive`, Core, QuakeSharp's own as decision 72 asks): level 0 and 1 headers, stored and LH5
+  members (Okumura's ar002: Huffman-coded literals, lengths and distances in an 8 KB window), each checked by its
+  CRC-16; a self-extractor's stub before the first header skipped (resource.1 has LHA's SFX in front).
+- **The user folder** is made if the system's application data folder is missing (.NET gave an empty path for it on a
+  Linux without `~/.config`, and the user folder became one in the current folder).
+- **The build** (`.github/workflows/release.yml`): on a version tag `v*`, for Windows (win-x64) and Linux (linux-x64),
+  the tests (with `QUAKESHARP_SHAREWARE_ZIP`), then `dotnet publish` self-contained as one file (SDL3 and VMA inside;
+  the system's Vulkan driver needed), packed with `quake106.zip`, `LICENSE` (GPL-2.0) and `tools/release/README.txt`
+  (how to play, the shareware's licence, the full game), a zip for Windows and a tar.gz for Linux, as a draft GitHub
+  Release published by hand. A manual run keeps the archives as the run's artifacts only.
+
+**Verified by** `LhaArchiveTests` (stored members past a stub, the CRC, a wrong CRC, an unknown method, an archive cut
+short) and `SharewareInstallerTests` (every one of resource.1's 16 members unpacked with its CRC right; the pak
+installed is the catalogue's, the licence beside it, once), with `QUAKESHARP_SHAREWARE_ZIP`, which CI now sets; and
+the published executables, each alone in a folder with `quake106.zip`, started from another folder as a dedicated
+server (no window): on Windows and in WSL's Ubuntu (a fresh home) the pak unpacked into the user folder's
+`shareware` and e1m1 loaded.
+
 ## 12. Decision log
 
 | # | Topic | Decision | Date |
@@ -1847,6 +1880,7 @@ frame rate, the pointer's own events and the rumble reach the window or the devi
 | 75 | Visual checks run headless (milestone 13, step 6) | Confirmed with the user: checks of the executable's look are made with `enhanced-shot` over a recorded events file (offscreen, no window, no input sent), never by driving the real window with sent keys, which took the user's keyboard focus; `enhanced-shot` takes `-lighting`, `-textures` and `-materials` for its default frame (§11.7) | 2026-10-13 |
 | 76 | Enhanced input (milestone 14) | Confirmed with the user: enhanced mode takes the mouse by default (free look, the wheel changing weapons) and a game controller with analog sticks and bindings, as defaults for unbound keys written to no cvar or config.cfg; the faithful mode keeps WinQuake's mouse and joystick exactly (in_win.c, keys.c and vid_win.c behave as before while `enhancedInput` is null). Controllers are read through the same winmm interface, so the traces (no joystick) are unchanged (§11.8) | 2026-10-14 |
 | 77 | Enhanced extras (milestone 15) | Asked by the user: the enhanced mode's smoothed 2D (on), bloom, vignette and FXAA (off), the game's sky filtered with `enhanced_filter`, a menu pointer, rumble, Alt+Enter with a remembered window, PNG screenshots, a frame rate in the title, reverb (off), each a setting and none written into the game. Tried and left out as nothing to see: smoother lightmaps and alias models lit per pixel; a free camera in demos left for later (§11.9) | 2026-10-14 |
+| 78 | Releases with the shareware (milestone 16) | Chosen with the user: a release carries id's `quake106.zip` whole and untouched beside the executable (the shareware licence lets it be given away free only as a whole, with its licence), and QuakeSharp unpacks `pak0.pak` from it on first run into the user folder with its own LHA (LH5) reader; no bare `pak0.pak` is distributed. Self-contained single-file builds for Windows and Linux, made on a version tag as a draft GitHub Release, published by hand (§11.10) | 2026-10-14 |
 
 ## 13. Open decisions
 

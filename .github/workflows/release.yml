@@ -1,0 +1,131 @@
+# Builds QuakeSharp to play (design.md §11.10, decision 78): a self-contained executable for Windows and Linux, each
+# with id's shareware archive quake106.zip beside it, untouched (its licence, SLICNSE.TXT inside it, lets it be given
+# away whole and free of charge), which QuakeSharp unpacks into the user folder the first time it runs. A version tag
+# (v*) makes a draft GitHub Release of them, to be looked over and published by hand; a manual run only keeps them as
+# the run's artifacts.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.rid }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+    runs-on: ${{ matrix.os }}
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      SLANG_VERSION: 2026.18
+      SLANG_SHA256_WINDOWS: 6ffa4827b519fd0a85b38407049d87ab0c1f045fe2289cb1e6831f965169f8a1
+      SLANG_SHA256_LINUX: 03acde8d19ad17f7b94312078ed945bed554a220feff084898a1bc94a9c998f5
+      SHAREWARE_URL: https://archive.org/download/Quake_802/quake106.zip
+      SHAREWARE_MD5: 8cee4d03ee092909fdb6a4f84f0c1357
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # The shaders' compiler, as ci.yml installs it: the pinned Slang release, checked by its SHA-256
+      - name: Install Slang
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            asset="slang-$SLANG_VERSION-windows-x86_64.zip"; sha256="$SLANG_SHA256_WINDOWS"; slangc="bin/slangc.exe"
+          else
+            asset="slang-$SLANG_VERSION-linux-x86_64.tar.gz"; sha256="$SLANG_SHA256_LINUX"; slangc="bin/slangc"
+          fi
+          dir="$RUNNER_TEMP/slang"
+          curl -fsSL -o "$RUNNER_TEMP/$asset" "https://github.com/shader-slang/slang/releases/download/v$SLANG_VERSION/$asset"
+          echo "$sha256  $RUNNER_TEMP/$asset" | sha256sum -c -
+          mkdir -p "$dir"
+          if [ "$RUNNER_OS" = "Windows" ]; then unzip -q "$RUNNER_TEMP/$asset" -d "$dir"; else tar -xzf "$RUNNER_TEMP/$asset" -C "$dir"; fi
+          echo "SLANGC=$dir/$slangc" >> "$GITHUB_ENV"
+
+      # id's shareware archive, checked by its MD5 (decision 53); a release without it is not made
+      - name: Fetch the shareware
+        shell: bash
+        run: |
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/quake106.zip" "$SHAREWARE_URL"
+          echo "$SHAREWARE_MD5  $RUNNER_TEMP/quake106.zip" | md5sum -c -
+
+      - name: Test
+        shell: bash
+        run: |
+          export QUAKESHARP_SHAREWARE_ZIP="$RUNNER_TEMP/quake106.zip"
+          dotnet test --solution QuakeSharp.slnx -c Release
+
+      - name: Publish
+        run: >
+          dotnet publish src/QuakeSharp -c Release -r ${{ matrix.rid }} --self-contained
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none -o publish
+
+      - name: Package
+        id: package
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME}"
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then version="dev-${GITHUB_SHA::7}"; fi
+          name="QuakeSharp-$version-${{ matrix.rid }}"
+          mkdir -p "dist/$name"
+          cp publish/QuakeSharp* "dist/$name/"
+          cp "$RUNNER_TEMP/quake106.zip" LICENSE "dist/$name/"
+          cp tools/release/README.txt "dist/$name/"
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip -mx=9 -bso0 "$name.zip" "$name"
+            echo "file=dist/$name.zip" >> "$GITHUB_OUTPUT"
+          else
+            chmod +x "$name/QuakeSharp"
+            tar -czf "$name.tar.gz" "$name"
+            echo "file=dist/$name.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.rid }}
+          path: ${{ steps.package.outputs.file }}
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          QuakeSharp to play: unpack, run QuakeSharp (QuakeSharp.exe on Windows). A Vulkan 1.3 graphics card is needed.
+
+          Each archive holds id Software's shareware Quake 1.06 (`quake106.zip`), untouched and under id's own licence
+          (`SLICNSE.TXT` inside it); QuakeSharp unpacks the shareware episode from it the first time it runs. To play the
+          full game, run QuakeSharp from your own Quake folder. See README.txt in the archive.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft --title "QuakeSharp $GITHUB_REF_NAME" --notes-file notes.md

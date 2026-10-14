@@ -69,12 +69,13 @@ jobs:
 
       # The shareware smoke test (design.md §10, decision 53): quake106.zip (9,094,045 bytes) from the Internet Archive,
       # checked by its MD5; its pak0.pak, in the LHA archive resource.1, extracted (7-Zip on Windows, lhasa on Linux),
-      # checked and cached, never committed. If it cannot be downloaded the smoke test skips with a warning.
+      # checked and cached with the archive itself (for the installer's tests, decision 78), never committed. If it
+      # cannot be downloaded the smoke test skips with a warning.
       - name: Restore shareware
         uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/shareware
-          key: shareware-${{ env.SHAREWARE_MD5 }}-${{ runner.os }}
+          key: shareware-zip-${{ env.SHAREWARE_MD5 }}-${{ runner.os }}
 
       - name: Fetch shareware
         id: shareware
@@ -103,17 +104,19 @@ jobs:
             fi
             mkdir -p "$dir/id1"
             mv "$(find "$out" -iname pak0.pak)" "$dir/id1/pak0.pak"
+            cp "$zip" "$dir/quake106.zip"
             echo "$SHAREWARE_PAK0_MD5  $dir/id1/pak0.pak" | md5sum -c -
             echo "fetched=true" >> "$GITHUB_OUTPUT"
           fi
           echo "QUAKESHARP_QUAKE_DIR=$dir" >> "$GITHUB_ENV"
+          echo "QUAKESHARP_SHAREWARE_ZIP=$dir/quake106.zip" >> "$GITHUB_ENV"
 
       - name: Cache shareware
         if: steps.shareware.outputs.fetched == 'true'
         uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/shareware
-          key: shareware-${{ env.SHAREWARE_MD5 }}-${{ runner.os }}
+          key: shareware-zip-${{ env.SHAREWARE_MD5 }}-${{ runner.os }}
 
       - name: Build
         run: dotnet build QuakeSharp.slnx -c Release

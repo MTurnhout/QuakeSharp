@@ -51,6 +51,24 @@ internal static class GameDataLocator
         return dir!;
     }
 
+    /// <summary>
+    /// The shareware's own archive, quake106.zip, through QUAKESHARP_SHAREWARE_ZIP (CI keeps the one it downloads): the
+    /// file whose MD5 is the Internet Archive's (design.md decision 53).
+    /// </summary>
+    public static string RequireSharewareZip()
+    {
+        string? zip = Environment.GetEnvironmentVariable("QUAKESHARP_SHAREWARE_ZIP");
+        bool found = false;
+        if (!string.IsNullOrEmpty(zip) && File.Exists(zip))
+        {
+            using FileStream stream = File.OpenRead(zip);
+            found = GameDataCatalog.ComputeMd5(stream) == SharewareInstaller.ZipMd5;
+        }
+
+        Assert.SkipUnless(found, "Set QUAKESHARP_SHAREWARE_ZIP to the shareware's quake106.zip.");
+        return zip!;
+    }
+
     private static IEnumerable<string> Settings()
     {
         string? setting = Environment.GetEnvironmentVariable("QUAKESHARP_QUAKE_DIR");
