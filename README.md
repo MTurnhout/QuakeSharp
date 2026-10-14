@@ -69,7 +69,9 @@ Multiplayer is WinQuake's TCP/IP over UDP (NetQuake's protocol 15, port 26000, `
 Linux alike: QuakeSharp plays with Winquake.exe 1.09 and with QuakeSpasm, as server and as client (QuakeSpasm 0.96.3's
 server sends a signon too large for any 1.09 client, Winquake.exe's or QuakeSharp's). As WinQuake: a server on the same
 machine is not listed by the search and is joined by the machine's address, not 127.0.0.1; a server keeps one player
-per address; on Linux, where the machine's name often resolves to 127.0.1.1, `-ip <address>` gives the real one.
+per address. Unlike WinQuake, the machine's own address is the one its default route leaves from (the LAN's), not
+the first its name gives (often a WSL, Hyper-V or VPN adapter's on Windows, 127.0.1.1 on Linux), so a game hosted or
+joined on such a machine works without `-ip <address>`, which still names another.
 
 `-recordevents <file>` records a game for the fidelity tests: QuakeSharp then runs as the oracle's traces do (a
 virtual clock of 1/64 s steps paced to real time, no `config.cfg`) and writes every key as a `-traceevents` line; on

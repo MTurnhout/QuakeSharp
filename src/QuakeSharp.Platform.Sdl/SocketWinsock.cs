@@ -11,8 +11,9 @@ namespace QuakeSharp.Platform.Sdl;
 /// UDP sockets, on Windows and Linux alike, with Winsock 1.1's semantics and error codes (.NET's
 /// <see cref="SocketError"/> values are Winsock's): IPv4 datagram sockets, non-blocking with FIONBIO, broadcast with
 /// SO_BROADCAST, MSG_PEEK (.NET's peek takes the datagram on Windows, so a peek holds it for the next read); the
-/// machine's name and its first IPv4 address; IPX's family refused, as today's Windows has none. Windows reports the ICMP answer to a datagram sent to a port nobody has as WSAECONNRESET on the next recvfrom;
-/// Linux reports nothing on an unconnected socket.
+/// machine's name and its IPv4 addresses, the one its default route leaves from first (decision 80); IPX's family
+/// refused, as today's Windows has none. Windows reports the ICMP answer to a datagram sent to a port nobody has as
+/// WSAECONNRESET on the next recvfrom; Linux reports nothing on an unconnected socket.
 /// </summary>
 public sealed partial class SocketWinsock : IWinsock, IDisposable
 {
@@ -244,6 +245,50 @@ public sealed partial class SocketWinsock : IWinsock, IDisposable
             return new HostEnt(name, [FromAddress(parsed)]);
         }
 
+        // the machine's own name: its addresses with the one its default route leaves from first (decision 80).
+        // net_wins.c takes the first for its own, binds a listening game's sockets to it and tells it to searching
+        // clients; Winsock's first is often a virtual adapter's (WSL, Hyper-V, a VPN), and Linux's often 127.0.1.1,
+        // which the other machines on the LAN cannot reach
+        HostEnt? entry = LookUp(name);
+        if (entry != null && string.Equals(name, Dns.GetHostName(), StringComparison.OrdinalIgnoreCase))
+        {
+            entry = entry with { h_addr_list = PreferRoute(entry.h_addr_list, DefaultRouteAddress()) };
+        }
+
+        return entry;
+    }
+
+    /// <summary>
+    /// The addresses with <paramref name="preferred"/> first: moved there if it is among them, put there if it is not
+    /// (the name resolved to a loopback address); as they are without one.
+    /// </summary>
+    public static uint[] PreferRoute(uint[] addresses, uint? preferred) =>
+        preferred is uint p ? [p, .. addresses.Where(a => a != p)] : addresses;
+
+    /// <summary>
+    /// The IPv4 address the machine's default route leaves from, as the system picks the source of a datagram to the
+    /// Internet: a UDP socket "connected" to a public address, which sends nothing; null without a route (no network).
+    /// </summary>
+    public static uint? DefaultRouteAddress()
+    {
+        try
+        {
+            using var probe = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            probe.Connect(new IPEndPoint(IPAddress.Parse("192.0.2.1"), 26000)); // TEST-NET-1: never sent to
+            return probe.LocalEndPoint is IPEndPoint { Address: var local } && !IPAddress.IsLoopback(local)
+                && !local.Equals(IPAddress.Any)
+                ? FromAddress(local)
+                : null;
+        }
+        catch (SocketException)
+        {
+            return null;
+        }
+    }
+
+    // gethostbyname's lookup: Winsock's own on Windows, .NET's resolver elsewhere
+    private HostEnt? LookUp(string name)
+    {
         // Windows: Winsock's own answer, whose addresses come in its order (the machine's first, which WinQuake takes
         // for its own, can be another adapter's than .NET's first)
         if (OperatingSystem.IsWindows())
