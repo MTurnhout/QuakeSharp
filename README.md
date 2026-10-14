@@ -73,6 +73,11 @@ per address. Unlike WinQuake, the machine's own address is the one its default r
 the first its name gives (often a WSL, Hyper-V or VPN adapter's on Windows, 127.0.1.1 on Linux), so a game hosted or
 joined on such a machine works without `-ip <address>`, which still names another.
 
+On Windows, allow QuakeSharp through the firewall on private networks when Windows asks, on every PC that plays (and
+set the home network's profile to Private). A server talks to each player from a port of its own, which the firewall
+blocks as unsolicited until QuakeSharp is allowed: the connection is accepted and then nothing happens. Windows asks
+again for a copy of QuakeSharp in another folder.
+
 `-recordevents <file>` records a game for the fidelity tests: QuakeSharp then runs as the oracle's traces do (a
 virtual clock of 1/64 s steps paced to real time, no `config.cfg`) and writes every key as a `-traceevents` line; on
 quitting it prints the frame count. A network game is recorded too: what arrived from the network goes to

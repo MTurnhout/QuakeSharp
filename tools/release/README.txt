@@ -15,6 +15,9 @@ files of this folder together: the libraries beside the executable are part of i
 - Scroll Lock switches between the faithful mode (WinQuake as it was) and the enhanced
   mode (a modern renderer, mouse look, controller support and more).
 - Settings, saved games and screenshots go to %APPDATA%\QuakeSharp (~/.config/QuakeSharp).
+- Multiplayer on Windows: when Windows asks, allow QuakeSharp through the firewall on
+  private networks, on every PC that plays. Until then a connection is accepted and
+  nothing more happens. Windows asks again for a copy in another folder.
 
 The game's files
 ----------------
