@@ -1,9 +1,9 @@
 # Builds QuakeSharp to play (design.md §11.10, decisions 78, 79): QuakeSharp compiled ahead of time (NativeAOT) for
-# Windows and Linux, in two packages each: one with id's shareware archive quake106.zip beside it, untouched (its
-# licence, SLICNSE.TXT inside it, lets it be given away whole and free of charge), which QuakeSharp unpacks into the
-# user folder the first time it runs; and one without, for a Quake of the player's own. A version tag (v*) makes a
-# draft GitHub Release of them, to be looked over and published by hand; a manual run only keeps them as the run's
-# artifacts.
+# Windows and Linux, one package each, with id's shareware archive quake106.zip beside it, untouched (its licence,
+# SLICNSE.TXT inside it, lets it be given away whole and free of charge), which QuakeSharp unpacks into the user folder
+# the first time it runs; a Quake of the player's own (id1/ where QuakeSharp is started, or beside it) comes first. A
+# version tag (v*) makes a draft GitHub Release of them, to be looked over and published by hand; a manual run only
+# keeps them as the run's artifacts.
 name: Release
 
 on:
@@ -80,30 +80,23 @@ jobs:
       - name: Publish
         run: dotnet publish src/QuakeSharp -c Release -r ${{ matrix.rid }} -p:PublishAot=true -p:DebugType=none -o publish
 
-      # two packages: QuakeSharp alone, and QuakeSharp with the shareware's archive (the -shareware one)
       - name: Package
         shell: bash
         run: |
           version="${GITHUB_REF_NAME}"
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then version="dev-${GITHUB_SHA::7}"; fi
-          base="QuakeSharp-$version-${{ matrix.rid }}"
+          name="QuakeSharp-$version-${{ matrix.rid }}"
           rm -f publish/*.dbg publish/*.pdb # the symbols stay out
-          for name in "$base" "$base-shareware"; do
-            mkdir -p "dist/$name"
-            cp publish/* "dist/$name/"
-            cp LICENSE tools/release/README.txt "dist/$name/"
-            if [ "$name" != "$base" ]; then cp "$RUNNER_TEMP/quake106.zip" "dist/$name/"; fi
-            (
-              cd dist
-              if [ "$RUNNER_OS" = "Windows" ]; then
-                7z a -tzip -mx=9 -bso0 "$name.zip" "$name"
-              else
-                chmod +x "$name/QuakeSharp"
-                tar -czf "$name.tar.gz" "$name"
-              fi
-            )
-          done
-          ls -la dist
+          mkdir -p "dist/$name"
+          cp publish/* LICENSE tools/release/README.txt "$RUNNER_TEMP/quake106.zip" "dist/$name/"
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip -mx=9 -bso0 "$name.zip" "$name"
+          else
+            chmod +x "$name/QuakeSharp"
+            tar -czf "$name.tar.gz" "$name"
+          fi
+          ls -la
 
       - uses: actions/upload-artifact@v7
         with:
@@ -133,11 +126,8 @@ jobs:
           cat > notes.md <<'NOTES'
           QuakeSharp to play: unpack, run QuakeSharp (QuakeSharp.exe on Windows). A Vulkan 1.3 graphics card is needed.
 
-          - `-shareware` packages: ready to play. They hold id Software's shareware Quake 1.06 (`quake106.zip`),
-            untouched and under id's own licence (`SLICNSE.TXT` inside it); QuakeSharp unpacks the shareware episode
-            from it the first time it runs.
-          - The others: QuakeSharp alone, for your own Quake: run it from your Quake folder, or copy it there.
-
-          See README.txt in the archive.
+          Each archive holds id Software's shareware Quake 1.06 (`quake106.zip`), untouched and under id's own licence
+          (`SLICNSE.TXT` inside it); QuakeSharp unpacks the shareware episode from it the first time it runs. To play
+          the full game, run QuakeSharp from your own Quake folder, or copy it there. See README.txt in the archive.
           NOTES
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft --title "QuakeSharp $GITHUB_REF_NAME" --notes-file notes.md
