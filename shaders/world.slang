@@ -291,6 +291,41 @@ uint skyIndex(float3 world, float2 targetPixel)
     return f != 0 ? f : textureIndices.Load(int3(back.x + 128, back.y, 0));
 }
 
+// a texel of the game's sky's colours, the front layer's (x below 128) clear where its index is 0, premultiplied
+float4 gameSkyTexel(int x, int y, int x0)
+{
+    int2 t = int2(x0 + (x & 127), y & 127);
+    float a = x0 == 0 && textureIndices.Load(int3(t, 0)) == 0 ? 0.0 : 1.0;
+    return float4(textureColors.Load(int3(t, 0)).rgb * a, a);
+}
+
+float4 gameSkyLayer(float2 p, int x0)
+{
+    p -= 0.5;
+    int2 i = int2(floor(p));
+    float2 f = p - floor(p);
+    float4 a = gameSkyTexel(i.x, i.y, x0), b = gameSkyTexel(i.x + 1, i.y, x0);
+    float4 c = gameSkyTexel(i.x, i.y + 1, x0), d = gameSkyTexel(i.x + 1, i.y + 1, x0);
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+// the game's sky read between its texels (enhanced_filter 1 in true colour, design.md §11.9): skyIndex's layers and
+// scrolling, each layer's colours blended, the front over the back by its clear texels
+float3 linearGameSky(float3 world)
+{
+    float3 dir = world - viewOrigin();
+    dir.z *= 3;
+    dir = normalize(dir);
+    float time = frameTime();
+    float skytime = time - (floor(time / 512.0) * 512.0);
+    float scroll = skytime * 8.0;
+    float s = scroll + (6.0 * 63.0 * dir.x);
+    float t = scroll + (6.0 * 63.0 * dir.y);
+    float4 front = gameSkyLayer(float2(s + scroll, t + scroll), 0);
+    float4 back = gameSkyLayer(float2(s, t), 128);
+    return (back.rgb * (1.0 - front.a)) + front.rgb;
+}
+
 static const int DRAW_REPLACED = 4;
 static const int DRAW_MATERIAL = 8;
 
@@ -370,6 +405,11 @@ float4 fragmentMain(VertexOutput input) : SV_Target
         if ((draw.flags & DRAW_REPLACED) != 0 && !colormapLighting())
         {
             return float4(shiftColor(replacedSky(input.world, input.position.xy)), 1);
+        }
+
+        if (linearSky())
+        {
+            return float4(shiftColor(linearGameSky(input.world)), 1);
         }
 
         return float4(paletteColor(skyIndex(input.world, input.position.xy)), 1);

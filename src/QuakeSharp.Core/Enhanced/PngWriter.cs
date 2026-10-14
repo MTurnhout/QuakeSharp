@@ -1,10 +1,10 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 
-namespace QuakeSharp.Tools;
+namespace QuakeSharp.Core.Enhanced;
 
-/// <summary>Minimal 8-bit RGBA PNG encoder (no external dependencies).</summary>
-internal static class PngWriter
+/// <summary>Minimal 8-bit PNG encoder over .NET's ZLibStream (no external dependencies): the tools' images and the enhanced mode's screenshots.</summary>
+public static class PngWriter
 {
     private static readonly uint[] CrcTable = BuildCrcTable();
 

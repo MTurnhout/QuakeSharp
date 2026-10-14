@@ -385,7 +385,7 @@ public sealed partial class QuakeEngine
         mouse_y = X86.FtoI(mouse_y * sensitivity.value);
 
         // add mouse X/Y movement to cmd
-        if ((in_strafe.state & 1) != 0 || (lookstrafe.value != 0 && (in_mlook.state & 1) != 0))
+        if ((in_strafe.state & 1) != 0 || (lookstrafe.value != 0 && FreeLook()))
         {
             cmd.sidemove += m_side.value * mouse_x;
         }
@@ -394,12 +394,12 @@ public sealed partial class QuakeEngine
             cl.viewangles[YAW] -= m_yaw.value * mouse_x;
         }
 
-        if ((in_mlook.state & 1) != 0)
+        if (FreeLook())
         {
             V_StopPitchDrift();
         }
 
-        if ((in_mlook.state & 1) != 0 && (in_strafe.state & 1) == 0)
+        if (FreeLook() && (in_strafe.state & 1) == 0)
         {
             cl.viewangles[PITCH] += m_pitch.value * mouse_y;
             if (cl.viewangles[PITCH] > 80)
@@ -437,7 +437,14 @@ public sealed partial class QuakeEngine
         if (ActiveApp && !Minimized)
         {
             IN_MouseMove(ref cmd);
-            IN_JoyMove(ref cmd);
+            if (enhancedInput is { Gamepad: true })
+            {
+                EIN_PadMove(ref cmd);
+            }
+            else
+            {
+                IN_JoyMove(ref cmd);
+            }
         }
     }
 
@@ -618,6 +625,12 @@ public sealed partial class QuakeEngine
     {
         int i, key_index;
         uint buttonstate, povstate;
+
+        if (enhancedInput is { Gamepad: true })
+        {
+            EIN_PadCommands();
+            return;
+        }
 
         if (!joy_avail)
         {

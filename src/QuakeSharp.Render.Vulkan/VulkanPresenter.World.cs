@@ -34,6 +34,7 @@ public sealed unsafe partial class VulkanPresenter
         public const int ViewAxes = 953;
         public const int SkyMap = 962;
         public const int SkySizes = 966;
+        public const int LinearSky = 1022;
         public const int DebugSurfaces = 1023;
         public const int Colormap = 1024;
         public const int Count = Colormap + (64 * 256 / 4);
@@ -367,6 +368,7 @@ public sealed unsafe partial class VulkanPresenter
             // d_sky.c does: the view's axes, and the frame's pixel each of the view target's shows
             words[FrameWords.Stepped] = (uint)options.Lighting;
             words[FrameWords.DebugSurfaces] = options.DebugSurfaces ? 1u : 0u;
+            words[FrameWords.LinearSky] = options.Filter != 0 && options.Lighting == 0 ? 1u : 0u;
             (double[] forward, double[] right, double[] up) = EnhancedCamera.AngleVectors(frame.View.Angles[0], frame.View.Angles[1], frame.View.Angles[2]);
             double[][] axes = [forward, right, up];
             for (int a = 0; a < 3; a++)

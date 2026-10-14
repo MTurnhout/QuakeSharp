@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using QuakeSharp.Core;
 using QuakeSharp.Core.Common;
+using QuakeSharp.Core.Enhanced;
 using QuakeSharp.Core.GameData;
 using QuakeSharp.Core.Model;
 

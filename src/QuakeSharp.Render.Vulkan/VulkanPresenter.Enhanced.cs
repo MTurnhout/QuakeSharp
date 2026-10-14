@@ -38,8 +38,43 @@ public sealed record EnhancedOptions(float Scale = 1, int Msaa = 4, bool Widescr
     /// (enhanced_materials).</summary>
     public bool Materials { get; init; } = true;
 
+    /// <summary>The 2D's staircase edges smoothed along their diagonals (enhanced_2d, design.md §11.9).</summary>
+    public bool Smooth2D { get; init; }
+
+    /// <summary>The bloom added over the view's bright parts (enhanced_bloom: 0 none, about 0.5 soft, 1 strong; design.md §11.9).</summary>
+    public float Bloom { get; init; }
+
+    /// <summary>The brightness where the bloom starts, 0..1 (enhanced_bloom_threshold).</summary>
+    public float BloomThreshold { get; init; } = 0.7f;
+
+    /// <summary>The view's corners darkened by this much, 0..1 (enhanced_vignette).</summary>
+    public float Vignette { get; init; }
+
+    /// <summary>FXAA over the view (enhanced_fxaa).</summary>
+    public bool Fxaa { get; init; }
+
     /// <summary>Each pixel of the view the number of its surface (red the low byte, green the high; the tools' debugging).</summary>
     public bool DebugSurfaces { get; init; }
+
+    /// <summary>The options quakesharp.cfg's settings give (decision 61's file; the executable's and the tools').</summary>
+    public static EnhancedOptions FromSettings(EnhancedSettings settings) => new(
+        settings.Number("enhanced_scale"), (int)settings.Number("enhanced_msaa"), settings.Number("enhanced_widescreen") != 0,
+        (int)settings.Number("enhanced_filter"), (int)settings.Number("enhanced_mipmaps"), settings.Number("enhanced_anisotropy"),
+        (int)settings.Number("enhanced_lighting"), (int)settings.Number("enhanced_particles"))
+    {
+        Interpolate = settings.Number("enhanced_interpolate") != 0,
+        Vsync = settings.Number("enhanced_vsync") != 0,
+        MaxFps = (int)settings.Number("enhanced_maxfps"),
+        LerpModels = settings.Number("enhanced_lerpmodels") != 0,
+        LerpMove = settings.Number("enhanced_lerpmove") != 0,
+        Textures = settings.Number("enhanced_textures") != 0,
+        Materials = settings.Number("enhanced_materials") != 0,
+        Smooth2D = settings.Number("enhanced_2d") != 0,
+        Bloom = Math.Clamp(settings.Number("enhanced_bloom"), 0f, 2f),
+        BloomThreshold = Math.Clamp(settings.Number("enhanced_bloom_threshold"), 0f, 0.99f),
+        Vignette = Math.Clamp(settings.Number("enhanced_vignette"), 0f, 1f),
+        Fxaa = settings.Number("enhanced_fxaa") != 0,
+    };
 }
 
 /// <summary>
@@ -76,7 +111,7 @@ public sealed unsafe partial class VulkanPresenter
         (EnhancedLayout layout, HostBuffer buffer) = PrepareEnhanced(f, frame, options, windowWidth, windowHeight, swapchain.Format);
         VkCommandBuffer cmd = StartCommands(f);
         enhanced!.Record(cmd, f, buffer, frame, layout, swapchain.Images[imageIndex], swapchain.Views[imageIndex],
-            new VkRect2D(0, 0, (uint)windowWidth, (uint)windowHeight), options.Lighting != 0);
+            new VkRect2D(0, 0, (uint)windowWidth, (uint)windowHeight), options);
         EndFrame(f, imageIndex, cmd);
     }
 
@@ -129,7 +164,7 @@ public sealed unsafe partial class VulkanPresenter
             using var readback = new HostBuffer(context, (ulong)(width * height * 4), VkBufferUsageFlags.TransferDst);
             VkCommandBuffer cmd = StartCommands(f);
             enhanced!.Record(cmd, f, buffer, frame, layout, target.Handle, target.View, new VkRect2D(0, 0, (uint)width, (uint)height),
-                options.Lighting != 0, VkImageLayout.TransferSrcOptimal);
+                options, VkImageLayout.TransferSrcOptimal);
             VkBufferImageCopy region = new()
             {
                 imageSubresource = new VkImageSubresourceLayers(VkImageAspectFlags.Color, 0, 0, 1),
@@ -155,12 +190,16 @@ public sealed unsafe partial class VulkanPresenter
         private readonly VulkanContext context;
         private readonly VkDescriptorSetLayout overlaySetLayout;
         private readonly VkDescriptorSetLayout compositeSetLayout;
+        private readonly VkDescriptorSetLayout bloomSetLayout;
         private readonly VkPipelineLayout overlayPipelineLayout;
         private readonly VkPipelineLayout compositePipelineLayout;
+        private readonly VkPipelineLayout bloomPipelineLayout;
         private readonly VkDescriptorPool pool;
         private readonly VkDescriptorSet[] overlaySets = new VkDescriptorSet[FramesInFlight];
         private readonly VkDescriptorSet[] compositeSets = new VkDescriptorSet[FramesInFlight];
+        private readonly VkDescriptorSet[] bloomSets = new VkDescriptorSet[3 * FramesInFlight];
         private readonly VkPipeline overlayPipeline;
+        private readonly VkPipeline bloomPipeline;
         private readonly VkSampleCountFlags supportedSamples;
         private VkPipeline compositePipeline;
         private VkFormat compositeFormat;
@@ -168,8 +207,9 @@ public sealed unsafe partial class VulkanPresenter
         private Image? frameIndices, frameMask, backtile;
         private Image? overlay, weight;
         private Image? viewMultisampled, viewDepth, view;
+        private Image? bloomA, bloomB;
         private int frameWidth, frameHeight, overlayScale, tileWidth, tileHeight;
-        private int viewWidth, viewHeight;
+        private int viewWidth, viewHeight, bloomWidth, bloomHeight;
         private VkSampleCountFlags viewSamples;
 
         public EnhancedTargets(VulkanPresenter presenter)
@@ -187,15 +227,18 @@ public sealed unsafe partial class VulkanPresenter
                 (VkDescriptorType.CombinedImageSampler, 1),
                 (VkDescriptorType.CombinedImageSampler, 2),
                 (VkDescriptorType.SampledImage, 3),
-                (VkDescriptorType.StorageBuffer, 4));
+                (VkDescriptorType.StorageBuffer, 4),
+                (VkDescriptorType.CombinedImageSampler, 5));
+            bloomSetLayout = presenter.CreateSetLayout((VkDescriptorType.CombinedImageSampler, 0));
             overlayPipelineLayout = presenter.CreatePipelineLayout(overlaySetLayout, sizeof(OverlayParams));
             compositePipelineLayout = presenter.CreatePipelineLayout(compositeSetLayout, sizeof(CompositeParams));
+            bloomPipelineLayout = presenter.CreatePipelineLayout(bloomSetLayout, sizeof(BloomParams));
 
             VkDescriptorPoolSize* sizes = stackalloc VkDescriptorPoolSize[3];
             sizes[0] = new() { type = VkDescriptorType.SampledImage, descriptorCount = 3 * FramesInFlight };
             sizes[1] = new() { type = VkDescriptorType.StorageBuffer, descriptorCount = 2 * FramesInFlight };
-            sizes[2] = new() { type = VkDescriptorType.CombinedImageSampler, descriptorCount = 3 * FramesInFlight };
-            VkDescriptorPoolCreateInfo poolInfo = new() { maxSets = 2 * FramesInFlight, poolSizeCount = 3, pPoolSizes = sizes };
+            sizes[2] = new() { type = VkDescriptorType.CombinedImageSampler, descriptorCount = 7 * FramesInFlight };
+            VkDescriptorPoolCreateInfo poolInfo = new() { maxSets = 5 * FramesInFlight, poolSizeCount = 3, pPoolSizes = sizes };
             Check(api.vkCreateDescriptorPool(&poolInfo, null, out pool), "vkCreateDescriptorPool");
             for (int i = 0; i < FramesInFlight; i++)
             {
@@ -203,7 +246,13 @@ public sealed unsafe partial class VulkanPresenter
                 compositeSets[i] = Allocate(compositeSetLayout);
             }
 
+            for (int i = 0; i < bloomSets.Length; i++)
+            {
+                bloomSets[i] = Allocate(bloomSetLayout);
+            }
+
             overlayPipeline = presenter.CreatePipeline("enhanced_overlay", overlayPipelineLayout, [OverlayFormat, WeightFormat]);
+            bloomPipeline = presenter.CreatePipeline("enhanced_bloom", bloomPipelineLayout, ViewFormat);
 
             VkPhysicalDeviceProperties properties = context.InstanceApi.vkGetPhysicalDeviceProperties(context.PhysicalDevice);
             supportedSamples = properties.limits.framebufferColorSampleCounts & properties.limits.framebufferDepthSampleCounts;
@@ -272,6 +321,12 @@ public sealed unsafe partial class VulkanPresenter
                 viewDepth = new Image(context, (uint)width, (uint)height, DepthFormat, VkImageUsageFlags.DepthStencilAttachment, samples,
                     VkImageAspectFlags.Depth);
                 view = new Image(context, (uint)width, (uint)height, ViewFormat, VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.Sampled);
+                bloomA?.Dispose();
+                bloomB?.Dispose();
+                bloomWidth = Math.Max(1, width / 4);
+                bloomHeight = Math.Max(1, height / 4);
+                bloomA = new Image(context, (uint)bloomWidth, (uint)bloomHeight, ViewFormat, VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.Sampled);
+                bloomB = new Image(context, (uint)bloomWidth, (uint)bloomHeight, ViewFormat, VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.Sampled);
                 viewWidth = width;
                 viewHeight = height;
                 viewSamples = samples;
@@ -298,8 +353,10 @@ public sealed unsafe partial class VulkanPresenter
             VkDescriptorImageInfo weightInfo = new() { sampler = presenter.sampler, imageView = weight!.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
             VkDescriptorImageInfo viewInfo = new() { sampler = presenter.sampler, imageView = view!.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
             VkDescriptorImageInfo tileInfo = new() { imageView = backtile!.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
+            VkDescriptorImageInfo bloomAInfo = new() { sampler = presenter.sampler, imageView = bloomA!.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
+            VkDescriptorImageInfo bloomBInfo = new() { sampler = presenter.sampler, imageView = bloomB!.View, imageLayout = VkImageLayout.ShaderReadOnlyOptimal };
 
-            VkWriteDescriptorSet* writes = stackalloc VkWriteDescriptorSet[8];
+            VkWriteDescriptorSet* writes = stackalloc VkWriteDescriptorSet[12];
             writes[0] = Write(overlaySets[f], 0, VkDescriptorType.SampledImage, &indicesInfo, null);
             writes[1] = Write(overlaySets[f], 1, VkDescriptorType.SampledImage, &maskInfo, null);
             writes[2] = Write(overlaySets[f], 2, VkDescriptorType.StorageBuffer, null, &paletteInfo);
@@ -308,12 +365,17 @@ public sealed unsafe partial class VulkanPresenter
             writes[5] = Write(compositeSets[f], 2, VkDescriptorType.CombinedImageSampler, &viewInfo, null);
             writes[6] = Write(compositeSets[f], 3, VkDescriptorType.SampledImage, &tileInfo, null);
             writes[7] = Write(compositeSets[f], 4, VkDescriptorType.StorageBuffer, null, &paletteInfo);
-            context.Api.vkUpdateDescriptorSets(8, writes, 0, null);
+            writes[8] = Write(compositeSets[f], 5, VkDescriptorType.CombinedImageSampler, &bloomAInfo, null);
+            writes[9] = Write(bloomSets[3 * f], 0, VkDescriptorType.CombinedImageSampler, &viewInfo, null);
+            writes[10] = Write(bloomSets[(3 * f) + 1], 0, VkDescriptorType.CombinedImageSampler, &bloomAInfo, null);
+            writes[11] = Write(bloomSets[(3 * f) + 2], 0, VkDescriptorType.CombinedImageSampler, &bloomBInfo, null);
+            context.Api.vkUpdateDescriptorSets(12, writes, 0, null);
         }
 
         public void Record(VkCommandBuffer cmd, int f, HostBuffer buffer, EnhancedFrame frame, EnhancedLayout layout,
-            VkImage target, VkImageView targetView, VkRect2D window, bool stepped, VkImageLayout finalLayout = VkImageLayout.PresentSrcKHR)
+            VkImage target, VkImageView targetView, VkRect2D window, EnhancedOptions options, VkImageLayout finalLayout = VkImageLayout.PresentSrcKHR)
         {
+            bool stepped = options.Lighting != 0;
             VkDeviceApi api = context.Api;
             int pixels = frame.Width * frame.Height;
 
@@ -334,7 +396,7 @@ public sealed unsafe partial class VulkanPresenter
             api.vkCmdBindPipeline(cmd, VkPipelineBindPoint.Graphics, overlayPipeline);
             VkDescriptorSet overlaySet = overlaySets[f];
             api.vkCmdBindDescriptorSets(cmd, VkPipelineBindPoint.Graphics, overlayPipelineLayout, 0, 1, &overlaySet, 0, null);
-            OverlayParams overlayParams = new() { Scale = overlayScale, ViewDrawn = layout.HasView ? 1 : 0 };
+            OverlayParams overlayParams = new() { Scale = overlayScale, ViewDrawn = layout.HasView ? 1 : 0, Smooth = options.Smooth2D ? 1 : 0 };
             api.vkCmdPushConstants(cmd, overlayPipelineLayout, VkShaderStageFlags.Fragment, 0, (uint)sizeof(OverlayParams), &overlayParams);
             presenter.SetViewport(cmd, overlayRect);
             api.vkCmdDraw(cmd, 3, 1, 0, 0);
@@ -388,6 +450,23 @@ public sealed unsafe partial class VulkanPresenter
             api.vkCmdEndRendering(cmd);
             ToSampled(cmd, view.Handle, VkPipelineStageFlags2.ColorAttachmentOutput, VkAccessFlags2.ColorAttachmentWrite, VkImageLayout.ColorAttachmentOptimal);
 
+            // the bloom (design.md §11.9): the bright parts down to a quarter, blurred across and down; without it, cleared
+            if (options.Bloom > 0)
+            {
+                BloomPass(cmd, f, 0, bloomA!, 1f / viewWidth, 1f / viewHeight, options.BloomThreshold);
+                BloomPass(cmd, f, 1, bloomB!, 1f / bloomWidth, 1f / bloomHeight, 0);
+                BloomPass(cmd, f, 2, bloomA!, 1f / bloomWidth, 1f / bloomHeight, 0);
+            }
+            else
+            {
+                ToAttachment(cmd, bloomA!.Handle);
+                VkRenderingAttachmentInfo cleared = Attachment(bloomA.View, VkAttachmentLoadOp.Clear, new VkClearValue(0f, 0f, 0f, 1f));
+                VkRenderingInfo clearInfo = new() { renderArea = new VkRect2D(0, 0, (uint)bloomWidth, (uint)bloomHeight), layerCount = 1, colorAttachmentCount = 1, pColorAttachments = &cleared };
+                api.vkCmdBeginRendering(cmd, &clearInfo);
+                api.vkCmdEndRendering(cmd);
+                ToSampled(cmd, bloomA.Handle, VkPipelineStageFlags2.ColorAttachmentOutput, VkAccessFlags2.ColorAttachmentWrite, VkImageLayout.ColorAttachmentOptimal);
+            }
+
             // the two together over the whole window
             presenter.Barrier(cmd, target, VkImageLayout.Undefined, VkImageLayout.ColorAttachmentOptimal,
                 VkPipelineStageFlags2.ColorAttachmentOutput, VkAccessFlags2.None, VkPipelineStageFlags2.ColorAttachmentOutput, VkAccessFlags2.ColorAttachmentWrite);
@@ -415,6 +494,9 @@ public sealed unsafe partial class VulkanPresenter
                 PixelScaleY = (float)layout.Frame.Height / frameHeight,
                 WarpPhase = stepped ? QuakeSharp.Core.Numerics.X86.FtoI(frame.Time * 20) & 127 : (float)(frame.Time * 20 % 128),
                 Warp = frame.Warp && layout.HasView ? (stepped ? 2 : 1) : 0,
+                BloomStrength = options.Bloom,
+                Vignette = options.Vignette,
+                Fxaa = options.Fxaa ? 1 : 0,
             };
             api.vkCmdPushConstants(cmd, compositePipelineLayout, VkShaderStageFlags.Fragment, 0, (uint)sizeof(CompositeParams), &compositeParams);
             presenter.SetViewport(cmd, window);
@@ -438,7 +520,10 @@ public sealed unsafe partial class VulkanPresenter
             viewMultisampled?.Dispose();
             viewDepth?.Dispose();
             view?.Dispose();
+            bloomA?.Dispose();
+            bloomB?.Dispose();
             api.vkDestroyPipeline(overlayPipeline);
+            api.vkDestroyPipeline(bloomPipeline);
             if (compositePipeline != VkPipeline.Null)
             {
                 api.vkDestroyPipeline(compositePipeline);
@@ -447,8 +532,30 @@ public sealed unsafe partial class VulkanPresenter
             api.vkDestroyDescriptorPool(pool);
             api.vkDestroyPipelineLayout(overlayPipelineLayout);
             api.vkDestroyPipelineLayout(compositePipelineLayout);
+            api.vkDestroyPipelineLayout(bloomPipelineLayout);
+            api.vkDestroyDescriptorSetLayout(bloomSetLayout);
             api.vkDestroyDescriptorSetLayout(overlaySetLayout);
             api.vkDestroyDescriptorSetLayout(compositeSetLayout);
+        }
+
+        // one of the bloom's passes into target, from the image of bloomSets[3f + pass]
+        private void BloomPass(VkCommandBuffer cmd, int f, int pass, Image target, float texelX, float texelY, float threshold)
+        {
+            VkDeviceApi api = context.Api;
+            ToAttachment(cmd, target.Handle);
+            VkRenderingAttachmentInfo color = Attachment(target.View, VkAttachmentLoadOp.DontCare, default);
+            var rect = new VkRect2D(0, 0, (uint)bloomWidth, (uint)bloomHeight);
+            VkRenderingInfo info = new() { renderArea = rect, layerCount = 1, colorAttachmentCount = 1, pColorAttachments = &color };
+            api.vkCmdBeginRendering(cmd, &info);
+            api.vkCmdBindPipeline(cmd, VkPipelineBindPoint.Graphics, bloomPipeline);
+            VkDescriptorSet set = bloomSets[(3 * f) + pass];
+            api.vkCmdBindDescriptorSets(cmd, VkPipelineBindPoint.Graphics, bloomPipelineLayout, 0, 1, &set, 0, null);
+            BloomParams p = new() { TexelX = texelX, TexelY = texelY, Pass = pass, Threshold = threshold };
+            api.vkCmdPushConstants(cmd, bloomPipelineLayout, VkShaderStageFlags.Fragment, 0, (uint)sizeof(BloomParams), &p);
+            presenter.SetViewport(cmd, rect);
+            api.vkCmdDraw(cmd, 3, 1, 0, 0);
+            api.vkCmdEndRendering(cmd);
+            ToSampled(cmd, target.Handle, VkPipelineStageFlags2.ColorAttachmentOutput, VkAccessFlags2.ColorAttachmentWrite, VkImageLayout.ColorAttachmentOptimal);
         }
 
         private static VkWriteDescriptorSet Write(VkDescriptorSet set, uint binding, VkDescriptorType type,
@@ -521,6 +628,8 @@ public sealed unsafe partial class VulkanPresenter
     {
         public int Scale;
         public int ViewDrawn;
+        public int Smooth;
+        public int Pad;
     }
 
     // enhanced_composite.slang's push constants
@@ -535,5 +644,17 @@ public sealed unsafe partial class VulkanPresenter
         public float PixelScaleX, PixelScaleY;
         public float WarpPhase;
         public int Warp;
+        public float BloomStrength;
+        public float Vignette;
+        public int Fxaa;
+        public int Pad;
+    }
+
+    // enhanced_bloom.slang's push constants
+    private struct BloomParams
+    {
+        public float TexelX, TexelY;
+        public int Pass;
+        public float Threshold;
     }
 }

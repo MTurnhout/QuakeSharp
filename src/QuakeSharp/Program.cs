@@ -66,22 +66,22 @@ static int Run(CommandLine commandLine)
     EnhancedSettings settings = EnhancedSettings.Load(settingsPath);
     bool forRun = commandLine.CheckParm("-enhanced") != 0 || commandLine.CheckParm("-faithful") != 0;
     bool enhanced = commandLine.CheckParm("-enhanced") != 0 || (commandLine.CheckParm("-faithful") == 0 && settings.Enhanced);
-    using var renderer = new EnhancedRenderer(presenter, new EnhancedOptions(
-        settings.Number("enhanced_scale"), (int)settings.Number("enhanced_msaa"), settings.Number("enhanced_widescreen") != 0,
-        (int)settings.Number("enhanced_filter"), (int)settings.Number("enhanced_mipmaps"), settings.Number("enhanced_anisotropy"),
-        (int)settings.Number("enhanced_lighting"), (int)settings.Number("enhanced_particles"))
-    {
-        Interpolate = settings.Number("enhanced_interpolate") != 0,
-        Vsync = settings.Number("enhanced_vsync") != 0,
-        MaxFps = (int)settings.Number("enhanced_maxfps"),
-        LerpModels = settings.Number("enhanced_lerpmodels") != 0,
-        LerpMove = settings.Number("enhanced_lerpmove") != 0,
-        Textures = settings.Number("enhanced_textures") != 0,
-        Materials = settings.Number("enhanced_materials") != 0,
-    });
+    using var renderer = new EnhancedRenderer(presenter, EnhancedOptions.FromSettings(settings));
     var mode = new EnhancedMode(renderer, enhancedSound: settings.Number("enhanced_sound") != 0,
-        placement: settings.Number("enhanced_3d_sfx") != 0);
+        input: new EnhancedInput(settings.Number("enhanced_mouse") != 0, settings.Number("enhanced_gamepad") != 0,
+            settings.Number("enhanced_gamepad_deadzone"), settings.Number("enhanced_gamepad_sensitivity"), settings.Number("enhanced_alwaysrun") != 0)
+        {
+            Rumble = settings.Number("enhanced_gamepad_rumble") != 0,
+        },
+        placement: settings.Number("enhanced_3d_sfx") != 0, reverb: settings.Number("enhanced_reverb"));
+    var enhancedWindow = new EnhancedWindow(window, settings, renderer,
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QuakeSharp"));
+    mode.Window = enhancedWindow;
     window.ScrollLock = mode.Toggle;
+    window.AltEnter = enhancedWindow.ToggleFullscreen;
+    window.PrintScreen = enhancedWindow.Screenshot;
+    window.Pointer = (x, y, code) => mode.Pointer(x, y, code, window.PixelSize, presenter.SquarePixels);
+    renderer.ScreenshotWritten = text => Console.WriteLine($"Screenshot: {text}");
 
     try
     {
@@ -97,6 +97,8 @@ static int Run(CommandLine commandLine)
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"Enhanced mode: {renderer.FramesDrawn} frames drawn, {renderer.DrawingTime.TotalMilliseconds / renderer.FramesDrawn:F2} ms each"));
         }
+
+        enhancedWindow.Remember();
 
         // the switches set it for their run only
         if (!forRun)
@@ -142,6 +144,9 @@ static int Play(CommandLine commandLine, SdlWindow window, VulkanPresenter prese
         {
             double newtime = system.FloatTime();
             engine.Host_Frame((float)(newtime - oldtime));
+            mode.Window?.Tick();
+            mode.UpdatePointer(window);
+            mode.UpdateRumble(joysticks);
             oldtime = newtime;
 
             if (newtime > quitTime)
@@ -282,6 +287,8 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
             system.Step();
             double newtime = system.Time;
             engine.Host_Frame((float)(newtime - oldtime));
+            mode.Window?.Tick();
+            mode.UpdatePointer(window);
             oldtime = newtime;
             frames++;
 
@@ -311,9 +318,9 @@ static int Record(CommandLine commandLine, string path, SdlWindow window, Vulkan
 /// enhanced renderer, and the faithful frames are not shown; off, nothing of it runs.
 /// </summary>
 internal sealed class EnhancedMode(EnhancedRenderer renderer, SdlSoundDma? sound = null, bool enhancedSound = true,
-    bool placement = false)
+    bool placement = false, EnhancedInput? input = null, float reverb = 0)
 {
-    private readonly EnhancedMixer mixer = new() { Placement = placement };
+    private readonly EnhancedMixer mixer = new() { Placement = placement, Reverb = reverb > 0 ? new EnhancedReverb(reverb) : null };
     private QuakeEngine? engine;
 
     // the last capture, whose models the next keeps (switching the mode back on need not make them all again)
@@ -323,11 +330,59 @@ internal sealed class EnhancedMode(EnhancedRenderer renderer, SdlSoundDma? sound
 
     public EnhancedRenderer Renderer => renderer;
 
+    /// <summary>The window the mode keeps (design.md §11.9; null: the game's always).</summary>
+    public EnhancedWindow? Window { get; set; }
+
+    /// <summary>The mouse and the controller the mode adds (null: none).</summary>
+    public EnhancedInput? Input => input;
+
     /// <summary>The engine, before Host_Init, and whether the mode starts on.</summary>
     public void Attach(QuakeEngine e, bool on)
     {
         engine = e;
         Set(on);
+    }
+
+    /// <summary>Between frames: the menu pointer on while a menu is up in the mode with its mouse (design.md §11.9).</summary>
+    public void UpdatePointer(SdlWindow window) =>
+        window.PointerMode = On && input is { Mouse: true } && engine is { key_dest: keydest_t.key_menu };
+
+    // the damage flash's strength last seen, for the rumble
+    private int damageSeen;
+
+    /// <summary>Between frames: the controller shakes as the player is hurt (design.md §11.9).</summary>
+    public void UpdateRumble(SdlJoysticks joysticks)
+    {
+        if (!On || input is not { Gamepad: true, Rumble: true } || engine == null)
+        {
+            return;
+        }
+
+        int damage = engine.cl.cshifts[QuakeSharp.Core.Client.ClientState.CSHIFT_DAMAGE].percent;
+        (float strength, uint ms) = EnhancedInput.RumbleFor(damageSeen, damage);
+        damageSeen = damage;
+        if (ms > 0)
+        {
+            joysticks.Rumble((uint)engine.EIN_PadSlot, strength, strength * 0.6f, ms);
+        }
+    }
+
+    /// <summary>The menu pointer's event at the window's pixel (x, y): moved to the frame's pixel there, handed to the menu.</summary>
+    public void Pointer(float x, float y, int code, (int Width, int Height) window, bool squarePixels)
+    {
+        if (engine?.enhanced?.Latest is not { } frame)
+        {
+            return;
+        }
+
+        EnhancedLayout layout = EnhancedLayout.Compute(frame, window.Width, window.Height, squarePixels, widescreen: false);
+        int fx = (int)Math.Floor((x - layout.Frame.X) * frame.Width / layout.Frame.Width);
+        int fy = (int)Math.Floor((y - layout.Frame.Y) * frame.Height / layout.Frame.Height);
+        engine.EIN_MenuPoint(fx, fy);
+        if (code != 0)
+        {
+            engine.EIN_MenuClick(fx, fy, code);
+        }
     }
 
     /// <summary>Scroll Lock.</summary>
@@ -352,12 +407,16 @@ internal sealed class EnhancedMode(EnhancedRenderer renderer, SdlSoundDma? sound
             last = capture;
             capture.Captured += renderer.Submit;
             engine.enhanced = capture;
+            engine.EIN_Set(Input);
         }
         else
         {
             engine.enhanced = null;
+            engine.EIN_Set(null);
             renderer.Deactivate();
         }
+
+        Window?.Set(on);
 
         // the device plays the enhanced mixer's ring while the mode has the sound
         sound?.UseEnhanced(on && enhancedSound ? mixer : null);
@@ -435,7 +494,17 @@ internal sealed class WindowVideo(SdlWindow window, VulkanPresenter presenter, E
         }
     }
 
-    public void SetMode(int width, int height, bool fullscreen) => window.SetMode(width, height, fullscreen);
+    public void SetMode(int width, int height, bool fullscreen)
+    {
+        if (mode.Window != null)
+        {
+            mode.Window.GameSetMode(width, height, fullscreen);
+        }
+        else
+        {
+            window.SetMode(width, height, fullscreen);
+        }
+    }
 }
 
 /// <summary>

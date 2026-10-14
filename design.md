@@ -522,7 +522,7 @@ is not taken. While it is taken the window holds the pointer (SDL3's relative mo
 mouse acceleration, which in_win.c changed, is left alone. A game controller works as the original joystick
 (`in_win.c`'s `joy_*` cvars and `JOY1`-`AUX32` keys) through winmm's interface (`IJoystickDevice`): an SDL3 gamepad's
 left stick turns and moves, its other axes, buttons and direction pad as `SdlJoysticks` maps them. The traces and
-`-recordevents` have the oracle's machine: no joystick.
+`-recordevents` have the oracle's machine: no joystick. The enhanced mode adds its own mouse and controller on top (§11.8).
 
 Keys are read as WinQuake reads them (`vid_win.c`: `MapKey`): the PC scan code of the key message (SDL's scan code
 turned back into it, `KeyTranslation`) looked up in `scantokey` (generated from `vid_win.c`), without the extended-key
@@ -621,6 +621,8 @@ registered data's, byte for byte).
 | 11 ✅ | Networking | UDP play with other NetQuake engines; net game tests. *Plan: §11.5. net_wins.c, net_wipx.c and net_win.c ported over a Winsock real (`SocketWinsock`, .NET's sockets) and virtual (`VirtualWinsock`, the oracle's `winsock_oracle.c`), the stand-ins gone (decision 55); games between hosts played together in one process and each host replayed alone in the oracle, every line in sync (`netjoin`, `netdm`, `netloss`, `netcmds`, `netswitches`, `netded`; decision 56); the dedicated server on both sides, its console scripted (trace format 8; decision 58); the real network, and games on it recorded and replayed (decision 59); Winquake.exe 1.09 and QuakeSpasm 0.96.3 played against, as server and as client, on one machine and on two (§3.4, decision 60): QuakeSharp plays with both but for QuakeSpasm's server, which no 1.09 client can join.* |
 | 12 ✅ | Enhanced mode | An optional layer the player switches on and off at any time, the faithful mode the default and untouched (§6.6): a Vulkan hardware renderer of the same view at any resolution and aspect, MSAA, filtered and mipmapped textures, lighting with overbright, the palette's shifts and gamma, sky, water, particles, frames interpolated beyond 72 a second and alias poses blended; sound mixed at the device's rate. *Plan: §11.6.* **Every trace, every line and file, matches with enhanced frames and sound made after every frame** (`EnhancedModeChangesNothing`); demos, saves, config.cfg and net games stay the same bytes. *Done (decisions 61-67): seams in draw.c, R_RenderView, V_UpdatePalette, VID_Update and S_Update_ hand snapshots and the channels to `Core/Enhanced`, which makes the models ready and mixes; `Render.Vulkan` draws on its own thread: the world lit as r_surf.c lights it (the colormap's look or true colour with overbright), the sky and water as r_sky.c, d_sky.c and d_scan.c draw them, alias models lit as r_alias.c, sprites, particles, the 2D from the frame, widened Hor+, MSAA, interpolated at the display's pace; a 44.1 kHz mixer following WinQuake's channels. Every trace matches with it on and switched; the comparison with the software frame, at faithful settings, has 96.6-100% of the view's pixels within 24 of the software's on every frame measured with everything drawn* |
 | 13 | Texture packs | Enhanced mode draws replacement textures from a pack (QuakeSpasm's and DarkPlaces' names): the world's textures, skies and alias skins at any resolution, their fullbrights, and normal and gloss maps lit by the dynamic lights; the tools export the game's textures for a pack's maker and check a pack. The faithful mode, and enhanced mode without a pack, untouched. *Plan: §11.7* |
+| 14 | Enhanced input | The enhanced mode's mouse (taken by the window as soon as it has the focus, free look, the wheel changing weapons) and game controller (analog sticks, triggers, bindings, menu navigation), the faithful mode's mouse and joystick exactly WinQuake's. *Plan: §11.8* |
+| 15 | Enhanced extras | The enhanced mode's smoothed 2D, bloom, vignette and FXAA, a filtered sky, a pointer in the menus, rumble, Alt+Enter and a remembered window, PNG screenshots, the frame rate in the title, reverb. *Plan: §11.9* |
 | Later | | QuakeWorld, release builds (single file, NativeAOT) |
 
 ### 11.1 Milestone 7: the plan
@@ -1698,6 +1700,72 @@ the faithful mode is unchanged.
 players' colours, materials, the by-hand check and README; `EnhancedModeChangesNothing` and the comparison's numbers
 are as step 5 left them (steps 5 and 6 changed no game-side code).
 
+### 11.8 Milestone 14: enhanced input
+
+WinQuake's mouse and joystick are in_win.c's (§8): in a window the mouse does nothing until `_windowed_mouse` is 1, looking
+up and down needs `+mlook`, the wheel is bound to nothing, and a game controller works as a 1990s joystick (the
+`joystick` cvar off, the left stick turning and walking, no bindings). The faithful mode keeps all of it (decision 76).
+Enhanced mode adds a modern way of playing without touching the game's rules or files.
+
+**The rules.** §11.6's, and: the enhanced input is the engine's `enhancedInput`, set while the mode is on and null
+otherwise, and in_win.c's code, keys.c's and vid_win.c's behave as before while it is null (the seams ask it: `FreeLook`,
+`WindowedMouse`, `KeyBinding`, and in `IN_Move` and `IN_Commands` the choice of the controller's code). It writes no cvar and no
+binding, so `config.cfg` stays the game's; it supplies defaults for keys the player has not bound, and a player's
+binding always wins. What a player's hands do reaches the game as ordinary input (a `usercmd`'s moves, key events), so
+QuakeC, the physics and the demos see nothing new.
+
+| What | Enhanced mode | Settings |
+|---|---|---|
+| Mouse | Taken as `_windowed_mouse` 1 does (the window holds the pointer once it has the focus, let go while paused); free look as `+mlook` held; the wheel's defaults `impulse 10` (up) and `impulse 12` (down); motion is SDL's relative motion, the system's acceleration not applied | `enhanced_mouse` (1) |
+| Controller | The first controller that answers (so one plugged in later works), read each frame. Left stick walks and strafes (a full push runs), right stick turns and looks (radial dead zone, a finer response near the centre, 220°/s yaw and 140°/s pitch at full deflection; `m_pitch`'s sign inverts it as it does the mouse); A jumps, B swims down, X up, Y centres the view, the bumpers and the hat's left and right change weapon, the right trigger fires, Back shows the scores, Start is Escape. In a menu the hat and the left stick are the arrow keys (repeating), A is Enter and B is Escape. Bound by the keys `JOY1`-`JOY4`, `AUX5`-`AUX12`, `AUX29`-`AUX32`, so the player's `bind` wins | `enhanced_gamepad` (1), `enhanced_gamepad_deadzone` (0.15), `enhanced_gamepad_sensitivity` (1) |
+| Running | Running is the default; the speed key walks (cl_input.c's `+speed` inverted for the keyboard's movement; the controller's stick is analog already) | `enhanced_alwaysrun` (1) |
+| Not included | Gyro, rumble, a pointer in the menus (the original has none), mouse acceleration curves | |
+
+**Verified by** unit tests of the stick's dead zone, the look curve, the hat, the triggers, the default bindings and
+the pad's key events (a game, a menu, the change between them, repeats, release), without a game (`EnhancedInputTests`); a
+headless game with the traces' scripted mouse and wheel in a window: with the input the mouse turns and looks and the
+wheel changes weapon, without it or with the controller only nothing happens (`EnhancedInputGameTests`); and the whole
+fidelity suite unchanged, as the faithful mode's input is untouched. Checked headless only, with no input sent to the
+real devices (decision 75): a controller's feel is the player's to judge.
+
+### 11.9 Milestone 15: enhanced extras
+
+What milestones 12-14 left of a modern presentation, each only in the enhanced mode, read from the game and never
+written into it (§11.6's rules), each a setting of quakesharp.cfg (decision 77).
+
+| What | How | Setting (default) |
+|---|---|---|
+| Smoothed 2D | The status bar's, menus', console's and centre prints' staircase edges cut along their diagonals at the 2D's integer scale, as Scale2x (EPX) chooses them, on the palette indices (a view pixel never counts as an equal neighbour): text and menu titles round off; textured art (the status bar) changes little | `enhanced_2d` (1) |
+| Post effects | Over the 3D view only: a bloom (the view's colours above a brightness, at a quarter of its size, blurred by two Gaussian passes, σ 8 of the view's pixels, added), a vignette (the corners darkened smoothly), FXAA (Lottes's first) | `enhanced_bloom` (0), `enhanced_bloom_threshold` (0.7), `enhanced_vignette` (0), `enhanced_fxaa` (0) |
+| Sky | The game's own sky read between its texels with linear filtering (`enhanced_filter` 1, true colour), as a pack's is: each layer's colours blended, the front over the back by its clear texels; with nearest filtering, or in the software's look, its texels as before | with `enhanced_filter` |
+| Menu pointer | While a menu is up, the system's pointer shows over the window: over an item of the main, single player, multiplayer, load, save, options or keys menu the item is chosen (as the arrow keys would, with their sound), a click enters it (on an options slider or switch its left or right half moves it), the right button goes back, the wheel moves; in the keys menu waiting for a key, a button is bound as WinQuake binds it. The mouse goes back to the game when the menu closes | with `enhanced_mouse` |
+| Rumble | The controller shakes when the player is hurt: the damage flash's strength (`cl.cshifts[CSHIFT_DAMAGE]`, which V_ParseDamage raises) growing, by how much | `enhanced_gamepad_rumble` (1) |
+| Window | Alt+Enter between a window and the whole screen (the Enter does not reach the game); the window's place and size, and full screen, kept at the end and given back at the next start; the mode's own size again when the enhanced mode goes off | `enhanced_fullscreen` (-1: the game's), `enhanced_window` |
+| Screenshot | Print Screen draws the enhanced frame again offscreen at the window's size and writes it as PNG to the user folder's `screenshots` (the game's `screenshot` still writes its PCX) | |
+| Frame rate | The frames drawn a second and the time each took, in the window's title, once a second | `enhanced_showfps` (0) |
+| Reverb | Jezar's Freeverb (eight damped combs and four all-passes a side) over the mixed sound, before the clamp | `enhanced_reverb` (0) |
+
+`enhanced-shot` draws its default frame from quakesharp.cfg's defaults, with `-set <name> <value>` for any setting
+(`-lighting`, `-textures`, `-materials` its short forms), so every look above is checked headless; `PngWriter` moved
+to Core for the screenshots.
+
+**Tried and left out** (decision 77): smoother lightmaps (Catmull-Rom between the luxels in place of the software's
+blend: the blend is already smooth, 57-61 dB apart, nothing to see) and alias models lit per pixel by r_alias.c's own
+light (53 dB apart: the light is mostly the ambient). The mixer already resamples with Hermite interpolation at four
+times the game's rate, and the water already warps smoothly on the GPU. A free camera in demos is left for later: the
+frame's visible set and entities are the game's view's, so it needs its own visibility, and its own keys (a key during
+a demo opens the menu).
+
+**Verified by** unit tests of the reverb (silence, the first echo after the shortest comb, its decay, the sides
+differing, dry without wet, cleared) and the rumble's strength (`EnhancedReverbTests`, `EnhancedInputTests`); a
+headless game choosing and clicking menu items with the pointer (the main menu's options, the screen size slider, back)
+(`EnhancedInputGameTests`); `enhanced-shot` over e1.events with the settings on and off: the smoothed 2D rounds the main
+menu's letters, the bloom glows round e1m1's ceiling lamps and the muzzle flash, the vignette darkens the corners, the
+filtered sky's clouds are smooth (frame 5000); the validation layer clean over them (`enhanced-shot -vkvalidation`, with
+and without the bloom); and the fidelity suite unchanged. Alt+Enter, Print Screen, the title's
+frame rate, the pointer's own events and the rumble reach the window or the device only, and are not driven here
+(decision 75): the player is the check.
+
 ## 12. Decision log
 
 | # | Topic | Decision | Date |
@@ -1777,6 +1845,8 @@ are as step 5 left them (steps 5 and 6 changed no game-side code).
 | 73 | Players' colours from a pack's layers (milestone 13, step 4) | A `_shirt` or `_pants` layer's grey is read as a place on the player's colour ramp: the base palette's range (16-31, 96-111) gives each entry its brightness against the range's brightest, the grey falls on or between two entries, and the colour is the player's row's at those entries as CL_NewTranslation moves them (darker than the darkest entry: it darkened to black). So the colours keep the ramps' hues, which change along them, as the game's do; DarkPlaces' grey times one colour made Quake's orange pants olive. The bake is per skin and colours, on the loader thread (§11.7) | 2026-10-13 |
 | 74 | Material maps' making and lighting (milestone 13, step 5) | Confirmed with the user: normals and gloss for a pack whose upscaler makes colours only are derived by the tools (`texture-pack-materials`: brightness as height, a Sobel filter wrapping round the texture; gloss from brightness and want of colour), no download; an AI material generator (DeepBump and the like) is the user's own, as upscalers are (decision 72). Normals in tangent space with y the image's up (OpenGL's way). world.slang scales each dynamic light's part of each luxel by 1 + N·L − N₀·L (the material's normal against the plane's, so a flat normal draws as without one) and adds a Blinn-Phong highlight (exponent 32) times the gloss, as bright as the light's part. World surfaces only: the software adds a dynamic light to an alias model's point light as one number with no direction, before the clamps (r_main.c), so a skin's `_norm` and `_gloss` are not drawn (§11.7) | 2026-10-13 |
 | 75 | Visual checks run headless (milestone 13, step 6) | Confirmed with the user: checks of the executable's look are made with `enhanced-shot` over a recorded events file (offscreen, no window, no input sent), never by driving the real window with sent keys, which took the user's keyboard focus; `enhanced-shot` takes `-lighting`, `-textures` and `-materials` for its default frame (§11.7) | 2026-10-13 |
+| 76 | Enhanced input (milestone 14) | Confirmed with the user: enhanced mode takes the mouse by default (free look, the wheel changing weapons) and a game controller with analog sticks and bindings, as defaults for unbound keys written to no cvar or config.cfg; the faithful mode keeps WinQuake's mouse and joystick exactly (in_win.c, keys.c and vid_win.c behave as before while `enhancedInput` is null). Controllers are read through the same winmm interface, so the traces (no joystick) are unchanged (§11.8) | 2026-10-14 |
+| 77 | Enhanced extras (milestone 15) | Asked by the user: the enhanced mode's smoothed 2D (on), bloom, vignette and FXAA (off), the game's sky filtered with `enhanced_filter`, a menu pointer, rumble, Alt+Enter with a remembered window, PNG screenshots, a frame rate in the title, reverb (off), each a setting and none written into the game. Tried and left out as nothing to see: smoother lightmaps and alias models lit per pixel; a free camera in demos left for later (§11.9) | 2026-10-14 |
 
 ## 13. Open decisions
 

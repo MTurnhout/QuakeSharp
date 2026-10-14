@@ -26,6 +26,9 @@ public sealed class EnhancedRenderer : IDisposable
     private long latestAt;
     private bool fresh;
 
+    // a screenshot asked for: where, at what size
+    private (string Path, int Width, int Height)? screenshot;
+
     // snapshots come (the mode is on), and a frame is being drawn
     private bool active, drawing;
     private Exception? failure;
@@ -100,6 +103,24 @@ public sealed class EnhancedRenderer : IDisposable
         }
     }
 
+    /// <summary>
+    /// The next frame drawn also offscreen at <paramref name="width"/> x <paramref name="height"/> and written to
+    /// <paramref name="path"/> as PNG (the enhanced mode's screenshot, design.md §11.9; the game's own `screenshot`
+    /// command still writes its PCX of the 8-bit frame).
+    /// </summary>
+    public void RequestScreenshot(string path, int width, int height)
+    {
+        lock (gate)
+        {
+            screenshot = (path, width, height);
+            fresh = true;
+            Monitor.PulseAll(gate);
+        }
+    }
+
+    /// <summary>A screenshot written (its path), or its failure (the message), raised on the renderer's thread.</summary>
+    public Action<string>? ScreenshotWritten { get; set; }
+
     /// <summary>The enhanced frames drawn so far, and the time spent drawing them (for the frame rate measured).</summary>
     public long FramesDrawn { get; private set; }
 
@@ -123,6 +144,7 @@ public sealed class EnhancedRenderer : IDisposable
         while (true)
         {
             EnhancedFrame frame;
+            (string Path, int Width, int Height)? shot;
             lock (gate)
             {
                 // switched off, or nothing new and the last one reached: wait for the game
@@ -140,6 +162,8 @@ public sealed class EnhancedRenderer : IDisposable
                 (frame, caughtUp) = Interpolated();
                 frame = smoothing.Apply(frame);
                 drawing = true;
+                shot = screenshot;
+                screenshot = null;
             }
 
             try
@@ -153,6 +177,26 @@ public sealed class EnhancedRenderer : IDisposable
                 }
 
                 DrawingTime += Stopwatch.GetElapsedTime(started);
+
+                // the screenshot drawn again offscreen at its size, written on a pool thread
+                if (shot is (string path, int width, int height) && width > 0 && height > 0)
+                {
+                    byte[] rgba = presenter.RenderEnhanced(frame, options, width, height);
+                    _ = Task.Run(() =>
+                    {
+                        try
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                            PngWriter.WriteRgba(path, width, height, rgba);
+                            ScreenshotWritten?.Invoke(path);
+                        }
+                        catch (IOException e)
+                        {
+                            ScreenshotWritten?.Invoke(e.Message);
+                        }
+                    });
+                }
+
                 FramesDrawn++;
             }
             catch (Exception e)

@@ -539,7 +539,7 @@ public sealed partial class QuakeEngine
                 return; // ignore most autorepeats
             }
 
-            if (key >= 200 && keybindings[key] == null)
+            if (key >= 200 && KeyBinding(key) == null)
             {
                 Con_Printf("%s is unbound, hit F4 to set.\n", Key_KeynumToString(key));
             }
@@ -582,7 +582,7 @@ public sealed partial class QuakeEngine
         // switch. Button commands include the kenum as a parameter, so multiple downs can be matched with ups
         if (!down)
         {
-            kb = keybindings[key];
+            kb = KeyBinding(key);
             if (kb != null && Ch(kb, 0) == '+')
             {
                 cmd = va("-%s %i\n", kb[1..], key);
@@ -614,7 +614,7 @@ public sealed partial class QuakeEngine
             || (key_dest == keydest_t.key_console && !consolekeys[key])
             || (key_dest == keydest_t.key_game && (!con_forcedup || !consolekeys[key])))
         {
-            kb = keybindings[key];
+            kb = KeyBinding(key);
             if (kb != null)
             {
                 if (Ch(kb, 0) == '+')

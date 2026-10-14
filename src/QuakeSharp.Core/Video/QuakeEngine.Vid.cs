@@ -744,7 +744,7 @@ public sealed partial class QuakeEngine
         // Set either the fullscreen or windowed mode
         if (modelist[modenum].type == modestate_t.MS_WINDOWED)
         {
-            if (_windowed_mouse.value != 0)
+            if (WindowedMouse() != 0)
             {
                 stat = VID_SetWindowedMode(modenum);
                 IN_ActivateMouse();
@@ -1218,9 +1218,9 @@ public sealed partial class QuakeEngine
         // handle the mouse state when windowed if that's changed
         if (modestate == modestate_t.MS_WINDOWED)
         {
-            if ((int)_windowed_mouse.value != windowed_mouse)
+            if (WindowedMouse() != windowed_mouse)
             {
-                if (_windowed_mouse.value != 0)
+                if (WindowedMouse() != 0)
                 {
                     IN_ActivateMouse();
                     IN_HideMouse();
@@ -1231,7 +1231,7 @@ public sealed partial class QuakeEngine
                     IN_ShowMouse();
                 }
 
-                windowed_mouse = (int)_windowed_mouse.value;
+                windowed_mouse = WindowedMouse();
             }
         }
     }
@@ -1372,7 +1372,7 @@ public sealed partial class QuakeEngine
         {
             if (ActiveApp)
             {
-                if (modestate == modestate_t.MS_WINDOWED && _windowed_mouse.value != 0)
+                if (modestate == modestate_t.MS_WINDOWED && WindowedMouse() != 0)
                 {
                     IN_ActivateMouse();
                     IN_HideMouse();
@@ -1381,7 +1381,7 @@ public sealed partial class QuakeEngine
 
             if (!ActiveApp)
             {
-                if (modestate == modestate_t.MS_WINDOWED && _windowed_mouse.value != 0)
+                if (modestate == modestate_t.MS_WINDOWED && WindowedMouse() != 0)
                 {
                     IN_DeactivateMouse();
                     IN_ShowMouse();
@@ -1410,7 +1410,7 @@ public sealed partial class QuakeEngine
     // vid_win.c: VID_HandlePause
     public void VID_HandlePause(bool pause)
     {
-        if (modestate == modestate_t.MS_WINDOWED && _windowed_mouse.value != 0)
+        if (modestate == modestate_t.MS_WINDOWED && WindowedMouse() != 0)
         {
             if (pause)
             {

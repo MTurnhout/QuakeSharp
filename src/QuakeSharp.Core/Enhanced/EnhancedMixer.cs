@@ -46,6 +46,9 @@ public sealed class EnhancedMixer
     /// </summary>
     public bool Placement { get; set; }
 
+    /// <summary>The room the mix goes through (enhanced_reverb, design.md §11.9; null: none).</summary>
+    public EnhancedReverb? Reverb { get; set; }
+
     /// <summary>The listener as S_Update set it, for the placement.</summary>
     public void Listen(Common.Vec3 origin, Common.Vec3 forward, Common.Vec3 right, int viewentity)
     {
@@ -63,7 +66,11 @@ public sealed class EnhancedMixer
     public static long FrameOf(long gameSample) => gameSample * Upsample;
 
     /// <summary>snd_dma.c: S_ClearBuffer: the ring silent.</summary>
-    public void Clear() => Array.Clear(Ring);
+    public void Clear()
+    {
+        Array.Clear(Ring);
+        Reverb?.Clear();
+    }
 
     /// <summary>
     /// Paints the game's samples from <paramref name="from"/> to <paramref name="to"/> (paintedtime to S_Update_'s
@@ -149,10 +156,15 @@ public sealed class EnhancedMixer
             }
         }
 
-        // what was painted in the game's sound is limited to its 16 bits: here to -1 to 1
+        // what was painted in the game's sound is limited to its 16 bits: here to -1 to 1 (after the room, if any)
         for (long n = first; n < last; n++)
         {
             int i = (int)(n & (RingFrames - 1)) * 2;
+            if (Reverb != null)
+            {
+                (Ring[i], Ring[i + 1]) = Reverb.Process(Ring[i], Ring[i + 1]);
+            }
+
             Ring[i] = Math.Clamp(Ring[i], -1, 1);
             Ring[i + 1] = Math.Clamp(Ring[i + 1], -1, 1);
         }

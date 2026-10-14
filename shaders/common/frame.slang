@@ -22,6 +22,7 @@ static const int STEPPED = 952;         // 1: the sky and water move in the soft
 static const int VIEW_AXES = 953;       // vpn, vright, vup: 9 floats
 static const int SKY_MAP = 962;         // the frame's pixel of the view target's: u = x * a + b, v = y * c + d
 static const int SKY_SIZES = 966;       // max(vrect width, height), vid.width / 2, vid.height / 2
+static const int LINEAR_SKY = 1022;     // 1: the game's sky read between its texels (enhanced_filter 1 in true colour)
 static const int DEBUG_SURFACES = 1023; // 1: each pixel the number of its surface (the tools' debugging)
 static const int COLORMAP = 1024;       // 64 x 256 bytes
 
@@ -64,6 +65,8 @@ public float frameTime() { return asfloat(frameWords[TIME]); }
 public float3 viewOrigin() { return float3(asfloat(frameWords[VIEW_ORIGIN]), asfloat(frameWords[VIEW_ORIGIN + 1]), asfloat(frameWords[VIEW_ORIGIN + 2])); }
 
 public bool stepped() { return frameWords[STEPPED] != 0; }
+
+public bool linearSky() { return frameWords[LINEAR_SKY] != 0; }
 
 public bool debugSurfaces() { return frameWords[DEBUG_SURFACES] != 0; }
 

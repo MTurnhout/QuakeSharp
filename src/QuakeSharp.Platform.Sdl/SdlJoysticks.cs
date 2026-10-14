@@ -137,6 +137,19 @@ public sealed unsafe class SdlJoysticks : IJoystickDevice, IDisposable
         }
     }
 
+    /// <summary>
+    /// The enhanced mode's rumble (design.md §11.9): the controller in <paramref name="slot"/> shakes, its low and high
+    /// motors at 0..1, for <paramref name="milliseconds"/>; nothing if it has no motors or is gone.
+    /// </summary>
+    public void Rumble(uint slot, float low, float high, uint milliseconds)
+    {
+        SDL_Gamepad* pad = Gamepad(slot);
+        if (pad != null)
+        {
+            SDL_RumbleGamepad(pad, (ushort)(Math.Clamp(low, 0f, 1f) * 0xffff), (ushort)(Math.Clamp(high, 0f, 1f) * 0xffff), milliseconds);
+        }
+    }
+
     public void Dispose()
     {
         foreach (nint pad in opened.Values)

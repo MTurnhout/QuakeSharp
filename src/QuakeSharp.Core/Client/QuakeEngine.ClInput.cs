@@ -382,7 +382,7 @@ public sealed partial class QuakeEngine
         }
 
         // adjust for speed key
-        if ((in_speed.state & 1) != 0)
+        if (((in_speed.state & 1) != 0) != (enhancedInput is { AlwaysRun: true }))
         {
             cmd.forwardmove *= cl_movespeedkey.value;
             cmd.sidemove *= cl_movespeedkey.value;

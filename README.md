@@ -143,6 +143,41 @@ matter of taste.
 A pack is read on a loader thread: after a level starts, a few of its surfaces may show the game's textures for a
 moment.
 
+## Mouse and controller
+
+The faithful mode (Scroll Lock off, or `-faithful`) plays as WinQuake does: in a window the mouse works only after
+Options → Use Mouse (`_windowed_mouse`), looking up and down needs `+mlook` (`\` by default), and a controller needs
+`joystick 1` and bindings. The enhanced mode (Scroll Lock, or `-enhanced`) adds a modern set on top, writing nothing to
+`config.cfg`; keys you have bound yourself always keep your binding.
+
+- **Mouse:** taken by the window as soon as it has the focus (let go while paused), free look, the wheel changes
+  weapon. Left button fires, right button walks forward, middle button holds `+mlook`, as the game binds them. Setting:
+  `enhanced_mouse`.
+- **Running:** the default; the speed key (Shift) walks. Setting: `enhanced_alwaysrun`.
+- **Controller** (any gamepad SDL knows, plugged in at any time): left stick walks and strafes, right stick looks; right
+  trigger fires, A jumps, B swims down, X swims up, Y centres the view, the bumpers and the D-pad's left and right
+  change weapon, Back shows the scores, Start opens the menu. In the menus the D-pad or left stick moves, A selects, B
+  goes back. Settings: `enhanced_gamepad`, `enhanced_gamepad_deadzone` (0.15) and `enhanced_gamepad_sensitivity` (1). The
+  keys are `JOY1`-`JOY4`, `AUX5`-`AUX12` and `AUX29`-`AUX32`, so `bind AUX12 "impulse 7"` changes what the right trigger
+  does.
+
+## Enhanced mode's extras
+
+Besides the renderer, texture packs and input above, the enhanced mode has these, all in `quakesharp.cfg` and none of
+them reaching the game:
+
+- **Look:** `enhanced_2d` (on) rounds the staircase edges of the status bar, menus and console text;
+  `enhanced_bloom` (0; 0.5 is soft) adds a glow round bright parts of the view, from `enhanced_bloom_threshold` (0.7);
+  `enhanced_vignette` (0; up to 1) darkens the corners; `enhanced_fxaa` (off) smooths edges further. With
+  `enhanced_filter 1` the sky is filtered as the textures are.
+- **Menus:** the mouse pointer shows in the menus: point to choose, click to enter, right-click to go back, click a
+  slider's left or right half to move it.
+- **Window:** Alt+Enter switches between a window and full screen; the window's size and place are kept for the next
+  run. Print Screen saves the frame as PNG in the user folder's `screenshots`. `enhanced_showfps 1` shows the frame rate
+  in the title.
+- **Sound:** `enhanced_reverb` (0; 0.2 is subtle) adds a room's echo.
+- **Controller:** it rumbles when you are hurt (`enhanced_gamepad_rumble`).
+
 ## The reference oracle
 
 QuakeSharp is checked against WinQuake 1.09's C code built as a headless program that writes a trace of every frame;

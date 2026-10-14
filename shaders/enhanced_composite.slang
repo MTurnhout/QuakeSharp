@@ -9,6 +9,7 @@ import fullscreen;
 [[vk::binding(2, 0)]] Sampler2D view;
 [[vk::binding(3, 0)]] Texture2D<uint> backtile;
 [[vk::binding(4, 0)]] StructuredBuffer<uint> palette; // 0x00BBGGRR
+[[vk::binding(5, 0)]] Sampler2D bloom;                 // enhanced_bloom.slang's, at a quarter of the view's size
 
 struct CompositeParams
 {
@@ -21,6 +22,10 @@ struct CompositeParams
     float2 pixelScale; // the window's pixels per pixel of the frame
     float warpPhase;  // D_WarpScreen's: cl.time * 20 (stepped in the software's look)
     int warp;         // under water (r_dowarp): 1 smooth, 2 in the software's steps
+    float bloomStrength; // design.md §11.9's post effects on the view: the bloom added (0 none),
+    float vignette;   // the corners darkened by (0 none),
+    int fxaa;         // 1: FXAA over the view
+    int pad;
 };
 
 [[vk::push_constant]] ConstantBuffer<CompositeParams> params;
@@ -65,13 +70,57 @@ float2 viewUv(float2 p)
     return moved / (size + 6.0);
 }
 
+float luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+// FXAA (Lottes's, its first version): where the view's brightness changes across an edge, its colours blended along it
+float3 fxaa(float2 uv)
+{
+    uint w, h;
+    view.GetDimensions(w, h);
+    float2 rcp = 1.0 / float2(w, h);
+    float3 m = view.Sample(uv).rgb;
+    float nw = luma(view.Sample(uv + (float2(-1, -1) * rcp)).rgb);
+    float ne = luma(view.Sample(uv + (float2(1, -1) * rcp)).rgb);
+    float sw = luma(view.Sample(uv + (float2(-1, 1) * rcp)).rgb);
+    float se = luma(view.Sample(uv + (float2(1, 1) * rcp)).rgb);
+    float lm = luma(m);
+    float least = min(lm, min(min(nw, ne), min(sw, se)));
+    float most = max(lm, max(max(nw, ne), max(sw, se)));
+    float2 dir = float2(-((nw + ne) - (sw + se)), (nw + sw) - (ne + se));
+    float reduce = max((nw + ne + sw + se) * (0.25 / 8.0), 1.0 / 128.0);
+    float scale = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
+    dir = clamp(dir * scale, -8.0, 8.0) * rcp;
+    float3 a = 0.5 * (view.Sample(uv + (dir * ((1.0 / 3.0) - 0.5))).rgb + view.Sample(uv + (dir * ((2.0 / 3.0) - 0.5))).rgb);
+    float3 b = (a * 0.5) + (0.25 * (view.Sample(uv - (dir * 0.5)).rgb + view.Sample(uv + (dir * 0.5)).rgb));
+    float lb = luma(b);
+    return lb < least || lb > most ? a : b;
+}
+
+// the view's colour at uv with the post effects: FXAA, the bloom added, the vignette darkening towards the corners
+// (at its rectangle's point at, 0..1)
+float3 viewEffects(float2 uv, float2 at)
+{
+    float3 c = params.fxaa != 0 ? fxaa(uv) : view.Sample(uv).rgb;
+    if (params.bloomStrength > 0)
+    {
+        c += bloom.Sample(uv).rgb * params.bloomStrength;
+    }
+
+    if (params.vignette > 0)
+    {
+        float2 d = (at - 0.5) * 2.0;
+        c *= 1.0 - (params.vignette * smoothstep(0.4, 1.5, dot(d, d)));
+    }
+
+    return c;
+}
 [shader("fragment")]
 float4 fragmentMain(FullscreenVertex input) : SV_Target
 {
     float2 p = input.position.xy;
     float2 fp = (p - params.frameRect.xy) / params.frameRect.zw;
     bool inViewRect = all(p >= params.viewRect.xy) && all(p < params.viewRect.xy + params.viewRect.zw);
-    float3 viewColor = inViewRect ? view.Sample(viewUv(p)).rgb : float3(0, 0, 0);
+    float3 viewColor = inViewRect ? viewEffects(viewUv(p), (p - params.viewRect.xy) / params.viewRect.zw) : float3(0, 0, 0);
 
     if (all(fp >= 0) && all(fp < 1))
     {

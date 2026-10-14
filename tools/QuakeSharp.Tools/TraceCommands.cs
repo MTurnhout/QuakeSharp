@@ -2,6 +2,7 @@ using System.Globalization;
 using QuakeSharp.Core;
 using QuakeSharp.Core.Common;
 using QuakeSharp.Core.Diagnostics;
+using QuakeSharp.Core.Enhanced;
 
 namespace QuakeSharp.Tools;
 

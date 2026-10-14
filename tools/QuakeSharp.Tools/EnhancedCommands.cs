@@ -17,15 +17,18 @@ internal static class EnhancedCommands
     // colour, and that are within 24 of it on every channel. <frames> "warp" instead lists the runs of frames whose view
     // is warped as under water (r_dowarp), to choose frames from; "dlights" those with dynamic lights. -pack <game-dir> draws the default frame with a texture
     // pack's textures (design.md §11.7; the faithful comparison never uses them).
-    // -lighting <0|1>, -textures <0|1> and -materials <0|1> set those enhanced settings for the default frame.
+    // The default frame is drawn at quakesharp.cfg's defaults; -set <name> <value> (any number of times) changes one of them,
+    // and -lighting, -textures, -materials <value> are short for -set enhanced_lighting and the like; -vkvalidation turns on
+    // the Vulkan validation layer.
     public static int Shot(string baseDir, string outDir, string frameList, string[] args)
     {
         int packArg = Array.IndexOf(args, "-pack");
         string? packDir = packArg >= 0 && packArg + 1 < args.Length ? args[packArg + 1] : null;
         args = packArg >= 0 ? [.. args[..packArg], .. args[Math.Min(args.Length, packArg + 2)..]] : args;
-        (int lighting, args) = TakeSwitch(args, "-lighting", 0);
-        (int textures, args) = TakeSwitch(args, "-textures", 1);
-        (int materials, args) = TakeSwitch(args, "-materials", 1);
+        var settings = new EnhancedSettings();
+        args = TakeSettings(args, settings);
+        bool validation = args.Contains("-vkvalidation");
+        args = [.. args.Where(a => a != "-vkvalidation")];
         Commands.RefuseRepository(outDir);
         Directory.CreateDirectory(outDir);
         bool scanWarp = frameList == "warp", scanDlights = frameList == "dlights";
@@ -41,14 +44,14 @@ internal static class EnhancedCommands
             var capture = new EnhancedCapture(run.Engine);
             run.Engine.enhanced = capture;
 
-            using VulkanPresenter presenter = VulkanPresenter.Headless(enableValidation: false, Console.Error.WriteLine);
+            using VulkanPresenter presenter = VulkanPresenter.Headless(enableValidation: validation, Console.Error.WriteLine);
             if (packDir != null)
             {
                 presenter.TexturePack = new EnhancedTexturePack([packDir]);
             }
 
             var faithful =new EnhancedOptions(Scale: 1, Msaa: 1, Widescreen: false, Filter: 0, Mipmaps: 0, Anisotropy: 1, Lighting: 1);
-            var defaults = new EnhancedOptions(Lighting: lighting) { Textures = textures != 0, Materials = materials != 0 };
+            EnhancedOptions defaults = EnhancedOptions.FromSettings(settings);
 
             int frame = 0;
             foreach (IReadOnlyList<string> _ in run.Frames(quitAfterDemo: new Core.Common.CommandLine(["quake", .. args]).CheckParm("-tracequitafterdemo") != 0))
@@ -103,13 +106,28 @@ internal static class EnhancedCommands
         return 0;
     }
 
-    // A switch and its number taken out of the arguments (the default where it is not there)
-    private static (int, string[]) TakeSwitch(string[] args, string name, int fallback)
+    // -set <name> <value> and its short forms taken out of the arguments into the settings
+    private static string[] TakeSettings(string[] args, EnhancedSettings settings)
     {
-        int at = Array.IndexOf(args, name);
-        return at >= 0 && at + 1 < args.Length
-            ? (int.Parse(args[at + 1], CultureInfo.InvariantCulture), [.. args[..at], .. args[(at + 2)..]])
-            : (fallback, args);
+        var rest = new List<string>();
+        for (int i = 0; i < args.Length; i++)
+        {
+            string? name = args[i] switch
+            {
+                "-set" when i + 2 < args.Length => args[++i],
+                "-lighting" or "-textures" or "-materials" when i + 1 < args.Length => "enhanced_" + args[i][1..],
+                _ => null,
+            };
+            if (name == null)
+            {
+                rest.Add(args[i]);
+                continue;
+            }
+
+            settings[name] = args[++i];
+        }
+
+        return [.. rest];
     }
 
     // enhanced-bench <quake-dir> <frame> <width>x<height> [trace args]: draws the enhanced frame of a trace's frame
