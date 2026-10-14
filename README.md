@@ -28,9 +28,10 @@ See [design.md](design.md) for the full design and milestones.
 
 ## Playing
 
-A release (see the repository's Releases) plays at once: unpack it and run QuakeSharp. It carries id Software's
-shareware Quake 1.06, `quake106.zip`, untouched and under id's own licence; QuakeSharp unpacks the first episode from
-it the first time it runs. To play the full game, run QuakeSharp from your Quake folder or copy it there.
+A release (see the repository's Releases) comes in two packages per platform. The `-shareware` one plays at once:
+unpack it and run QuakeSharp. It carries id Software's shareware Quake 1.06, `quake106.zip`, untouched and under id's
+own licence; QuakeSharp unpacks the first episode from it the first time it runs. The other is QuakeSharp alone: to
+play the full game, run it from your Quake folder or copy it there.
 
 ## Game data
 

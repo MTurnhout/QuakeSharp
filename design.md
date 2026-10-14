@@ -623,7 +623,7 @@ registered data's, byte for byte).
 | 13 | Texture packs | Enhanced mode draws replacement textures from a pack (QuakeSpasm's and DarkPlaces' names): the world's textures, skies and alias skins at any resolution, their fullbrights, and normal and gloss maps lit by the dynamic lights; the tools export the game's textures for a pack's maker and check a pack. The faithful mode, and enhanced mode without a pack, untouched. *Plan: §11.7* |
 | 14 | Enhanced input | The enhanced mode's mouse (taken by the window as soon as it has the focus, free look, the wheel changing weapons) and game controller (analog sticks, triggers, bindings, menu navigation), the faithful mode's mouse and joystick exactly WinQuake's. *Plan: §11.8* |
 | 15 | Enhanced extras | The enhanced mode's smoothed 2D, bloom, vignette and FXAA, a filtered sky, a pointer in the menus, rumble, Alt+Enter and a remembered window, PNG screenshots, the frame rate in the title, reverb. *Plan: §11.9* |
-| 16 | Releases | A playable release for Windows and Linux with id's shareware archive untouched beside the executable, unpacked by QuakeSharp on first run. *Plan: §11.10* |
+| 16 | Releases | Releases for Windows and Linux compiled ahead of time, alone and with id's shareware archive untouched beside the executable, unpacked by QuakeSharp on first run. *Plan: §11.10* |
 | Later | | QuakeWorld, release builds (single file, NativeAOT) |
 
 ### 11.1 Milestone 7: the plan
@@ -1790,9 +1790,11 @@ and QuakeSharp takes the episode out of it itself.
 - **The user folder** is made if the system's application data folder is missing (.NET gave an empty path for it on a
   Linux without `~/.config`, and the user folder became one in the current folder).
 - **The build** (`.github/workflows/release.yml`): on a version tag `v*`, for Windows (win-x64) and Linux (linux-x64),
-  the tests (with `QUAKESHARP_SHAREWARE_ZIP`), then `dotnet publish` self-contained as one file (SDL3 and VMA inside;
-  the system's Vulkan driver needed), packed with `quake106.zip`, `LICENSE` (GPL-2.0) and `tools/release/README.txt`
-  (how to play, the shareware's licence, the full game), a zip for Windows and a tar.gz for Linux, as a draft GitHub
+  the tests (with `QUAKESHARP_SHAREWARE_ZIP`), then `dotnet publish` compiled ahead of time (NativeAOT, decision 79:
+  the executable, about 5 MB, with SDL3's and VMA's libraries beside it; the system's Vulkan driver needed), packed with
+  `LICENSE` (GPL-2.0) and `tools/release/README.txt` (how to play, where the game's files are looked for, the
+  shareware's licence) twice: alone (`QuakeSharp-<version>-<rid>`, for a Quake of the player's own) and with
+  `quake106.zip` (`...-shareware`, to play at once); a zip for Windows and a tar.gz for Linux, as a draft GitHub
   Release published by hand. A manual run keeps the archives as the run's artifacts only.
 
 **Verified by** `LhaArchiveTests` (stored members past a stub, the CRC, a wrong CRC, an unknown method, an archive cut
@@ -1800,7 +1802,8 @@ short) and `SharewareInstallerTests` (every one of resource.1's 16 members unpac
 installed is the catalogue's, the licence beside it, once), with `QUAKESHARP_SHAREWARE_ZIP`, which CI now sets; and
 the published executables, each alone in a folder with `quake106.zip`, started from another folder as a dedicated
 server (no window): on Windows and in WSL's Ubuntu (a fresh home) the pak unpacked into the user folder's
-`shareware` and e1m1 loaded.
+`shareware` and e1m1 loaded. NativeAOT (decision 79): no trimming or AOT warning; `quakesharp-tools` compiled the same
+way replays demo1-3, e1 and the tour (61,200 frames) the same as the oracle's traces in every section of every frame.
 
 ## 12. Decision log
 
@@ -1884,7 +1887,7 @@ server (no window): on Windows and in WSL's Ubuntu (a fresh home) the pak unpack
 | 76 | Enhanced input (milestone 14) | Confirmed with the user: enhanced mode takes the mouse by default (free look, the wheel changing weapons) and a game controller with analog sticks and bindings, as defaults for unbound keys written to no cvar or config.cfg; the faithful mode keeps WinQuake's mouse and joystick exactly (in_win.c, keys.c and vid_win.c behave as before while `enhancedInput` is null). Controllers are read through the same winmm interface, so the traces (no joystick) are unchanged (§11.8) | 2026-10-14 |
 | 77 | Enhanced extras (milestone 15) | Asked by the user: the enhanced mode's smoothed 2D (on), bloom, vignette and FXAA (off), the game's sky filtered with `enhanced_filter`, a menu pointer, rumble, Alt+Enter with a remembered window, PNG screenshots, a frame rate in the title, reverb (off), each a setting and none written into the game. Tried and left out as nothing to see: smoother lightmaps and alias models lit per pixel; a free camera in demos left for later (§11.9) | 2026-10-14 |
 | 78 | Releases with the shareware (milestone 16) | Chosen with the user: a release carries id's `quake106.zip` whole and untouched beside the executable (the shareware licence lets it be given away free only as a whole, with its licence), and QuakeSharp unpacks `pak0.pak` from it on first run into the user folder with its own LHA (LH5) reader; no bare `pak0.pak` is distributed. Self-contained single-file builds for Windows and Linux, made on a version tag as a draft GitHub Release, published by hand (§11.10) | 2026-10-14 |
-
+| 79 | NativeAOT releases, with and without the shareware (milestone 16) | Asked by the user: the releases are compiled ahead of time (NativeAOT, in place of a single-file JIT build: the executable about 5 MB beside SDL3's and VMA's libraries, starting at once), checked to play the traces the same as the JIT build and the oracle; and each platform has two packages, QuakeSharp alone and QuakeSharp with `quake106.zip` (§11.10) | 2026-10-14 |
 ## 13. Open decisions
 
 To confirm with the user before the milestones they affect; the proposals are the defaults until then.
